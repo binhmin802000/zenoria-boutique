@@ -195,7 +195,7 @@ function CrystalLogo({ mode = 1, compact = false }) {
       </div>
       <div>
         <div className={`${compact ? "text-xl" : "text-3xl"} tracking-[.22em] font-serif text-[#412f3b]`}>ZENORIA</div>
-        {!compact && <div className="text-[10px] tracking-wide text-[#755f6e] italic">L&apos;énergie du cristal, l&apos;harmonie de l&apos;âme.</div>}
+        {!compact && <div className="text-[10px] tracking-wide text-[#755f6e] italic">L'énergie du cristal, l'harmonie de l'âme.</div>}
       </div>
     </div>
   );
@@ -248,18 +248,10 @@ export default function ZenoriaShop() {
     setCartOpen(true);
   };
 
-  // Scroll fluide vers une section par son id, sans utiliser de lien "#" classique
-  const scrollToSection = (id) => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth" });
-    }
-  };
-
   return (
     <div className="min-h-screen bg-[#fbf8f4] text-[#342b32] selection:bg-[#dcc8dd]">
       <Head>
-        <title>Zenoria — L&apos;énergie du cristal, l&apos;harmonie de l&apos;âme</title>
+        <title>Zenoria — L'énergie du cristal, l'harmonie de l'âme</title>
         <meta name="description" content="Bagues artisanales en cristaux Swarovski. Collections Bleus, Roses, Nature et Violettes." />
       </Head>
 
@@ -271,11 +263,11 @@ export default function ZenoriaShop() {
         <div className="max-w-7xl mx-auto px-5 h-20 flex items-center justify-between">
           <CrystalLogo compact mode={logo} />
           <nav className="hidden lg:flex gap-7 text-sm">
-            <button onClick={() => scrollToSection("collections")} className="hover:text-[#8f6075]">Collections</button>
-            <button onClick={() => scrollToSection("energies")} className="hover:text-[#8f6075]">Nos énergies</button>
-            <button onClick={() => scrollToSection("philosophie")} className="hover:text-[#8f6075]">Notre histoire</button>
-            <button onClick={() => scrollToSection("quiz")} className="hover:text-[#8f6075]">Quiz</button>
-            <button onClick={() => scrollToSection("contact")} className="hover:text-[#8f6075]">Contact</button>
+            <a href="#collections">Collections</a>
+            <a href="#energies">Nos énergies</a>
+            <a href="#philosophie">Notre histoire</a>
+            <a href="#quiz">Quiz</a>
+            <a href="#contact">Contact</a>
           </nav>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon"><Search size={19} /></Button>
@@ -295,11 +287,11 @@ export default function ZenoriaShop() {
         </div>
         {menu && (
           <div className="lg:hidden px-6 pb-5 flex flex-col gap-3 text-sm">
-            <button onClick={() => { scrollToSection("collections"); setMenu(false); }} className="text-left">Collections</button>
-            <button onClick={() => { scrollToSection("energies"); setMenu(false); }} className="text-left">Nos énergies</button>
-            <button onClick={() => { scrollToSection("philosophie"); setMenu(false); }} className="text-left">Notre histoire</button>
-            <button onClick={() => { scrollToSection("quiz"); setMenu(false); }} className="text-left">Quiz</button>
-            <button onClick={() => { scrollToSection("contact"); setMenu(false); }} className="text-left">Contact</button>
+            <a href="#collections">Collections</a>
+            <a href="#energies">Nos énergies</a>
+            <a href="#philosophie">Notre histoire</a>
+            <a href="#quiz">Quiz</a>
+            <a href="#contact">Contact</a>
           </div>
         )}
       </header>
@@ -313,25 +305,22 @@ export default function ZenoriaShop() {
               <div className="text-xs uppercase tracking-[.3em] text-[#8b6578] mb-5">10 collections · Cristaux Swarovski</div>
               <h1 className="font-serif text-6xl md:text-8xl leading-none mb-5 text-[#513642]">ZENORIA</h1>
               <p className="font-serif italic text-2xl md:text-3xl text-[#594856] mb-5">
-                L&apos;énergie du cristal,<br />l&apos;harmonie de l&apos;âme.
+                L'énergie du cristal,<br />l'harmonie de l'âme.
               </p>
               <p className="max-w-lg text-[#6e6268] leading-7 mb-8">
-                Des bagues artisanales imaginées comme des symboles d&apos;équilibre, façonnées pour révéler votre lumière intérieure.
+                Des bagues artisanales imaginées comme des symboles d'équilibre, façonnées pour révéler votre lumière intérieure.
               </p>
               <div className="flex flex-wrap gap-3">
-                <Button
-                  onClick={() => scrollToSection("collections")}
-                  className="rounded-full bg-[#8f6075] hover:bg-[#71485b] px-7 h-12"
-                >
-                  Découvrir la collection <ArrowRight className="ml-2" size={17} />
-                </Button>
-                <Button
-                  onClick={() => scrollToSection("philosophie")}
-                  variant="outline"
-                  className="rounded-full border-[#9b7a89] px-7 h-12 bg-white/35"
-                >
-                  Notre philosophie
-                </Button>
+                #collections
+                  <Button className="rounded-full bg-[#8f6075] hover:bg-[#71485b] px-7 h-12">
+                    Découvrir la collection <ArrowRight className="ml-2" size={17} />
+                  </Button>
+                </a>
+                <a hrefphie">
+                  <Button variant="outline" className="rounded-full border-[#9b7a89] px-7 h-12 bg-white/35">
+                    Notre philosophie
+                  </Button>
+                </a>
               </div>
             </motion.div>
             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8 }} className="relative flex justify-center">
@@ -351,7 +340,7 @@ export default function ZenoriaShop() {
         <section id="energies" className="max-w-7xl mx-auto px-6 py-20">
           <div className="text-center mb-10">
             <div className="text-xs tracking-[.3em] text-[#9c7285] uppercase mb-3">Votre intention, votre bijou</div>
-            <h2 className="font-serif text-4xl">Trouvez l&apos;énergie qui vous ressemble</h2>
+            <h2 className="font-serif text-4xl">Trouvez l'énergie qui vous ressemble</h2>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {energies.map((e) => (
@@ -419,10 +408,10 @@ export default function ZenoriaShop() {
           <div className="bg-[#3b2b39] text-white p-12 lg:p-20 flex flex-col justify-center">
             <div className="text-xs tracking-[.3em] uppercase text-[#d7b4c3] mb-4">Notre philosophie</div>
             <h2 className="font-serif text-4xl md:text-5xl leading-tight mb-6">
-              Plus qu&apos;un bijou,<br />un symbole d&apos;équilibre.
+              Plus qu'un bijou,<br />un symbole d'équilibre.
             </h2>
             <p className="text-white/70 leading-7 max-w-xl">
-              Chaque création Zenoria associe l&apos;élégance du cristal à un univers de sérénité. Nos bagues sont pensées pour accompagner les instants précieux et raconter une histoire personnelle.
+              Chaque création Zenoria associe l'élégance du cristal à un univers de sérénité. Nos bagues sont pensées pour accompagner les instants précieux et raconter une histoire personnelle.
             </p>
             <Button variant="outline" className="mt-8 w-fit rounded-full border-white/40 bg-transparent text-white">
               Découvrir notre histoire
@@ -435,7 +424,7 @@ export default function ZenoriaShop() {
           <div className="rounded-[2.5rem] p-8 md:p-14 bg-gradient-to-r from-[#eee3f5] to-[#f6e3df] grid lg:grid-cols-[1.2fr_.8fr] gap-10">
             <div>
               <Sparkles className="text-[#956d83] mb-5" />
-              <h2 className="font-serif text-4xl mb-4">Quelle énergie recherchez-vous aujourd&apos;hui ?</h2>
+              <h2 className="font-serif text-4xl mb-4">Quelle énergie recherchez-vous aujourd'hui ?</h2>
               <p className="text-[#6d6068] mb-7">Choisissez votre intention et découvrez la création Zenoria qui lui correspond.</p>
               <div className="flex flex-wrap gap-3">
                 {["Sérénité", "Amour", "Protection", "Abondance", "Éveil spirituel"].map((x) => (
@@ -481,8 +470,8 @@ export default function ZenoriaShop() {
             <div className="grid md:grid-cols-3 gap-5">
               {[
                 "Une création délicate, encore plus belle portée.",
-                "Le soin du détail et l&apos;univers de la marque m&apos;ont séduite.",
-                "Un cadeau lumineux, présenté avec beaucoup d&apos;élégance.",
+                "Le soin du détail et l'univers de la marque m'ont séduite.",
+                "Un cadeau lumineux, présenté avec beaucoup d'élégance.",
               ].map((t, i) => (
                 <div key={t} className="rounded-3xl bg-[#fbf7f5] p-7">
                   <div className="flex mb-4">

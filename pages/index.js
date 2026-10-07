@@ -1,12 +1,14 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import Head from "next/head";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShoppingBag, Search, User, Heart, Menu, X, Sparkles, ArrowRight,
-  Star, Leaf, Shield, Sun, Gem, Instagram
+  Star, Leaf, Shield, Sun, Gem, Instagram, LogOut
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { supabase } from "@/lib/supabase";
+import AuthModal from "@/components/AuthModal";
 
 // ============================================================
 // CATALOGUE ZENORIA — basé sur la structure réelle des dossiers
@@ -201,13 +203,45 @@ function CrystalLogo({ mode = 1, compact = false }) {
   );
 }
 
-// Visuel produit : utilise la vraie photo si présente dans /public/images/<slug>/,
-// sinon affiche un visuel graphique de remplacement.
-function RingVisual({ product, large = false }) {
+// Visuel produit : utilise la vraie photo (ou la vidéo pour le Hero) si présente
+// dans /public/images/<slug>/, sinon affiche un visuel graphique de remplacement.
+function RingVisual({ product, large = false, circle = false, video = false }) {
   const [imgError, setImgError] = useState(false);
   const imgSrc = product.photos && product.photos[0] ? `/images/${product.slug}/${product.photos[0]}` : null;
+  const videoSrc = product.video ? `/images/${product.slug}/${product.video}` : null;
+
+  // Cercle du Hero affichant la vidéo de la collection en lecture automatique.
+  if (circle && video && videoSrc && !imgError) {
+    return (
+      <div className="relative w-full h-full rounded-full overflow-hidden bg-black">
+        <video
+          key={videoSrc}
+          src={videoSrc}
+          autoPlay
+          loop
+          muted
+          playsInline
+          onError={() => setImgError(true)}
+          className="w-full h-full object-cover object-center"
+        />
+      </div>
+    );
+  }
 
   if (imgSrc && !imgError) {
+    if (circle) {
+      return (
+        <div className="relative w-full h-full rounded-full overflow-hidden">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={imgSrc}
+            alt={product.name}
+            onError={() => setImgError(true)}
+            className="w-full h-full object-cover object-center"
+          />
+        </div>
+      );
+    }
     return (
       <div className={`relative overflow-hidden ${large ? "h-[360px]" : "h-56"}`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -215,7 +249,7 @@ function RingVisual({ product, large = false }) {
           src={imgSrc}
           alt={product.name}
           onError={() => setImgError(true)}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover object-center"
         />
       </div>
     );
@@ -233,14 +267,144 @@ function RingVisual({ product, large = false }) {
   );
 }
 
+// Visuel affiché dans la fiche produit (modal).
+// Par défaut : lit automatiquement la vidéo de la collection en boucle.
+// L'utilisateur peut basculer vers une galerie photo (navigable une par une)
+// via les onglets "Vidéo" / "Photos" affichés sous le média.
+function ProductMedia({ product }) {
+  const [videoError, setVideoError] = useState(false);
+  const [mode, setMode] = useState("video"); // "video" | "photo"
+  const [photoIndex, setPhotoIndex] = useState(0);
+  const videoSrc = product.video ? `/images/${product.slug}/${product.video}` : null;
+  const photos = product.photos || [];
+
+  // Reset de la sélection quand on change de produit
+  useEffect(() => {
+    setMode("video");
+    setPhotoIndex(0);
+    setVideoError(false);
+  }, [product.slug]);
+
+  const hasVideo = Boolean(videoSrc) && !videoError;
+  const hasPhotos = photos.length > 0;
+
+  const goPrevPhoto = () => setPhotoIndex((i) => (i === 0 ? photos.length - 1 : i - 1));
+  const goNextPhoto = () => setPhotoIndex((i) => (i === photos.length - 1 ? 0 : i + 1));
+
+  return (
+    <div>
+      <div className="relative overflow-hidden h-[360px] bg-black">
+        {mode === "video" && hasVideo ? (
+          <video
+            key={videoSrc}
+            src={videoSrc}
+            autoPlay
+            loop
+            muted
+            playsInline
+            controls
+            onError={() => setVideoError(true)}
+            className="w-full h-full object-cover object-center"
+          />
+        ) : hasPhotos ? (
+          <div className="relative w-full h-full">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              key={photos[photoIndex]}
+              src={`/images/${product.slug}/${photos[photoIndex]}`}
+              alt={`${product.name} - photo ${photoIndex + 1}`}
+              className="w-full h-full object-cover object-center"
+            />
+            {photos.length > 1 && (
+              <>
+                <button
+                  onClick={goPrevPhoto}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-white/80 hover:bg-white grid place-items-center"
+                  aria-label="Photo précédente"
+                >
+                  ‹
+                </button>
+                <button
+                  onClick={goNextPhoto}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-white/80 hover:bg-white grid place-items-center"
+                  aria-label="Photo suivante"
+                >
+                  ›
+                </button>
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+                  {photos.map((_, i) => (
+                    <span
+                      key={i}
+                      className={`h-1.5 w-1.5 rounded-full ${i === photoIndex ? "bg-white" : "bg-white/50"}`}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <RingVisual product={product} large />
+        )}
+      </div>
+      <div className="flex gap-2 px-8 pt-4">
+        {hasVideo && (
+          <button
+            onClick={() => setMode("video")}
+            className={`rounded-full px-3 py-1 text-xs ${mode === "video" ? "bg-[#8f6075] text-white" : "bg-[#f5edf1] text-[#826d77]"}`}
+          >
+            Vidéo
+          </button>
+        )}
+        {hasPhotos && (
+          <button
+            onClick={() => setMode("photo")}
+            className={`rounded-full px-3 py-1 text-xs ${mode === "photo" ? "bg-[#8f6075] text-white" : "bg-[#f5edf1] text-[#826d77]"}`}
+          >
+            {photos.length} photo{photos.length > 1 ? "s" : ""}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ZenoriaShop() {
   const [cart, setCart] = useState([]);
   const [fav, setFav] = useState([]);
   const [menu, setMenu] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [selected, setSelected] = useState(null);
-  const [logo, setLogo] = useState(1);
+  const logo = 1;
   const [quiz, setQuiz] = useState(null);
+  const [selectedFamily, setSelectedFamily] = useState(null);
+
+  // --- Authentification (Supabase) ---
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+
+  useEffect(() => {
+    // Récupère la session active au chargement de la page
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session ? data.session.user : null);
+      setAuthLoading(false);
+    });
+
+    // Écoute les changements de session (connexion / déconnexion)
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session ? session.user : null);
+    });
+
+    return () => {
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setAccountMenuOpen(false);
+  };
 
   const total = useMemo(() => cart.reduce((s, p) => s + p.price, 0), [cart]);
   const add = (p) => {
@@ -255,6 +419,17 @@ export default function ZenoriaShop() {
       el.scrollIntoView({ behavior: "smooth" });
     }
   };
+
+  // Clique sur une carte "énergie" : filtre le catalogue sur la famille choisie
+  // et fait défiler jusqu'à la section Collections.
+  const handleEnergyClick = (energyName) => {
+    setSelectedFamily((prev) => (prev === energyName ? null : energyName));
+    scrollToSection("collections");
+  };
+
+  const filteredProducts = selectedFamily
+    ? products.filter((p) => p.family.includes(selectedFamily))
+    : products;
 
   return (
     <div className="min-h-screen bg-[#fbf8f4] text-[#342b32] selection:bg-[#dcc8dd]">
@@ -279,7 +454,36 @@ export default function ZenoriaShop() {
           </nav>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon"><Search size={19} /></Button>
-            <Button variant="ghost" size="icon" className="hidden sm:flex"><User size={19} /></Button>
+
+            {/* Compte utilisateur */}
+            <div className="relative hidden sm:block">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  if (user) {
+                    setAccountMenuOpen(!accountMenuOpen);
+                  } else {
+                    setAuthModalOpen(true);
+                  }
+                }}
+              >
+                <User size={19} />
+              </Button>
+              {user && accountMenuOpen && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-[#eadfe4] p-4 z-50">
+                  <div className="text-xs text-[#9a7384] uppercase tracking-widest mb-1">Connecté(e) en tant que</div>
+                  <div className="text-sm font-medium truncate mb-3">{user.email}</div>
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center gap-2 text-sm text-[#8f6075] hover:text-[#71485b]"
+                  >
+                    <LogOut size={16} /> Se déconnecter
+                  </button>
+                </div>
+              )}
+            </div>
+
             <Button variant="ghost" size="icon" onClick={() => setCartOpen(true)} className="relative">
               <ShoppingBag size={19} />
               {cart.length > 0 && (
@@ -300,6 +504,17 @@ export default function ZenoriaShop() {
             <button onClick={() => { scrollToSection("philosophie"); setMenu(false); }} className="text-left">Notre histoire</button>
             <button onClick={() => { scrollToSection("quiz"); setMenu(false); }} className="text-left">Quiz</button>
             <button onClick={() => { scrollToSection("contact"); setMenu(false); }} className="text-left">Contact</button>
+            {!authLoading && (
+              user ? (
+                <button onClick={() => { handleLogout(); setMenu(false); }} className="text-left text-[#8f6075]">
+                  Se déconnecter ({user.email})
+                </button>
+              ) : (
+                <button onClick={() => { setAuthModalOpen(true); setMenu(false); }} className="text-left text-[#8f6075]">
+                  Connexion / Créer un compte
+                </button>
+              )
+            )}
           </div>
         )}
       </header>
@@ -335,8 +550,8 @@ export default function ZenoriaShop() {
               </div>
             </motion.div>
             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8 }} className="relative flex justify-center">
-              <div className="h-[420px] w-[420px] max-w-[88vw] rounded-full bg-white/35 border border-white shadow-[0_30px_100px_rgba(91,54,77,.2)] grid place-items-center">
-                <RingVisual product={products[0]} large />
+              <div className="h-[420px] w-[420px] max-w-[88vw] rounded-full bg-white/35 border border-white shadow-[0_30px_100px_rgba(91,54,77,.2)] overflow-hidden relative">
+                <RingVisual product={products[0]} large circle video />
               </div>
               <div className="absolute right-0 bottom-8 rounded-2xl bg-white/65 backdrop-blur p-4 shadow-lg">
                 <Gem className="text-[#9b6480] mb-2" />
@@ -355,7 +570,16 @@ export default function ZenoriaShop() {
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {energies.map((e) => (
-              <motion.div whileHover={{ y: -7 }} key={e.name} className={`rounded-[2rem] p-6 min-h-48 bg-gradient-to-br ${e.bg} border border-white shadow-sm`}>
+              <motion.div
+                whileHover={{ y: -7 }}
+                key={e.name}
+                onClick={() => handleEnergyClick(e.name)}
+                role="button"
+                tabIndex={0}
+                className={`cursor-pointer rounded-[2rem] p-6 min-h-48 bg-gradient-to-br ${e.bg} border shadow-sm transition ${
+                  selectedFamily === e.name ? "border-[#8f6075] ring-2 ring-[#8f6075]" : "border-white"
+                }`}
+              >
                 <e.icon className="mb-8 text-[#725464]" />
                 <div className="font-serif text-2xl mb-2">{e.name}</div>
                 <div className="text-sm text-[#665c61]">{e.desc}</div>
@@ -371,12 +595,20 @@ export default function ZenoriaShop() {
             <div className="flex justify-between items-end mb-9">
               <div>
                 <div className="text-xs tracking-[.3em] text-[#9c7285] uppercase mb-3">La collection</div>
-                <h2 className="font-serif text-4xl">Nos créations</h2>
+                <h2 className="font-serif text-4xl">
+                  {selectedFamily ? `Collection ${selectedFamily}` : "Nos créations"}
+                </h2>
               </div>
-              <button className="text-sm border-b border-[#6d4e5c]">Voir toute la collection</button>
+              {selectedFamily ? (
+                <button onClick={() => setSelectedFamily(null)} className="text-sm border-b border-[#6d4e5c]">
+                  Voir toute la collection
+                </button>
+              ) : (
+                <button className="text-sm border-b border-[#6d4e5c]">Voir toute la collection</button>
+              )}
             </div>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {products.map((p) => (
+              {filteredProducts.map((p) => (
                 <Card key={p.id} className="overflow-hidden rounded-[1.5rem] border-[#eee2e5] group">
                   <div className="relative">
                     <RingVisual product={p} />
@@ -597,17 +829,13 @@ export default function ZenoriaShop() {
               exit={{ opacity: 0, scale: 0.95 }}
               className="fixed z-50 inset-x-4 top-[6%] max-w-4xl mx-auto bg-[#fbf8f4] rounded-[2rem] overflow-hidden shadow-2xl grid md:grid-cols-2 max-h-[88vh] overflow-y-auto"
             >
-              <RingVisual product={selected} large />
+              <ProductMedia product={selected} />
               <div className="p-8 relative">
                 <button className="absolute right-5 top-5" onClick={() => setSelected(null)}><X /></button>
                 <div className="text-xs uppercase tracking-widest text-[#9a7384]">{selected.family} · {selected.collection}</div>
                 <h3 className="font-serif text-4xl mt-3">{selected.name}</h3>
                 <div className="text-2xl mt-4">{selected.price},00 €</div>
                 <p className="text-sm leading-6 text-[#70656a] my-6">{selected.energy}</p>
-                <div className="flex gap-2 mb-6 text-xs text-[#826d77]">
-                  <span className="rounded-full bg-[#f5edf1] px-3 py-1">{selected.photoCount} photo{selected.photoCount > 1 ? "s" : ""}</span>
-                  <span className="rounded-full bg-[#f5edf1] px-3 py-1">{selected.videoCount} vidéo</span>
-                </div>
                 <label className="text-xs uppercase tracking-widest">Taille</label>
                 <div className="flex gap-2 mt-2 mb-6">
                   {[50, 52, 54, 56].map((s) => (
@@ -623,24 +851,8 @@ export default function ZenoriaShop() {
         )}
       </AnimatePresence>
 
-      <div className="fixed left-4 bottom-4 z-30 rounded-2xl bg-white/90 backdrop-blur shadow-lg border border-[#eadce2] p-3 hidden md:block">
-        <div className="text-[10px] uppercase tracking-widest mb-2">3 variantes logo</div>
-        <div className="flex gap-2">
-          {[1, 2, 3].map((n) => (
-            <button
-              onClick={() => setLogo(n)}
-              key={n}
-              className={`h-8 w-8 rounded-full border ${logo === n ? "ring-2 ring-[#9a6b80]" : "border-[#ddd]"}`}
-            >
-              <span
-                className={`block m-auto h-5 w-5 rounded-full bg-gradient-to-br ${
-                  n === 1 ? "from-[#bd8792] via-[#d8b36d] to-[#705185]" : n === 2 ? "from-[#6f4a8e] via-[#ead4b0] to-[#bf8797]" : "from-[#222] via-[#9d6f86] to-[#d7b66f]"
-                }`}
-              />
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* AUTHENTIFICATION */}
+      <AuthModal open={authModalOpen} onClose={() => setAuthModalOpen(false)} />
     </div>
   );
 }

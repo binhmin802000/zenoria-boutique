@@ -3,7 +3,7 @@ import Head from "next/head";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShoppingBag, Search, User, Heart, Menu, X, Sparkles, ArrowRight,
-  Star, Leaf, Shield, Sun, Gem, Instagram, LogOut
+  Star, Leaf, Shield, Gem, Instagram, LogOut
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,8 +15,7 @@ import AuthModal from "@/components/AuthModal";
 // Pour ajouter tes vraies photos/vidéos :
 // 1. Dépose les fichiers dans /public/images/<dossier-collection>/
 // 2. Renseigne le champ "photos" et "video" ci-dessous avec les
-//    noms de fichiers exacts (déjà pré-remplis à partir de ton
-//    inventaire Windows).
+//    noms de fichiers exacts.
 // ============================================================
 
 const products = [
@@ -269,21 +268,21 @@ function RingVisual({ product, large = false, circle = false, video = false }) {
 
 // Visuel affiché dans la fiche produit (modal).
 // Par défaut : lit automatiquement la vidéo de la collection en boucle.
-// L'utilisateur peut basculer vers une galerie photo (navigable une par une)
-// via les onglets "Vidéo" / "Photos" affichés sous le média.
-function ProductMedia({ product }) {
+// "initialMode" permet d'ouvrir directement sur les photos ("photo") ou la vidéo ("video").
+// L'utilisateur peut ensuite basculer via les onglets "Vidéo" / "X photos" sous le média.
+function ProductMedia({ product, initialMode = "video" }) {
   const [videoError, setVideoError] = useState(false);
-  const [mode, setMode] = useState("video"); // "video" | "photo"
+  const [mode, setMode] = useState(initialMode); // "video" | "photo"
   const [photoIndex, setPhotoIndex] = useState(0);
   const videoSrc = product.video ? `/images/${product.slug}/${product.video}` : null;
   const photos = product.photos || [];
 
-  // Reset de la sélection quand on change de produit
+  // Remise à zéro quand on change de produit ou de mode d'ouverture
   useEffect(() => {
-    setMode("video");
+    setMode(initialMode);
     setPhotoIndex(0);
     setVideoError(false);
-  }, [product.slug]);
+  }, [product.slug, initialMode]);
 
   const hasVideo = Boolean(videoSrc) && !videoError;
   const hasPhotos = photos.length > 0;
@@ -374,6 +373,7 @@ export default function ZenoriaShop() {
   const [menu, setMenu] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [selectedMode, setSelectedMode] = useState("video");
   const logo = 1;
   const [quiz, setQuiz] = useState(null);
   const [selectedFamily, setSelectedFamily] = useState(null);
@@ -401,6 +401,19 @@ export default function ZenoriaShop() {
     };
   }, []);
 
+  // Nettoie l'URL après une connexion automatique via lien d'e-mail
+  // (confirmation d'inscription, mot de passe oublié), pour ne plus
+  // afficher le jeton d'accès dans la barre d'adresse.
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash.includes("access_token")) {
+      // On laisse d'abord Supabase lire le jeton, puis on nettoie l'URL.
+      const timer = setTimeout(() => {
+        window.history.replaceState(null, "", window.location.pathname);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setAccountMenuOpen(false);
@@ -410,6 +423,12 @@ export default function ZenoriaShop() {
   const add = (p) => {
     setCart([...cart, p]);
     setCartOpen(true);
+  };
+
+  // Ouvre la fiche produit, directement sur la vidéo ou sur les photos
+  const openProduct = (p, mode = "video") => {
+    setSelectedMode(mode);
+    setSelected(p);
   };
 
   // Scroll fluide vers une section par son id, sans utiliser de lien "#" classique
@@ -618,7 +637,7 @@ export default function ZenoriaShop() {
                     >
                       <Heart size={18} fill={fav.includes(p.id) ? "#9a667c" : "none"} className="text-[#9a667c]" />
                     </button>
-                    <button className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition z-[5]" onClick={() => setSelected(p)} />
+                    <button className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition z-[5]" onClick={() => openProduct(p)} />
                   </div>
                   <CardContent className="p-5">
                     <div className="text-xs uppercase tracking-widest text-[#9a7384]">{p.family} · {p.collection}</div>
@@ -628,8 +647,20 @@ export default function ZenoriaShop() {
                     </div>
                     <p className="text-sm text-[#70656a] mt-3">{p.energy}</p>
                     <div className="flex gap-2 mt-4 text-xs text-[#826d77]">
-                      <span className="rounded-full bg-[#f5edf1] px-3 py-1">{p.photoCount} photo{p.photoCount > 1 ? "s" : ""}</span>
-                      <span className="rounded-full bg-[#f5edf1] px-3 py-1">{p.videoCount} vidéo</span>
+                      <button
+                        type="button"
+                        onClick={() => openProduct(p, "photo")}
+                        className="rounded-full bg-[#f5edf1] hover:bg-[#ead9e1] px-3 py-1 transition"
+                      >
+                        {p.photoCount} photo{p.photoCount > 1 ? "s" : ""}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openProduct(p, "video")}
+                        className="rounded-full bg-[#f5edf1] hover:bg-[#ead9e1] px-3 py-1 transition"
+                      >
+                        {p.videoCount} vidéo
+                      </button>
                     </div>
                     <Button onClick={() => add(p)} variant="outline" className="w-full mt-5 rounded-full border-[#b88d9f] hover:bg-[#8f6075] hover:text-white">
                       Ajouter au panier
@@ -694,7 +725,7 @@ export default function ZenoriaShop() {
                   <div className="font-serif text-3xl my-3">{quiz}</div>
                   <p className="text-sm text-[#6b6166] mb-5">Nous avons sélectionné une création qui accompagne cette intention.</p>
                   <Button
-                    onClick={() => setSelected(products.find((p) => p.collection === quiz) || products[0])}
+                    onClick={() => openProduct(products.find((p) => p.collection === quiz) || products[0])}
                     className="rounded-full bg-[#8d5e74]"
                   >
                     Voir la recommandation
@@ -719,8 +750,8 @@ export default function ZenoriaShop() {
             <div className="grid md:grid-cols-3 gap-5">
               {[
                 "Une création délicate, encore plus belle portée.",
-                "Le soin du détail et l&apos;univers de la marque m&apos;ont séduite.",
-                "Un cadeau lumineux, présenté avec beaucoup d&apos;élégance.",
+                "Le soin du détail et l'univers de la marque m'ont séduite.",
+                "Un cadeau lumineux, présenté avec beaucoup d'élégance.",
               ].map((t, i) => (
                 <div key={t} className="rounded-3xl bg-[#fbf7f5] p-7">
                   <div className="flex mb-4">
@@ -835,7 +866,7 @@ export default function ZenoriaShop() {
               exit={{ opacity: 0, scale: 0.95 }}
               className="fixed z-50 inset-x-4 top-[6%] max-w-4xl mx-auto bg-[#fbf8f4] rounded-[2rem] overflow-hidden shadow-2xl grid md:grid-cols-2 max-h-[88vh] overflow-y-auto"
             >
-              <ProductMedia product={selected} />
+              <ProductMedia product={selected} initialMode={selectedMode} />
               <div className="p-8 relative">
                 <button className="absolute right-5 top-5" onClick={() => setSelected(null)}><X /></button>
                 <div className="text-xs uppercase tracking-widest text-[#9a7384]">{selected.family} · {selected.collection}</div>

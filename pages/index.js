@@ -671,13 +671,19 @@ export default function ZenoriaShop() {
               <p className="text-[#6d6068] mb-7">Choisissez votre intention et découvrez la création Zenoria qui lui correspond.</p>
               <div className="flex flex-wrap gap-3">
                 {["Sérénité", "Amour", "Protection", "Abondance", "Éveil spirituel"].map((x) => (
-                  <Button
+                  <button
                     key={x}
+                    type="button"
                     onClick={() => setQuiz(x)}
-                    className={`rounded-full ${quiz === x ? "bg-[#82566d] text-white" : "bg-white text-[#54434c] hover:bg-white/70"}`}
+                    style={{ color: quiz === x ? "#ffffff" : "#54434c" }}
+                    className={`rounded-full px-5 h-10 text-sm font-medium border transition ${
+                      quiz === x
+                        ? "bg-[#82566d] border-[#82566d]"
+                        : "bg-white border-[#d9c5cc] hover:bg-[#f5edf1]"
+                    }`}
                   >
                     {x}
-                  </Button>
+                  </button>
                 ))}
               </div>
             </div>

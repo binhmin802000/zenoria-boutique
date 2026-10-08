@@ -3,7 +3,7 @@ import Head from "next/head";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShoppingBag, Search, User, Heart, Menu, X, Sparkles, ArrowRight,
-  Star, Leaf, Shield, Gem, Instagram, LogOut
+  Star, Leaf, Shield, Gem, Instagram, LogOut, Minus, Plus, Trash2, Tag, Truck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,14 +11,98 @@ import { supabase } from "@/lib/supabase";
 import AuthModal from "@/components/AuthModal";
 
 // ============================================================
-// CATALOGUE ZENORIA — basé sur la structure réelle des dossiers
-// Pour ajouter tes vraies photos/vidéos :
-// 1. Dépose les fichiers dans /public/images/<dossier-collection>/
-// 2. Renseigne le champ "photos" et "video" ci-dessous avec les
-//    noms de fichiers exacts.
+// RÉGLAGES DE LA BOUTIQUE (à adapter facilement)
 // ============================================================
+const SHIPPING_FEE = 4.9;               // frais de livraison sous le seuil (France)
+const FREE_SHIPPING_THRESHOLD = 50;     // livraison offerte à partir de ce montant (après remise)
+const DEFAULT_STOCK = 5;                // stock de départ pour chaque collection
+const MAX_QTY_PER_PRODUCT = 10;         // quantité max par bague (stock + fabrication sur commande)
+const BACKORDER_LEAD_TIME = "5 jours";  // délai de fabrication une fois le stock épuisé
+const CART_STORAGE_KEY = "zenoria_cart_v2";
 
-const products = [
+// Codes promo D'EXEMPLE : à modifier ou supprimer avant la mise en vente.
+// Attention : ces codes sont lisibles dans le code du site. Pour de vrais codes,
+// on les gérera côté serveur avec Stripe à l'étape suivante.
+//   type "percent"  -> pourcentage de remise
+//   type "fixed"    -> remise en euros
+//   type "shipping" -> livraison offerte
+const PROMO_CODES = {
+  BIENVENUE10: { type: "percent", value: 10, label: "-10 % sur vos articles" },
+  ZENORIA5: { type: "fixed", value: 5, label: "5 € de remise" },
+  LIVRAISONZEN: { type: "shipping", value: 0, label: "Livraison offerte" },
+};
+
+const formatPrice = (n) =>
+  n.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
+
+const round2 = (n) => Math.round(n * 100) / 100;
+
+// Calcul des montants du panier (sous-total, remise, livraison, total)
+function computeTotals(lines, promo) {
+  const subtotal = round2(lines.reduce((s, l) => s + l.product.price * l.qty, 0));
+  let discount = 0;
+  if (promo && promo.type === "percent") discount = round2((subtotal * promo.value) / 100);
+  if (promo && promo.type === "fixed") discount = Math.min(promo.value, subtotal);
+  const discounted = round2(subtotal - discount);
+  const freeByPromo = Boolean(promo && promo.type === "shipping");
+  const qualifies = discounted >= FREE_SHIPPING_THRESHOLD;
+  const shipping = lines.length === 0 ? 0 : freeByPromo || qualifies ? 0 : SHIPPING_FEE;
+  const total = round2(discounted + shipping);
+  const remaining = round2(Math.max(0, FREE_SHIPPING_THRESHOLD - discounted));
+  return { subtotal, discount, shipping, total, remaining, freeShipping: lines.length > 0 && shipping === 0 };
+}
+
+// ============================================================
+// DISPONIBILITÉ D'UNE BAGUE
+// Chaque bague part avec un stock (product.stock, 5 par défaut).
+// - qty <= stock       -> disponible immédiatement
+// - qty > stock         -> la partie au-delà du stock est fabriquée sur
+//                          commande, avec un délai de quelques jours.
+// - stock === 0         -> rupture de stock, fabrication sur commande uniquement.
+// Remarque : sans base de données, ce stock est une information affichée
+// par bague (modifiable dans le catalogue), pas un compteur partagé en temps
+// réel entre tous les visiteurs du site.
+// ============================================================
+function getAvailability(product, qty = 0) {
+  const stock = typeof product.stock === "number" ? product.stock : DEFAULT_STOCK;
+  if (stock <= 0) {
+    return { state: "backorder", stock, label: "Rupture de stock", detail: `Fabriquée sur commande · délai ${BACKORDER_LEAD_TIME}` };
+  }
+  if (qty > stock) {
+    return {
+      state: "partial-backorder",
+      stock,
+      label: `${stock} disponible${stock > 1 ? "s" : ""}`,
+      detail: `${qty - stock} exemplaire${qty - stock > 1 ? "s" : ""} fabriqué${qty - stock > 1 ? "s" : ""} sur commande · délai ${BACKORDER_LEAD_TIME}`,
+    };
+  }
+  return { state: "in-stock", stock, label: `${stock} disponible${stock > 1 ? "s" : ""}`, detail: "" };
+}
+
+// ============================================================
+// AFFICHAGE ADAPTATIF DU PANIER
+// Le panier choisit tout seul la présentation la plus confortable qui tient
+// dans la hauteur de l'écran : "comfort" (grandes lignes), "compact" ou "dense".
+// rowH = hauteur estimée d'une ligne (marges comprises).
+// ============================================================
+const CART_DENSITY = {
+  comfort: { thumb: "h-20 w-20", name: "text-lg", btn: "h-8 w-8", rowH: 150 },
+  compact: { thumb: "h-14 w-14", name: "text-base", btn: "h-7 w-7", rowH: 112 },
+  dense: { thumb: "h-12 w-12", name: "text-sm", btn: "h-6 w-6", rowH: 90 },
+};
+// Hauteur réservée hors liste : en-tête + barre de livraison + pied de panier (estimation)
+const CART_RESERVED_HEIGHT = 380;
+
+function pickCartDensity(lineCount, viewportHeight, extraHeight = 0) {
+  const available = Math.max(0, viewportHeight - CART_RESERVED_HEIGHT - extraHeight);
+  return ["comfort", "compact"].find((d) => lineCount * CART_DENSITY[d].rowH <= available) || "dense";
+}
+
+// ============================================================
+// CATALOGUE ZENORIA — basé sur la structure réelle des dossiers
+// Photos/vidéos : /public/images/<slug>/<nom-du-fichier>
+// ============================================================
+const baseProducts = [
   {
     id: 1,
     slug: "bleu-de-mer",
@@ -171,6 +255,72 @@ const products = [
   },
 ];
 
+// ============================================================
+// FICHE DESCRIPTIVE DE CHAQUE BAGUE (à compléter par toi)
+//
+// - pitch    : phrases de présentation affichées sur la fiche
+// - crystals : composition en cristaux. À REMPLIR avec les vraies valeurs :
+//              [{ color: "Bleu océan", count: 5, hex: "#5aa9d6" }, ...]
+//              ("hex" est facultatif : il affiche une pastille de couleur)
+// - stock    : nombre de bagues disponibles immédiatement (5 par défaut).
+//              Mets 0 pour une collection en rupture de stock : le site
+//              proposera alors une fabrication sur commande automatiquement.
+// ============================================================
+const productDetails = {
+  "bleu-de-mer": {
+    pitch: "Un bleu limpide, comme une eau calme au petit matin. Une bague qui invite au lâcher-prise et apporte une touche de fraîcheur à chacune de vos tenues.",
+    crystals: [],
+    stock: DEFAULT_STOCK,
+  },
+  "bleu-saphir": {
+    pitch: "Un bleu profond et lumineux, pour celles qui avancent avec confiance. Une bague élégante et affirmée, qui se remarque sans jamais en faire trop.",
+    crystals: [],
+    stock: DEFAULT_STOCK,
+  },
+  "bleu-violette": {
+    pitch: "Entre bleu et violet, un jeu de reflets qui change avec la lumière. Une bague pour les âmes intuitives, à porter comme un petit secret.",
+    crystals: [],
+    stock: DEFAULT_STOCK,
+  },
+  "bleue": {
+    pitch: "Un bleu pur et apaisant, simple et harmonieux. Le bijou idéal d'un quotidien serein, facile à associer avec tout.",
+    crystals: [],
+    stock: DEFAULT_STOCK,
+  },
+  "chocolat": {
+    pitch: "Des tons chauds et profonds, comme une terre généreuse. Une bague douce et rassurante, qui apporte une élégance naturelle à votre main.",
+    crystals: [],
+    stock: DEFAULT_STOCK,
+  },
+  "citron": {
+    pitch: "Un éclat vif et solaire pour illuminer vos journées. Une bague pleine d'énergie, qui met de bonne humeur dès qu'on la regarde.",
+    crystals: [],
+    stock: DEFAULT_STOCK,
+  },
+  "rose": {
+    pitch: "Un rose tendre et délicat, symbole de douceur et de féminité. Une bague romantique, idéale à s'offrir ou à offrir.",
+    crystals: [],
+    stock: DEFAULT_STOCK,
+  },
+  "rose-bonbon": {
+    pitch: "Un rose vif et pétillant, joyeux comme un sourire. Une bague qui affiche votre optimisme et réveille toutes les tenues.",
+    crystals: [],
+    stock: DEFAULT_STOCK,
+  },
+  "verte": {
+    pitch: "Un vert frais, comme une nature qui renaît. Une bague qui accompagne vos nouveaux départs avec légèreté et éclat.",
+    crystals: [],
+    stock: DEFAULT_STOCK,
+  },
+  "violette": {
+    pitch: "Un violet profond, couleur de l'intuition et de la méditation. Une bague précieuse pour vos moments de calme intérieur.",
+    crystals: [],
+    stock: DEFAULT_STOCK,
+  },
+};
+
+const products = baseProducts.map((p) => ({ ...p, ...(productDetails[p.slug] || {}) }));
+
 const energies = [
   { name: "Bleus", desc: "4 créations · Sérénité et protection", icon: Shield, bg: "from-sky-100 to-indigo-200" },
   { name: "Roses", desc: "2 créations · Amour et joie", icon: Heart, bg: "from-rose-100 to-pink-200" },
@@ -266,10 +416,49 @@ function RingVisual({ product, large = false, circle = false, video = false }) {
   );
 }
 
+// Petite vignette à taille variable, utilisée dans le panier
+function CartThumb({ product, size = "h-20 w-20" }) {
+  const [imgError, setImgError] = useState(false);
+  const src = product.photos && product.photos[0] ? `/images/${product.slug}/${product.photos[0]}` : null;
+  if (src && !imgError) {
+    return (
+      <div className={`${size} shrink-0 rounded-xl overflow-hidden bg-[#f5edf1]`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt={product.name} onError={() => setImgError(true)} className="w-full h-full object-cover object-center" />
+      </div>
+    );
+  }
+  return (
+    <div className={`${size} shrink-0 rounded-xl bg-gradient-to-br ${product.color} grid place-items-center text-xl`}>
+      {product.stone}
+    </div>
+  );
+}
+
+// Pastille de disponibilité. "qty" permet d'adapter le message : sans quantité
+// (fiche produit, carte catalogue), elle indique simplement le stock ; avec une
+// quantité (dans le panier), elle précise si une partie est sur commande.
+function AvailabilityBadge({ product, qty = 0, showDetail = false }) {
+  const a = getAvailability(product, qty);
+  const color =
+    a.state === "in-stock"
+      ? "bg-emerald-50 text-emerald-700"
+      : a.state === "partial-backorder"
+      ? "bg-amber-50 text-amber-700"
+      : "bg-amber-50 text-amber-700";
+  const dot = a.state === "in-stock" ? "bg-emerald-500" : "bg-amber-500";
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs ${color}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+      {a.label}
+      {showDetail && a.detail ? ` · ${a.detail}` : ""}
+    </span>
+  );
+}
+
 // Visuel affiché dans la fiche produit (modal).
 // Par défaut : lit automatiquement la vidéo de la collection en boucle.
 // "initialMode" permet d'ouvrir directement sur les photos ("photo") ou la vidéo ("video").
-// L'utilisateur peut ensuite basculer via les onglets "Vidéo" / "X photos" sous le média.
 function ProductMedia({ product, initialMode = "video" }) {
   const [videoError, setVideoError] = useState(false);
   const [mode, setMode] = useState(initialMode); // "video" | "photo"
@@ -368,7 +557,17 @@ function ProductMedia({ product, initialMode = "video" }) {
 }
 
 export default function ZenoriaShop() {
-  const [cart, setCart] = useState([]);
+  // --- Panier : liste de { id, qty } (les prix et stocks sont relus depuis le catalogue) ---
+  const [cartItems, setCartItems] = useState([]);
+  const [cartLoaded, setCartLoaded] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoInput, setPromoInput] = useState("");
+  const [promoError, setPromoError] = useState("");
+  const [promoOpen, setPromoOpen] = useState(false);
+  const [cartNotice, setCartNotice] = useState("");
+  const [checkoutNotice, setCheckoutNotice] = useState(false);
+  const [viewportH, setViewportH] = useState(800);
+
   const [fav, setFav] = useState([]);
   const [menu, setMenu] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
@@ -402,11 +601,8 @@ export default function ZenoriaShop() {
   }, []);
 
   // Nettoie l'URL après une connexion automatique via lien d'e-mail
-  // (confirmation d'inscription, mot de passe oublié), pour ne plus
-  // afficher le jeton d'accès dans la barre d'adresse.
   useEffect(() => {
     if (typeof window !== "undefined" && window.location.hash.includes("access_token")) {
-      // On laisse d'abord Supabase lire le jeton, puis on nettoie l'URL.
       const timer = setTimeout(() => {
         window.history.replaceState(null, "", window.location.pathname);
       }, 1000);
@@ -414,15 +610,145 @@ export default function ZenoriaShop() {
     }
   }, []);
 
+  // Restaure le panier enregistré dans le navigateur
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(CART_STORAGE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        const items = (saved.items || [])
+          .map((i) => {
+            const p = products.find((x) => x.id === i.id);
+            return p ? { id: p.id, qty: Math.min(MAX_QTY_PER_PRODUCT, Math.max(1, Number(i.qty) || 1)) } : null;
+          })
+          .filter(Boolean);
+        setCartItems(items);
+        if (saved.promo && PROMO_CODES[saved.promo]) setPromoCode(saved.promo);
+      }
+    } catch (e) {
+      // panier illisible : on repart d'un panier vide
+    }
+    setCartLoaded(true);
+  }, []);
+
+  // Enregistre le panier à chaque modification
+  useEffect(() => {
+    if (!cartLoaded) return;
+    try {
+      window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify({ items: cartItems, promo: promoCode }));
+    } catch (e) {
+      // stockage indisponible : on ignore
+    }
+  }, [cartItems, promoCode, cartLoaded]);
+
+  // Fermeture des fenêtres avec la touche Échap
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        setCartOpen(false);
+        setSelected(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Suit la hauteur de la fenêtre pour adapter le panier
+  useEffect(() => {
+    const update = () => setViewportH(window.innerHeight);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setAccountMenuOpen(false);
   };
 
-  const total = useMemo(() => cart.reduce((s, p) => s + p.price, 0), [cart]);
-  const add = (p) => {
-    setCart([...cart, p]);
+  // --- Calculs du panier ---
+  const cartLines = useMemo(
+    () =>
+      cartItems
+        .map((it) => ({ product: products.find((p) => p.id === it.id), qty: it.qty }))
+        .filter((l) => l.product),
+    [cartItems]
+  );
+  const cartCount = cartLines.reduce((s, l) => s + l.qty, 0);
+  const promo = promoCode ? PROMO_CODES[promoCode] : null;
+  const totals = useMemo(() => computeTotals(cartLines, promo), [cartLines, promo]);
+  const progress = Math.min(100, Math.round(((totals.subtotal - totals.discount) / FREE_SHIPPING_THRESHOLD) * 100));
+  const cartDensity = pickCartDensity(
+    cartLines.length,
+    viewportH,
+    (promoOpen && !promo ? 44 : 0) + (cartNotice ? 44 : 0)
+  );
+  const tightFooter = cartDensity === "dense";
+  const dens = CART_DENSITY[cartDensity];
+
+  // --- Actions du panier ---
+  const addToCart = (p) => {
+    const current = cartItems.find((i) => i.id === p.id);
+    setCheckoutNotice(false);
+    if (current && current.qty >= MAX_QTY_PER_PRODUCT) {
+      setCartNotice(`Quantité maximale atteinte pour « ${p.name} ».`);
+      setCartOpen(true);
+      return;
+    }
+    setCartNotice("");
+    setCartItems(
+      current
+        ? cartItems.map((i) => (i.id === p.id ? { ...i, qty: i.qty + 1 } : i))
+        : [...cartItems, { id: p.id, qty: 1 }]
+    );
     setCartOpen(true);
+  };
+
+  const changeQty = (p, delta) => {
+    const current = cartItems.find((i) => i.id === p.id);
+    if (!current) return;
+    setCheckoutNotice(false);
+    if (delta > 0 && current.qty >= MAX_QTY_PER_PRODUCT) {
+      setCartNotice(`Quantité maximale atteinte pour « ${p.name} ».`);
+      return;
+    }
+    setCartNotice("");
+    setCartItems(
+      cartItems.map((i) => (i.id === p.id ? { ...i, qty: Math.min(MAX_QTY_PER_PRODUCT, Math.max(1, i.qty + delta)) } : i))
+    );
+  };
+
+  const removeLine = (p) => {
+    setCartNotice("");
+    setCheckoutNotice(false);
+    setCartItems(cartItems.filter((i) => i.id !== p.id));
+  };
+
+  const clearCart = () => {
+    setCartNotice("");
+    setCheckoutNotice(false);
+    setCartItems([]);
+    setPromoCode("");
+    setPromoOpen(false);
+  };
+
+  const applyPromo = (e) => {
+    if (e) e.preventDefault();
+    const code = promoInput.trim().toUpperCase();
+    if (!code) return;
+    if (PROMO_CODES[code]) {
+      setPromoCode(code);
+      setPromoError("");
+      setPromoInput("");
+      setPromoOpen(false);
+    } else {
+      setPromoError("Ce code promo n'est pas valide.");
+    }
+  };
+
+  const removePromo = () => {
+    setPromoCode("");
+    setPromoError("");
   };
 
   // Ouvre la fiche produit, directement sur la vidéo ou sur les photos
@@ -431,7 +757,7 @@ export default function ZenoriaShop() {
     setSelected(p);
   };
 
-  // Scroll fluide vers une section par son id, sans utiliser de lien "#" classique
+  // Scroll fluide vers une section par son id
   const scrollToSection = (id) => {
     const el = document.getElementById(id);
     if (el) {
@@ -440,7 +766,6 @@ export default function ZenoriaShop() {
   };
 
   // Clique sur une carte "énergie" : filtre le catalogue sur la famille choisie
-  // et fait défiler jusqu'à la section Collections.
   const handleEnergyClick = (energyName) => {
     setSelectedFamily((prev) => (prev === energyName ? null : energyName));
     scrollToSection("collections");
@@ -454,11 +779,11 @@ export default function ZenoriaShop() {
     <div className="min-h-screen bg-[#fbf8f4] text-[#342b32] selection:bg-[#dcc8dd]">
       <Head>
         <title>Zenoria — L&apos;énergie du cristal, l&apos;harmonie de l&apos;âme</title>
-        <meta name="description" content="Bagues artisanales en cristaux Swarovski. Collections Bleus, Roses, Nature et Violettes." />
+        <meta name="description" content="Bagues artisanales en cristaux. Collections Bleus, Roses, Nature et Violettes." />
       </Head>
 
       <div className="bg-[#342434] text-white/85 text-[11px] py-2 px-4 text-center tracking-wide">
-        Livraison offerte dès 70 € · Créations artisanales · Paiement sécurisé
+        Livraison offerte dès {FREE_SHIPPING_THRESHOLD} € · Créations artisanales · Paiement sécurisé
       </div>
 
       <header className="sticky top-0 z-40 bg-[#fbf8f4]/95 backdrop-blur border-b border-[#eadfe4]">
@@ -503,11 +828,11 @@ export default function ZenoriaShop() {
               )}
             </div>
 
-            <Button variant="ghost" size="icon" onClick={() => setCartOpen(true)} className="relative">
+            <Button variant="ghost" size="icon" onClick={() => setCartOpen(true)} className="relative" aria-label="Ouvrir le panier">
               <ShoppingBag size={19} />
-              {cart.length > 0 && (
-                <span className="absolute right-0 top-0 h-5 min-w-5 rounded-full bg-[#9a667c] text-white text-[10px] grid place-items-center">
-                  {cart.length}
+              {cartCount > 0 && (
+                <span className="absolute right-0 top-0 h-5 min-w-5 px-1 rounded-full bg-[#9a667c] text-white text-[10px] grid place-items-center">
+                  {cartCount}
                 </span>
               )}
             </Button>
@@ -544,7 +869,7 @@ export default function ZenoriaShop() {
           <div className="absolute -right-24 top-10 h-[560px] w-[560px] rounded-full border border-white/50 bg-white/20 backdrop-blur-sm" />
           <div className="max-w-7xl mx-auto px-6 py-20 grid lg:grid-cols-2 items-center gap-14 relative z-10">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
-              <div className="text-xs uppercase tracking-[.3em] text-[#8b6578] mb-5">10 collections · Cristaux Swarovski</div>
+              <div className="text-xs uppercase tracking-[.3em] text-[#8b6578] mb-5">10 collections · Bagues artisanales</div>
               <h1 className="font-serif text-6xl md:text-8xl leading-none mb-5 text-[#513642]">ZENORIA</h1>
               <p className="font-serif italic text-2xl md:text-3xl text-[#594856] mb-5">
                 L&apos;énergie du cristal,<br />l&apos;harmonie de l&apos;âme.
@@ -634,15 +959,21 @@ export default function ZenoriaShop() {
                     <button
                       onClick={() => setFav(fav.includes(p.id) ? fav.filter((x) => x !== p.id) : [...fav, p.id])}
                       className="absolute right-4 top-4 h-10 w-10 bg-white/80 rounded-full grid place-items-center z-10"
+                      aria-label="Ajouter aux favoris"
                     >
                       <Heart size={18} fill={fav.includes(p.id) ? "#9a667c" : "none"} className="text-[#9a667c]" />
                     </button>
-                    <button className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition z-[5]" onClick={() => openProduct(p)} />
+                    <button className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition z-[5]" onClick={() => openProduct(p)} aria-label={`Voir ${p.name}`} />
                   </div>
                   <CardContent className="p-5">
                     <div className="text-xs uppercase tracking-widest text-[#9a7384]">{p.family} · {p.collection}</div>
-                    <div className="flex justify-between mt-2 gap-3">
-                      <div className="font-serif text-xl">{p.name}</div>
+                    <div className="flex justify-between items-start mt-2 gap-3">
+                      <div className="min-w-0">
+                        <div className="font-serif text-xl truncate">{p.name}</div>
+                        <div className="mt-1.5">
+                          <AvailabilityBadge product={p} />
+                        </div>
+                      </div>
                       <div className="font-medium whitespace-nowrap">{p.price},00 €</div>
                     </div>
                     <p className="text-sm text-[#70656a] mt-3">{p.energy}</p>
@@ -662,7 +993,7 @@ export default function ZenoriaShop() {
                         {p.videoCount} vidéo
                       </button>
                     </div>
-                    <Button onClick={() => add(p)} variant="outline" className="w-full mt-5 rounded-full border-[#b88d9f] hover:bg-[#8f6075] hover:text-white">
+                    <Button onClick={() => addToCart(p)} variant="outline" className="w-full mt-5 rounded-full border-[#b88d9f] hover:bg-[#8f6075] hover:text-white">
                       Ajouter au panier
                     </Button>
                   </CardContent>
@@ -820,35 +1151,207 @@ export default function ZenoriaShop() {
         {cartOpen && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/35 z-50" onClick={() => setCartOpen(false)} />
-            <motion.aside initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} className="fixed right-0 top-0 h-full w-full max-w-md bg-[#fbf8f4] z-50 p-7 shadow-2xl">
-              <div className="flex justify-between items-center">
-                <h3 className="font-serif text-3xl">Votre panier</h3>
-                <Button variant="ghost" size="icon" onClick={() => setCartOpen(false)}><X /></Button>
-              </div>
-              <div className="mt-8 space-y-4">
-                {cart.length === 0 ? (
-                  <p className="text-[#756a70]">Votre panier est vide.</p>
-                ) : (
-                  cart.map((p, i) => (
-                    <div className="flex justify-between bg-white p-4 rounded-2xl" key={i}>
-                      <div>
-                        <div className="font-serif">{p.name}</div>
-                        <div className="text-xs text-[#8b737e]">{p.collection}</div>
-                      </div>
-                      <div>{p.price},00 €</div>
+            <motion.aside
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              style={{ height: "100dvh" }}
+              className="fixed right-0 top-0 h-full w-full max-w-md bg-[#fbf8f4] z-50 shadow-2xl flex flex-col"
+            >
+              {/* En-tête */}
+              <div className="flex-none flex justify-between items-center px-5 py-4 border-b border-[#eadfe4]">
+                <div className="min-w-0">
+                  <h3 className="font-serif text-2xl leading-none">Votre panier</h3>
+                  {cartCount > 0 && (
+                    <div className="text-xs text-[#8b737e] mt-1.5">
+                      {cartCount} article{cartCount > 1 ? "s" : ""}
+                      <span className="mx-1.5">·</span>
+                      <button onClick={clearCart} className="underline">Vider le panier</button>
                     </div>
-                  ))
-                )}
-              </div>
-              {cart.length > 0 && (
-                <div className="absolute bottom-7 left-7 right-7">
-                  <div className="flex justify-between text-xl font-serif mb-5">
-                    <span>Total</span>
-                    <span>{total},00 €</span>
-                  </div>
-                  <Button className="w-full rounded-full h-12 bg-[#82576c]">Commander</Button>
-                  <p className="text-[11px] text-center mt-3 text-[#7e7378]">Paiement de démonstration, aucune transaction réelle.</p>
+                  )}
                 </div>
+                <button onClick={() => setCartOpen(false)} className="h-10 w-10 rounded-full grid place-items-center hover:bg-[#f0e6ea]" aria-label="Fermer le panier">
+                  <X />
+                </button>
+              </div>
+
+              {cartLines.length === 0 ? (
+                <div className="flex-1 grid place-items-center p-8 text-center">
+                  <div>
+                    <ShoppingBag className="mx-auto text-[#b88d9f] mb-4" size={40} />
+                    <div className="font-serif text-2xl mb-2">Votre panier est vide</div>
+                    <p className="text-sm text-[#756a70] mb-6">Découvrez nos créations et laissez-vous guider par votre énergie.</p>
+                    <button
+                      onClick={() => { setCartOpen(false); scrollToSection("collections"); }}
+                      className="rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-6 h-11 text-sm"
+                    >
+                      Continuer mes achats
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Livraison offerte : toujours visible */}
+                  <div className="flex-none px-5 pt-3 pb-2">
+                    <div className="flex items-center gap-2 text-xs text-[#54434c]">
+                      <Truck size={14} className="text-[#8f6075] shrink-0" />
+                      {totals.freeShipping ? (
+                        <span>Livraison offerte 🎉</span>
+                      ) : (
+                        <span>Plus que <strong>{formatPrice(totals.remaining)}</strong> pour la livraison offerte</span>
+                      )}
+                    </div>
+                    <div className="h-1.5 rounded-full bg-[#f0e6ea] mt-2 overflow-hidden">
+                      <div className="h-full rounded-full bg-[#8f6075] transition-all" style={{ width: `${totals.freeShipping ? 100 : progress}%` }} />
+                    </div>
+                    <div className="text-[11px] text-[#8b737e] mt-1.5">
+                      Livraison offerte dès {FREE_SHIPPING_THRESHOLD} € en France
+                    </div>
+                    {cartNotice && (
+                      <div className="text-xs rounded-lg bg-amber-50 text-amber-700 px-3 py-2 mt-2">{cartNotice}</div>
+                    )}
+                  </div>
+
+                  {/* Liste : seule cette zone défile si vraiment il y a trop d'articles */}
+                  <div className={`flex-1 min-h-0 overflow-y-auto px-5 py-2 ${cartDensity === "dense" ? "space-y-2" : "space-y-3"}`}>
+                    {cartLines.map(({ product: p, qty }) => {
+                      const avail = getAvailability(p, qty);
+                      return (
+                        <div key={p.id} className={`flex gap-3 bg-white rounded-2xl border border-[#eee2e5] ${cartDensity === "dense" ? "p-2" : "p-3"}`}>
+                          <CartThumb product={p} size={dens.thumb} />
+                          <div className="flex-1 min-w-0 flex flex-col justify-between">
+                            <div className="flex justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className={`font-serif leading-tight truncate ${dens.name}`}>{p.name}</div>
+                                <div className="text-xs text-[#8b737e] mt-0.5 truncate">{p.collection}</div>
+                              </div>
+                              <button
+                                onClick={() => removeLine(p)}
+                                className="h-7 w-7 shrink-0 rounded-full grid place-items-center text-[#9a7384] hover:bg-[#f0e6ea]"
+                                aria-label={`Retirer ${p.name} du panier`}
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                            {cartDensity === "comfort" && (
+                              <div className="mt-1.5">
+                                <AvailabilityBadge product={p} qty={qty} showDetail />
+                              </div>
+                            )}
+                            {cartDensity !== "comfort" && avail.state !== "in-stock" && (
+                              <div className="text-[11px] text-amber-700 mt-1">{avail.detail}</div>
+                            )}
+                            <div className={`flex items-center justify-between ${cartDensity === "dense" ? "mt-1" : "mt-2"}`}>
+                              <div className="flex items-center rounded-full border border-[#d9c5cc]">
+                                <button
+                                  onClick={() => changeQty(p, -1)}
+                                  disabled={qty <= 1}
+                                  className={`${dens.btn} grid place-items-center rounded-full hover:bg-[#f5edf1] disabled:opacity-30 disabled:hover:bg-transparent`}
+                                  aria-label="Diminuer la quantité"
+                                >
+                                  <Minus size={13} />
+                                </button>
+                                <span className="w-7 text-center text-sm">{qty}</span>
+                                <button
+                                  onClick={() => changeQty(p, 1)}
+                                  className={`${dens.btn} grid place-items-center rounded-full hover:bg-[#f5edf1]`}
+                                  aria-label="Augmenter la quantité"
+                                >
+                                  <Plus size={13} />
+                                </button>
+                              </div>
+                              <div className="font-medium text-sm">{formatPrice(p.price * qty)}</div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Pied de panier : toujours visible */}
+                  <div className={`flex-none border-t border-[#eadfe4] bg-white/80 px-5 ${tightFooter ? "py-3 space-y-2" : "py-4 space-y-3"}`}>
+                    {promo ? (
+                      <div className="flex items-center justify-between rounded-xl bg-emerald-50 text-emerald-700 px-3 py-2 text-sm">
+                        <span className="flex items-center gap-2 min-w-0">
+                          <Tag size={14} className="shrink-0" />
+                          <span className="truncate">{promoCode} · {promo.label}</span>
+                        </span>
+                        <button onClick={removePromo} className="text-xs underline shrink-0 ml-2">Retirer</button>
+                      </div>
+                    ) : promoOpen ? (
+                      <form onSubmit={applyPromo}>
+                        <div className="flex gap-2">
+                          <input
+                            autoFocus
+                            value={promoInput}
+                            onChange={(e) => { setPromoInput(e.target.value); setPromoError(""); }}
+                            placeholder="Code promo"
+                            className="flex-1 min-w-0 rounded-full border border-[#d9c5cc] bg-white px-4 h-9 text-sm outline-none focus:border-[#8f6075] uppercase placeholder:normal-case"
+                          />
+                          <button
+                            type="submit"
+                            className="rounded-full border border-[#8f6075] text-[#8f6075] hover:bg-[#8f6075] hover:text-white px-4 h-9 text-sm transition"
+                          >
+                            Appliquer
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setPromoOpen(false); setPromoError(""); setPromoInput(""); }}
+                            className="h-9 w-9 shrink-0 rounded-full grid place-items-center text-[#8b737e] hover:bg-[#f0e6ea]"
+                            aria-label="Fermer le code promo"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                        {promoError && <div className="text-xs text-red-600 mt-1.5 px-1">{promoError}</div>}
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setPromoOpen(true)}
+                        className="flex items-center gap-1.5 text-sm text-[#8f6075] underline"
+                      >
+                        <Tag size={14} /> Vous avez un code promo ?
+                      </button>
+                    )}
+
+                    {/* Récapitulatif */}
+                    <div className={`text-[#54434c] ${tightFooter ? "text-xs space-y-0.5" : "text-sm space-y-1"}`}>
+                      <div className="flex justify-between">
+                        <span>Sous-total</span>
+                        <span>{formatPrice(totals.subtotal)}</span>
+                      </div>
+                      {totals.discount > 0 && (
+                        <div className="flex justify-between text-emerald-700">
+                          <span>Remise</span>
+                          <span>-{formatPrice(totals.discount)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span>Livraison (France)</span>
+                        <span>{totals.shipping === 0 ? "Offerte" : formatPrice(totals.shipping)}</span>
+                      </div>
+                      <div className={`flex justify-between font-serif text-[#342b32] border-t border-[#eadfe4] ${tightFooter ? "text-lg pt-1.5" : "text-xl pt-2"}`}>
+                        <span>Total TTC</span>
+                        <span>{formatPrice(totals.total)}</span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => setCheckoutNotice(true)}
+                      className={`w-full rounded-full bg-[#82576c] hover:bg-[#6d4659] text-white text-sm font-medium transition ${tightFooter ? "h-11" : "h-12"}`}
+                    >
+                      Commander
+                    </button>
+                    {checkoutNotice ? (
+                      <p className="text-[11px] text-center rounded-lg bg-[#f5edf1] text-[#6b4a5b] px-3 py-1.5">
+                        Le paiement en ligne sera ajouté à la prochaine étape. Aucune transaction n&apos;est possible pour le moment.
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-center text-[#7e7378]">Paiement de démonstration, aucune transaction réelle.</p>
+                    )}
+                  </div>
+                </>
               )}
             </motion.aside>
           </>
@@ -868,20 +1371,52 @@ export default function ZenoriaShop() {
             >
               <ProductMedia product={selected} initialMode={selectedMode} />
               <div className="p-8 relative">
-                <button className="absolute right-5 top-5" onClick={() => setSelected(null)}><X /></button>
+                <button className="absolute right-5 top-5" onClick={() => setSelected(null)} aria-label="Fermer"><X /></button>
                 <div className="text-xs uppercase tracking-widest text-[#9a7384]">{selected.family} · {selected.collection}</div>
                 <h3 className="font-serif text-4xl mt-3">{selected.name}</h3>
                 <div className="text-2xl mt-4">{selected.price},00 €</div>
-                <p className="text-sm leading-6 text-[#70656a] my-6">{selected.energy}</p>
-                <label className="text-xs uppercase tracking-widest">Taille</label>
-                <div className="flex gap-2 mt-2 mb-6">
-                  {[50, 52, 54, 56].map((s) => (
-                    <button className="h-10 w-10 rounded-full border border-[#b89baa] hover:bg-[#eadde3]" key={s}>{s}</button>
-                  ))}
+                <div className="mt-3">
+                  <AvailabilityBadge product={selected} showDetail />
                 </div>
-                <Button onClick={() => { add(selected); setSelected(null); }} className="w-full rounded-full h-12 bg-[#855a6f]">
+
+                {selected.pitch && (
+                  <p className="text-[15px] leading-7 text-[#54434c] mt-5">{selected.pitch}</p>
+                )}
+                <p className="text-sm leading-6 text-[#70656a] mt-3 italic">{selected.energy}</p>
+
+                {/* Composition en cristaux */}
+                {selected.crystals && selected.crystals.length > 0 ? (
+                  <div className="mt-6">
+                    <div className="text-xs uppercase tracking-widest mb-2">Composition</div>
+                    <p className="text-sm text-[#70656a] mb-3">
+                      {selected.crystals.reduce((s, c) => s + c.count, 0)} cristaux en {selected.crystals.length} couleur{selected.crystals.length > 1 ? "s" : ""}
+                    </p>
+                    <ul className="space-y-1.5">
+                      {selected.crystals.map((c) => (
+                        <li key={c.color} className="flex items-center gap-3 text-sm text-[#54434c]">
+                          <span
+                            className="h-4 w-4 rounded-full border border-black/10"
+                            style={{ background: c.hex || "#e9dde3" }}
+                          />
+                          <span>{c.count} × {c.color}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  process.env.NODE_ENV !== "production" && (
+                    <div className="mt-6 rounded-xl border border-dashed border-[#b88d9f] px-4 py-3 text-xs text-[#8b737e]">
+                      Aperçu local : la composition en cristaux de cette bague reste à renseigner dans le catalogue (champ « crystals »). Elle n&apos;apparaît pas sur le site en ligne tant qu&apos;elle est vide.
+                    </div>
+                  )
+                )}
+
+                <button
+                  onClick={() => { addToCart(selected); setSelected(null); }}
+                  className="w-full mt-7 rounded-full h-12 bg-[#855a6f] hover:bg-[#6f4a5c] text-white text-sm font-medium transition"
+                >
                   Ajouter au panier
-                </Button>
+                </button>
               </div>
             </motion.div>
           </>

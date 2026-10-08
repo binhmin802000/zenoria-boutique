@@ -3,11 +3,11 @@ import Head from "next/head";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShoppingBag, Search, User, Heart, Menu, X, Sparkles, ArrowRight,
-  Star, Leaf, Shield, Gem, Instagram, LogOut, Minus, Plus, Trash2, Tag, Truck
+  Star, Leaf, Shield, Gem, Instagram, LogOut, Minus, Plus, Trash2, Tag, Truck, Settings
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { supabase } from "@/lib/supabase";
+import { supabase, getMediaUrl } from "@/lib/supabase";
 import AuthModal from "@/components/AuthModal";
 
 // ============================================================
@@ -15,31 +15,55 @@ import AuthModal from "@/components/AuthModal";
 // ============================================================
 const SHIPPING_FEE = 4.9;               // frais de livraison sous le seuil (France)
 const FREE_SHIPPING_THRESHOLD = 50;     // livraison offerte à partir de ce montant (après remise)
-const DEFAULT_STOCK = 5;                // stock de départ pour chaque collection
 const MAX_QTY_PER_PRODUCT = 10;         // quantité max par bague (stock + fabrication sur commande)
 const BACKORDER_LEAD_TIME = "5 jours";  // délai de fabrication une fois le stock épuisé
 const CART_STORAGE_KEY = "zenoria_cart_v2";
 
-// Codes promo D'EXEMPLE : à modifier ou supprimer avant la mise en vente.
-// Attention : ces codes sont lisibles dans le code du site. Pour de vrais codes,
-// on les gérera côté serveur avec Stripe à l'étape suivante.
-//   type "percent"  -> pourcentage de remise
-//   type "fixed"    -> remise en euros
-//   type "shipping" -> livraison offerte
-const PROMO_CODES = {
-  BIENVENUE10: { type: "percent", value: 10, label: "-10 % sur vos articles" },
-  ZENORIA5: { type: "fixed", value: 5, label: "5 € de remise" },
-  LIVRAISONZEN: { type: "shipping", value: 0, label: "Livraison offerte" },
-};
+// ============================================================
+// Le catalogue (collections) et les codes promo ne sont plus codés
+// en dur ici : ils sont lus depuis la base de données Supabase, et
+// peuvent être modifiés depuis l'interface d'administration (/admin)
+// sans avoir à toucher au code ni à redéployer le site.
+// Les photos/vidéos sont résolues via getMediaUrl() : compatible à
+// la fois avec les fichiers uploadés depuis /admin (Supabase Storage)
+// et les anciennes collections dont les médias sont dans /public/images.
+// ============================================================
 
 const formatPrice = (n) =>
   n.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
+// Prix réellement appliqué : le prix promotionnel s'il est défini et inférieur au prix normal.
+const effectivePrice = (p) => (p.promoPrice != null && p.promoPrice < p.price ? p.promoPrice : p.price);
+
+// Convertit une ligne de la table "products" (Supabase) vers le format utilisé par l'interface.
+function mapDbProduct(row) {
+  const photos = Array.isArray(row.photos) ? row.photos : [];
+  return {
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    family: row.family,
+    collection: row.collection,
+    energy: row.energy,
+    price: Number(row.price),
+    promoPrice: row.promo_price !== null && row.promo_price !== undefined ? Number(row.promo_price) : null,
+    stock: typeof row.stock === "number" ? row.stock : 0,
+    pitch: row.pitch || "",
+    crystals: Array.isArray(row.crystals) ? row.crystals : [],
+    photos,
+    video: row.video || null,
+    color: row.color || "from-rose-300 via-pink-100 to-white",
+    stone: row.stone || "💎",
+    photoCount: photos.length,
+    videoCount: row.video ? 1 : 0,
+  };
+}
+
 // Calcul des montants du panier (sous-total, remise, livraison, total)
 function computeTotals(lines, promo) {
-  const subtotal = round2(lines.reduce((s, l) => s + l.product.price * l.qty, 0));
+  const subtotal = round2(lines.reduce((s, l) => s + effectivePrice(l.product) * l.qty, 0));
   let discount = 0;
   if (promo && promo.type === "percent") discount = round2((subtotal * promo.value) / 100);
   if (promo && promo.type === "fixed") discount = Math.min(promo.value, subtotal);
@@ -54,17 +78,13 @@ function computeTotals(lines, promo) {
 
 // ============================================================
 // DISPONIBILITÉ D'UNE BAGUE
-// Chaque bague part avec un stock (product.stock, 5 par défaut).
-// - qty <= stock       -> disponible immédiatement
-// - qty > stock         -> la partie au-delà du stock est fabriquée sur
-//                          commande, avec un délai de quelques jours.
-// - stock === 0         -> rupture de stock, fabrication sur commande uniquement.
-// Remarque : sans base de données, ce stock est une information affichée
-// par bague (modifiable dans le catalogue), pas un compteur partagé en temps
-// réel entre tous les visiteurs du site.
+// - qty <= stock      -> disponible immédiatement
+// - qty > stock        -> la partie au-delà du stock est fabriquée sur
+//                         commande, avec un délai de quelques jours.
+// - stock === 0        -> rupture de stock, fabrication sur commande uniquement.
 // ============================================================
 function getAvailability(product, qty = 0) {
-  const stock = typeof product.stock === "number" ? product.stock : DEFAULT_STOCK;
+  const stock = typeof product.stock === "number" ? product.stock : 0;
   if (stock <= 0) {
     return { state: "backorder", stock, label: "Rupture de stock", detail: `Fabriquée sur commande · délai ${BACKORDER_LEAD_TIME}` };
   }
@@ -81,16 +101,12 @@ function getAvailability(product, qty = 0) {
 
 // ============================================================
 // AFFICHAGE ADAPTATIF DU PANIER
-// Le panier choisit tout seul la présentation la plus confortable qui tient
-// dans la hauteur de l'écran : "comfort" (grandes lignes), "compact" ou "dense".
-// rowH = hauteur estimée d'une ligne (marges comprises).
 // ============================================================
 const CART_DENSITY = {
   comfort: { thumb: "h-20 w-20", name: "text-lg", btn: "h-8 w-8", rowH: 150 },
   compact: { thumb: "h-14 w-14", name: "text-base", btn: "h-7 w-7", rowH: 112 },
   dense: { thumb: "h-12 w-12", name: "text-sm", btn: "h-6 w-6", rowH: 90 },
 };
-// Hauteur réservée hors liste : en-tête + barre de livraison + pied de panier (estimation)
 const CART_RESERVED_HEIGHT = 380;
 
 function pickCartDensity(lineCount, viewportHeight, extraHeight = 0) {
@@ -98,234 +114,13 @@ function pickCartDensity(lineCount, viewportHeight, extraHeight = 0) {
   return ["comfort", "compact"].find((d) => lineCount * CART_DENSITY[d].rowH <= available) || "dense";
 }
 
-// ============================================================
-// CATALOGUE ZENORIA — basé sur la structure réelle des dossiers
-// Photos/vidéos : /public/images/<slug>/<nom-du-fichier>
-// ============================================================
-const baseProducts = [
-  {
-    id: 1,
-    slug: "bleu-de-mer",
-    name: "Bleu de Mer",
-    family: "Collection Bleus",
-    collection: "Sérénité",
-    energy: "Calme, apaisement et lâcher-prise",
-    price: 89,
-    color: "from-cyan-200 via-sky-100 to-blue-300",
-    stone: "🌊",
-    photoCount: 2,
-    videoCount: 1,
-    photos: ["IMG_20250628_170109.jpg", "IMG_20250628_170326.jpg"],
-    video: "VID_20250628_165912.mp4",
-  },
-  {
-    id: 2,
-    slug: "bleu-saphir",
-    name: "Bleu Saphir",
-    family: "Collection Bleus",
-    collection: "Protection",
-    energy: "Confiance, protection et force intérieure",
-    price: 99,
-    color: "from-blue-700 via-indigo-300 to-slate-100",
-    stone: "💎",
-    photoCount: 2,
-    videoCount: 1,
-    photos: ["IMG_20250801_164130.jpg", "IMG_20250801_164300.jpg"],
-    video: "VID_20250801_164013.mp4",
-  },
-  {
-    id: 3,
-    slug: "bleu-violette",
-    name: "Bleu Violette",
-    family: "Collection Bleus",
-    collection: "Intuition",
-    energy: "Spiritualité, intuition et méditation",
-    price: 95,
-    color: "from-indigo-400 via-violet-200 to-sky-100",
-    stone: "🔮",
-    photoCount: 3,
-    videoCount: 1,
-    photos: ["IMG_20250620_194129.jpg", "IMG_20250620_194549.jpg", "IMG_20250620_194624.jpg"],
-    video: "VID_20250620_194400.mp4",
-  },
-  {
-    id: 4,
-    slug: "bleue",
-    name: "Bleue",
-    family: "Collection Bleus",
-    collection: "Harmonie",
-    energy: "Équilibre, harmonie et pureté",
-    price: 85,
-    color: "from-sky-300 via-blue-100 to-white",
-    stone: "💙",
-    photoCount: 2,
-    videoCount: 1,
-    photos: ["IMG_20250620_140124_1.jpg", "IMG_20250620_193815.jpg"],
-    video: "VID_20250620_135856.mp4",
-  },
-  {
-    id: 5,
-    slug: "chocolat",
-    name: "Chocolat",
-    family: "Collection Nature",
-    collection: "Ancrage",
-    energy: "Stabilité, terre et ancrage",
-    price: 79,
-    color: "from-amber-900 via-orange-200 to-stone-100",
-    stone: "🤎",
-    photoCount: 2,
-    videoCount: 1,
-    photos: ["IMG_20250623_152138.jpg", "IMG_20250623_152156.jpg"],
-    video: "VID_20250623_150531.mp4",
-  },
-  {
-    id: 6,
-    slug: "citron",
-    name: "Citron",
-    family: "Collection Nature",
-    collection: "Vitalité",
-    energy: "Vitalité, créativité et lumière",
-    price: 79,
-    color: "from-yellow-300 via-lime-100 to-white",
-    stone: "🍋",
-    photoCount: 2,
-    videoCount: 1,
-    photos: ["IMG_20250623_152304.jpg", "IMG_20250623_152337.jpg"],
-    video: "VID_20250623_150825.mp4",
-  },
-  {
-    id: 7,
-    slug: "rose",
-    name: "Rose",
-    family: "Collection Roses",
-    collection: "Amour",
-    energy: "Amour, douceur et féminité",
-    price: 89,
-    color: "from-rose-300 via-pink-100 to-white",
-    stone: "🌸",
-    photoCount: 2,
-    videoCount: 1,
-    photos: ["IMG_20250620_193338.jpg", "IMG_20250620_193406.jpg"],
-    video: "VID_20250620_141433.mp4",
-  },
-  {
-    id: 8,
-    slug: "rose-bonbon",
-    name: "Rose Bonbon",
-    family: "Collection Roses",
-    collection: "Joie",
-    energy: "Optimisme, tendresse et énergie positive",
-    price: 85,
-    color: "from-pink-400 via-rose-100 to-fuchsia-100",
-    stone: "🍬",
-    photoCount: 2,
-    videoCount: 1,
-    photos: ["IMG_20250626_173150.jpg", "IMG_20250626_173203.jpg"],
-    video: "VID_20250626_172809.mp4",
-  },
-  {
-    id: 9,
-    slug: "verte",
-    name: "Verte",
-    family: "Collection Nature",
-    collection: "Abondance",
-    energy: "Croissance, renouveau et abondance",
-    price: 89,
-    color: "from-emerald-400 via-green-100 to-lime-100",
-    stone: "🌿",
-    photoCount: 2,
-    videoCount: 1,
-    photos: ["IMG_20250628_171902.jpg", "IMG_20250628_172016.jpg"],
-    video: "VID_20250628_171744.mp4",
-  },
-  {
-    id: 10,
-    slug: "violette",
-    name: "Violette",
-    family: "Collection Violettes",
-    collection: "Éveil spirituel",
-    energy: "Sagesse, méditation et connexion intérieure",
-    price: 95,
-    color: "from-purple-500 via-violet-200 to-white",
-    stone: "💜",
-    photoCount: 2,
-    videoCount: 1,
-    photos: ["IMG_20250620_141016.jpg", "IMG_20250620_193626.jpg"],
-    video: "VID_20250620_140816.mp4",
-  },
-];
-
-// ============================================================
-// FICHE DESCRIPTIVE DE CHAQUE BAGUE (à compléter par toi)
-//
-// - pitch    : phrases de présentation affichées sur la fiche
-// - crystals : composition en cristaux. À REMPLIR avec les vraies valeurs :
-//              [{ color: "Bleu océan", count: 5, hex: "#5aa9d6" }, ...]
-//              ("hex" est facultatif : il affiche une pastille de couleur)
-// - stock    : nombre de bagues disponibles immédiatement (5 par défaut).
-//              Mets 0 pour une collection en rupture de stock : le site
-//              proposera alors une fabrication sur commande automatiquement.
-// ============================================================
-const productDetails = {
-  "bleu-de-mer": {
-    pitch: "Un bleu limpide, comme une eau calme au petit matin. Une bague qui invite au lâcher-prise et apporte une touche de fraîcheur à chacune de vos tenues.",
-    crystals: [],
-    stock: DEFAULT_STOCK,
-  },
-  "bleu-saphir": {
-    pitch: "Un bleu profond et lumineux, pour celles qui avancent avec confiance. Une bague élégante et affirmée, qui se remarque sans jamais en faire trop.",
-    crystals: [],
-    stock: DEFAULT_STOCK,
-  },
-  "bleu-violette": {
-    pitch: "Entre bleu et violet, un jeu de reflets qui change avec la lumière. Une bague pour les âmes intuitives, à porter comme un petit secret.",
-    crystals: [],
-    stock: DEFAULT_STOCK,
-  },
-  "bleue": {
-    pitch: "Un bleu pur et apaisant, simple et harmonieux. Le bijou idéal d'un quotidien serein, facile à associer avec tout.",
-    crystals: [],
-    stock: DEFAULT_STOCK,
-  },
-  "chocolat": {
-    pitch: "Des tons chauds et profonds, comme une terre généreuse. Une bague douce et rassurante, qui apporte une élégance naturelle à votre main.",
-    crystals: [],
-    stock: DEFAULT_STOCK,
-  },
-  "citron": {
-    pitch: "Un éclat vif et solaire pour illuminer vos journées. Une bague pleine d'énergie, qui met de bonne humeur dès qu'on la regarde.",
-    crystals: [],
-    stock: DEFAULT_STOCK,
-  },
-  "rose": {
-    pitch: "Un rose tendre et délicat, symbole de douceur et de féminité. Une bague romantique, idéale à s'offrir ou à offrir.",
-    crystals: [],
-    stock: DEFAULT_STOCK,
-  },
-  "rose-bonbon": {
-    pitch: "Un rose vif et pétillant, joyeux comme un sourire. Une bague qui affiche votre optimisme et réveille toutes les tenues.",
-    crystals: [],
-    stock: DEFAULT_STOCK,
-  },
-  "verte": {
-    pitch: "Un vert frais, comme une nature qui renaît. Une bague qui accompagne vos nouveaux départs avec légèreté et éclat.",
-    crystals: [],
-    stock: DEFAULT_STOCK,
-  },
-  "violette": {
-    pitch: "Un violet profond, couleur de l'intuition et de la méditation. Une bague précieuse pour vos moments de calme intérieur.",
-    crystals: [],
-    stock: DEFAULT_STOCK,
-  },
-};
-
-const products = baseProducts.map((p) => ({ ...p, ...(productDetails[p.slug] || {}) }));
-
-const energies = [
-  { name: "Bleus", desc: "4 créations · Sérénité et protection", icon: Shield, bg: "from-sky-100 to-indigo-200" },
-  { name: "Roses", desc: "2 créations · Amour et joie", icon: Heart, bg: "from-rose-100 to-pink-200" },
-  { name: "Nature", desc: "3 créations · Ancrage et abondance", icon: Leaf, bg: "from-emerald-100 to-amber-100" },
-  { name: "Violettes", desc: "1 création · Intuition et éveil", icon: Sparkles, bg: "from-violet-100 to-purple-200" },
+// Thème visuel de chaque famille (le nombre de créations, lui, est calculé
+// dynamiquement à partir du catalogue chargé depuis la base de données).
+const ENERGY_THEMES = [
+  { name: "Bleus", theme: "Sérénité et protection", icon: Shield, bg: "from-sky-100 to-indigo-200" },
+  { name: "Roses", theme: "Amour et joie", icon: Heart, bg: "from-rose-100 to-pink-200" },
+  { name: "Nature", theme: "Ancrage et abondance", icon: Leaf, bg: "from-emerald-100 to-amber-100" },
+  { name: "Violettes", theme: "Intuition et éveil", icon: Sparkles, bg: "from-violet-100 to-purple-200" },
 ];
 
 function CrystalLogo({ mode = 1, compact = false }) {
@@ -352,14 +147,14 @@ function CrystalLogo({ mode = 1, compact = false }) {
   );
 }
 
-// Visuel produit : utilise la vraie photo (ou la vidéo pour le Hero) si présente
-// dans /public/images/<slug>/, sinon affiche un visuel graphique de remplacement.
+// Visuel produit : utilise la vraie photo (ou la vidéo pour le Hero) si présente,
+// qu'elle vienne de Supabase Storage (upload via /admin) ou de /public/images
+// (anciennes collections), sinon affiche un visuel graphique de remplacement.
 function RingVisual({ product, large = false, circle = false, video = false }) {
   const [imgError, setImgError] = useState(false);
-  const imgSrc = product.photos && product.photos[0] ? `/images/${product.slug}/${product.photos[0]}` : null;
-  const videoSrc = product.video ? `/images/${product.slug}/${product.video}` : null;
+  const imgSrc = product.photos && product.photos[0] ? getMediaUrl(product.photos[0], product.slug) : null;
+  const videoSrc = product.video ? getMediaUrl(product.video, product.slug) : null;
 
-  // Cercle du Hero affichant la vidéo de la collection en lecture automatique.
   if (circle && video && videoSrc && !imgError) {
     return (
       <div className="relative w-full h-full rounded-full overflow-hidden bg-black">
@@ -419,7 +214,7 @@ function RingVisual({ product, large = false, circle = false, video = false }) {
 // Petite vignette à taille variable, utilisée dans le panier
 function CartThumb({ product, size = "h-20 w-20" }) {
   const [imgError, setImgError] = useState(false);
-  const src = product.photos && product.photos[0] ? `/images/${product.slug}/${product.photos[0]}` : null;
+  const src = product.photos && product.photos[0] ? getMediaUrl(product.photos[0], product.slug) : null;
   if (src && !imgError) {
     return (
       <div className={`${size} shrink-0 rounded-xl overflow-hidden bg-[#f5edf1]`}>
@@ -435,17 +230,10 @@ function CartThumb({ product, size = "h-20 w-20" }) {
   );
 }
 
-// Pastille de disponibilité. "qty" permet d'adapter le message : sans quantité
-// (fiche produit, carte catalogue), elle indique simplement le stock ; avec une
-// quantité (dans le panier), elle précise si une partie est sur commande.
+// Pastille de disponibilité
 function AvailabilityBadge({ product, qty = 0, showDetail = false }) {
   const a = getAvailability(product, qty);
-  const color =
-    a.state === "in-stock"
-      ? "bg-emerald-50 text-emerald-700"
-      : a.state === "partial-backorder"
-      ? "bg-amber-50 text-amber-700"
-      : "bg-amber-50 text-amber-700";
+  const color = a.state === "in-stock" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700";
   const dot = a.state === "in-stock" ? "bg-emerald-500" : "bg-amber-500";
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs ${color}`}>
@@ -456,17 +244,28 @@ function AvailabilityBadge({ product, qty = 0, showDetail = false }) {
   );
 }
 
+// Affiche un prix, avec le prix barré si une promotion est active
+function PriceTag({ product, className = "" }) {
+  const hasPromo = product.promoPrice != null && product.promoPrice < product.price;
+  if (!hasPromo) {
+    return <span className={className}>{formatPrice(product.price)}</span>;
+  }
+  return (
+    <span className={className}>
+      <span className="line-through text-[#b0a3a9] mr-1.5 font-normal">{formatPrice(product.price)}</span>
+      <span className="text-[#b2544a]">{formatPrice(product.promoPrice)}</span>
+    </span>
+  );
+}
+
 // Visuel affiché dans la fiche produit (modal).
-// Par défaut : lit automatiquement la vidéo de la collection en boucle.
-// "initialMode" permet d'ouvrir directement sur les photos ("photo") ou la vidéo ("video").
 function ProductMedia({ product, initialMode = "video" }) {
   const [videoError, setVideoError] = useState(false);
-  const [mode, setMode] = useState(initialMode); // "video" | "photo"
+  const [mode, setMode] = useState(initialMode);
   const [photoIndex, setPhotoIndex] = useState(0);
-  const videoSrc = product.video ? `/images/${product.slug}/${product.video}` : null;
+  const videoSrc = product.video ? getMediaUrl(product.video, product.slug) : null;
   const photos = product.photos || [];
 
-  // Remise à zéro quand on change de produit ou de mode d'ouverture
   useEffect(() => {
     setMode(initialMode);
     setPhotoIndex(0);
@@ -499,7 +298,7 @@ function ProductMedia({ product, initialMode = "video" }) {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               key={photos[photoIndex]}
-              src={`/images/${product.slug}/${photos[photoIndex]}`}
+              src={getMediaUrl(photos[photoIndex], product.slug)}
               alt={`${product.name} - photo ${photoIndex + 1}`}
               className="w-full h-full object-cover object-center"
             />
@@ -557,7 +356,12 @@ function ProductMedia({ product, initialMode = "video" }) {
 }
 
 export default function ZenoriaShop() {
-  // --- Panier : liste de { id, qty } (les prix et stocks sont relus depuis le catalogue) ---
+  // --- Catalogue et codes promo, chargés depuis Supabase ---
+  const [products, setProducts] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [promoCodes, setPromoCodes] = useState({});
+
+  // --- Panier ---
   const [cartItems, setCartItems] = useState([]);
   const [cartLoaded, setCartLoaded] = useState(false);
   const [promoCode, setPromoCode] = useState("");
@@ -582,17 +386,77 @@ export default function ZenoriaShop() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Charge le catalogue + les codes promo, puis restaure le panier sauvegardé
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const [{ data: prodData, error: prodErr }, { data: promoData }] = await Promise.all([
+        supabase.from("products").select("*").eq("active", true).order("id"),
+        supabase.from("promo_codes").select("*").eq("active", true),
+      ]);
+      if (!active) return;
+
+      const loadedProducts = !prodErr && prodData ? prodData.map(mapDbProduct) : [];
+      setProducts(loadedProducts);
+
+      const promoMap = {};
+      (promoData || []).forEach((p) => {
+        promoMap[p.code] = { type: p.type, value: Number(p.value), label: p.label };
+      });
+      setPromoCodes(promoMap);
+
+      try {
+        const raw = window.localStorage.getItem(CART_STORAGE_KEY);
+        if (raw) {
+          const saved = JSON.parse(raw);
+          const items = (saved.items || [])
+            .map((i) => {
+              const p = loadedProducts.find((x) => x.id === i.id);
+              return p ? { id: p.id, qty: Math.min(MAX_QTY_PER_PRODUCT, Math.max(1, Number(i.qty) || 1)) } : null;
+            })
+            .filter(Boolean);
+          setCartItems(items);
+          if (saved.promo && promoMap[saved.promo]) setPromoCode(saved.promo);
+        }
+      } catch (e) {
+        // panier illisible : on repart d'un panier vide
+      }
+
+      setCatalogLoading(false);
+      setCartLoaded(true);
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
-    // Récupère la session active au chargement de la page
+    const checkAdmin = async (currentUser) => {
+      if (!currentUser) {
+        setIsAdmin(false);
+        return;
+      }
+      const { data } = await supabase
+        .from("admin_users")
+        .select("user_id")
+        .eq("user_id", currentUser.id)
+        .maybeSingle();
+      setIsAdmin(Boolean(data));
+    };
+
     supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session ? data.session.user : null);
+      const currentUser = data.session ? data.session.user : null;
+      setUser(currentUser);
+      checkAdmin(currentUser);
       setAuthLoading(false);
     });
 
-    // Écoute les changements de session (connexion / déconnexion)
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session ? session.user : null);
+      const currentUser = session ? session.user : null;
+      setUser(currentUser);
+      checkAdmin(currentUser);
     });
 
     return () => {
@@ -608,27 +472,6 @@ export default function ZenoriaShop() {
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, []);
-
-  // Restaure le panier enregistré dans le navigateur
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(CART_STORAGE_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw);
-        const items = (saved.items || [])
-          .map((i) => {
-            const p = products.find((x) => x.id === i.id);
-            return p ? { id: p.id, qty: Math.min(MAX_QTY_PER_PRODUCT, Math.max(1, Number(i.qty) || 1)) } : null;
-          })
-          .filter(Boolean);
-        setCartItems(items);
-        if (saved.promo && PROMO_CODES[saved.promo]) setPromoCode(saved.promo);
-      }
-    } catch (e) {
-      // panier illisible : on repart d'un panier vide
-    }
-    setCartLoaded(true);
   }, []);
 
   // Enregistre le panier à chaque modification
@@ -672,10 +515,10 @@ export default function ZenoriaShop() {
       cartItems
         .map((it) => ({ product: products.find((p) => p.id === it.id), qty: it.qty }))
         .filter((l) => l.product),
-    [cartItems]
+    [cartItems, products]
   );
   const cartCount = cartLines.reduce((s, l) => s + l.qty, 0);
-  const promo = promoCode ? PROMO_CODES[promoCode] : null;
+  const promo = promoCode ? promoCodes[promoCode] : null;
   const totals = useMemo(() => computeTotals(cartLines, promo), [cartLines, promo]);
   const progress = Math.min(100, Math.round(((totals.subtotal - totals.discount) / FREE_SHIPPING_THRESHOLD) * 100));
   const cartDensity = pickCartDensity(
@@ -685,6 +528,16 @@ export default function ZenoriaShop() {
   );
   const tightFooter = cartDensity === "dense";
   const dens = CART_DENSITY[cartDensity];
+
+  // --- Familles d'énergie, avec comptage dynamique à partir du catalogue ---
+  const energies = useMemo(
+    () =>
+      ENERGY_THEMES.map((e) => ({
+        ...e,
+        count: products.filter((p) => p.family.includes(e.name)).length,
+      })),
+    [products]
+  );
 
   // --- Actions du panier ---
   const addToCart = (p) => {
@@ -736,7 +589,7 @@ export default function ZenoriaShop() {
     if (e) e.preventDefault();
     const code = promoInput.trim().toUpperCase();
     if (!code) return;
-    if (PROMO_CODES[code]) {
+    if (promoCodes[code]) {
       setPromoCode(code);
       setPromoError("");
       setPromoInput("");
@@ -751,13 +604,11 @@ export default function ZenoriaShop() {
     setPromoError("");
   };
 
-  // Ouvre la fiche produit, directement sur la vidéo ou sur les photos
   const openProduct = (p, mode = "video") => {
     setSelectedMode(mode);
     setSelected(p);
   };
 
-  // Scroll fluide vers une section par son id
   const scrollToSection = (id) => {
     const el = document.getElementById(id);
     if (el) {
@@ -765,7 +616,6 @@ export default function ZenoriaShop() {
     }
   };
 
-  // Clique sur une carte "énergie" : filtre le catalogue sur la famille choisie
   const handleEnergyClick = (energyName) => {
     setSelectedFamily((prev) => (prev === energyName ? null : energyName));
     scrollToSection("collections");
@@ -818,6 +668,14 @@ export default function ZenoriaShop() {
                 <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-[#eadfe4] p-4 z-50">
                   <div className="text-xs text-[#9a7384] uppercase tracking-widest mb-1">Connecté(e) en tant que</div>
                   <div className="text-sm font-medium truncate mb-3">{user.email}</div>
+                  {isAdmin && (
+                    <a
+                      href="/admin"
+                      className="flex items-center gap-2 text-sm text-[#8f6075] hover:text-[#71485b] mb-2"
+                    >
+                      <Settings size={16} /> Administration
+                    </a>
+                  )}
                   <button
                     onClick={handleLogout}
                     className="flex items-center gap-2 text-sm text-[#8f6075] hover:text-[#71485b]"
@@ -850,9 +708,12 @@ export default function ZenoriaShop() {
             <button onClick={() => { scrollToSection("contact"); setMenu(false); }} className="text-left">Contact</button>
             {!authLoading && (
               user ? (
-                <button onClick={() => { handleLogout(); setMenu(false); }} className="text-left text-[#8f6075]">
-                  Se déconnecter ({user.email})
-                </button>
+                <>
+                  {isAdmin && <a href="/admin" className="text-left text-[#8f6075]">Administration</a>}
+                  <button onClick={() => { handleLogout(); setMenu(false); }} className="text-left text-[#8f6075]">
+                    Se déconnecter ({user.email})
+                  </button>
+                </>
               ) : (
                 <button onClick={() => { setAuthModalOpen(true); setMenu(false); }} className="text-left text-[#8f6075]">
                   Connexion / Créer un compte
@@ -869,7 +730,9 @@ export default function ZenoriaShop() {
           <div className="absolute -right-24 top-10 h-[560px] w-[560px] rounded-full border border-white/50 bg-white/20 backdrop-blur-sm" />
           <div className="max-w-7xl mx-auto px-6 py-20 grid lg:grid-cols-2 items-center gap-14 relative z-10">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
-              <div className="text-xs uppercase tracking-[.3em] text-[#8b6578] mb-5">10 collections · Bagues artisanales</div>
+              <div className="text-xs uppercase tracking-[.3em] text-[#8b6578] mb-5">
+                {products.length > 0 ? `${products.length} collections · ` : ""}Bagues artisanales
+              </div>
               <h1 className="font-serif text-6xl md:text-8xl leading-none mb-5 text-[#513642]">ZENORIA</h1>
               <p className="font-serif italic text-2xl md:text-3xl text-[#594856] mb-5">
                 L&apos;énergie du cristal,<br />l&apos;harmonie de l&apos;âme.
@@ -895,7 +758,7 @@ export default function ZenoriaShop() {
             </motion.div>
             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8 }} className="relative flex justify-center">
               <div className="h-[420px] w-[420px] max-w-[88vw] rounded-full bg-white/35 border border-white shadow-[0_30px_100px_rgba(91,54,77,.2)] overflow-hidden relative">
-                <RingVisual product={products[0]} large circle video />
+                {products[0] && <RingVisual product={products[0]} large circle video />}
               </div>
               <div className="absolute right-0 bottom-8 rounded-2xl bg-white/65 backdrop-blur p-4 shadow-lg">
                 <Gem className="text-[#9b6480] mb-2" />
@@ -926,7 +789,7 @@ export default function ZenoriaShop() {
               >
                 <e.icon className="mb-8 text-[#725464]" />
                 <div className="font-serif text-2xl mb-2">{e.name}</div>
-                <div className="text-sm text-[#665c61]">{e.desc}</div>
+                <div className="text-sm text-[#665c61]">{e.count} création{e.count > 1 ? "s" : ""} · {e.theme}</div>
                 <ArrowRight className="mt-5" size={18} />
               </motion.div>
             ))}
@@ -951,55 +814,64 @@ export default function ZenoriaShop() {
                 <button className="text-sm border-b border-[#6d4e5c]">Voir toute la collection</button>
               )}
             </div>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredProducts.map((p) => (
-                <Card key={p.id} className="overflow-hidden rounded-[1.5rem] border-[#eee2e5] group">
-                  <div className="relative">
-                    <RingVisual product={p} />
-                    <button
-                      onClick={() => setFav(fav.includes(p.id) ? fav.filter((x) => x !== p.id) : [...fav, p.id])}
-                      className="absolute right-4 top-4 h-10 w-10 bg-white/80 rounded-full grid place-items-center z-10"
-                      aria-label="Ajouter aux favoris"
-                    >
-                      <Heart size={18} fill={fav.includes(p.id) ? "#9a667c" : "none"} className="text-[#9a667c]" />
-                    </button>
-                    <button className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition z-[5]" onClick={() => openProduct(p)} aria-label={`Voir ${p.name}`} />
-                  </div>
-                  <CardContent className="p-5">
-                    <div className="text-xs uppercase tracking-widest text-[#9a7384]">{p.family} · {p.collection}</div>
-                    <div className="flex justify-between items-start mt-2 gap-3">
-                      <div className="min-w-0">
-                        <div className="font-serif text-xl truncate">{p.name}</div>
-                        <div className="mt-1.5">
-                          <AvailabilityBadge product={p} />
+
+            {catalogLoading ? (
+              <p className="text-sm text-[#8b737e] text-center py-10">Chargement des créations...</p>
+            ) : filteredProducts.length === 0 ? (
+              <p className="text-sm text-[#8b737e] text-center py-10">
+                Notre catalogue est en cours de mise à jour, merci de repasser bientôt.
+              </p>
+            ) : (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredProducts.map((p) => (
+                  <Card key={p.id} className="overflow-hidden rounded-[1.5rem] border-[#eee2e5] group">
+                    <div className="relative">
+                      <RingVisual product={p} />
+                      <button
+                        onClick={() => setFav(fav.includes(p.id) ? fav.filter((x) => x !== p.id) : [...fav, p.id])}
+                        className="absolute right-4 top-4 h-10 w-10 bg-white/80 rounded-full grid place-items-center z-10"
+                        aria-label="Ajouter aux favoris"
+                      >
+                        <Heart size={18} fill={fav.includes(p.id) ? "#9a667c" : "none"} className="text-[#9a667c]" />
+                      </button>
+                      <button className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition z-[5]" onClick={() => openProduct(p)} aria-label={`Voir ${p.name}`} />
+                    </div>
+                    <CardContent className="p-5">
+                      <div className="text-xs uppercase tracking-widest text-[#9a7384]">{p.family} · {p.collection}</div>
+                      <div className="flex justify-between items-start mt-2 gap-3">
+                        <div className="min-w-0">
+                          <div className="font-serif text-xl truncate">{p.name}</div>
+                          <div className="mt-1.5">
+                            <AvailabilityBadge product={p} />
+                          </div>
                         </div>
+                        <PriceTag product={p} className="font-medium whitespace-nowrap text-right" />
                       </div>
-                      <div className="font-medium whitespace-nowrap">{p.price},00 €</div>
-                    </div>
-                    <p className="text-sm text-[#70656a] mt-3">{p.energy}</p>
-                    <div className="flex gap-2 mt-4 text-xs text-[#826d77]">
-                      <button
-                        type="button"
-                        onClick={() => openProduct(p, "photo")}
-                        className="rounded-full bg-[#f5edf1] hover:bg-[#ead9e1] px-3 py-1 transition"
-                      >
-                        {p.photoCount} photo{p.photoCount > 1 ? "s" : ""}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openProduct(p, "video")}
-                        className="rounded-full bg-[#f5edf1] hover:bg-[#ead9e1] px-3 py-1 transition"
-                      >
-                        {p.videoCount} vidéo
-                      </button>
-                    </div>
-                    <Button onClick={() => addToCart(p)} variant="outline" className="w-full mt-5 rounded-full border-[#b88d9f] hover:bg-[#8f6075] hover:text-white">
-                      Ajouter au panier
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                      <p className="text-sm text-[#70656a] mt-3">{p.energy}</p>
+                      <div className="flex gap-2 mt-4 text-xs text-[#826d77]">
+                        <button
+                          type="button"
+                          onClick={() => openProduct(p, "photo")}
+                          className="rounded-full bg-[#f5edf1] hover:bg-[#ead9e1] px-3 py-1 transition"
+                        >
+                          {p.photoCount} photo{p.photoCount > 1 ? "s" : ""}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openProduct(p, "video")}
+                          className="rounded-full bg-[#f5edf1] hover:bg-[#ead9e1] px-3 py-1 transition"
+                        >
+                          {p.videoCount} vidéo
+                        </button>
+                      </div>
+                      <Button onClick={() => addToCart(p)} variant="outline" className="w-full mt-5 rounded-full border-[#b88d9f] hover:bg-[#8f6075] hover:text-white">
+                        Ajouter au panier
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </div>
         </section>
 
@@ -1055,12 +927,14 @@ export default function ZenoriaShop() {
                   <div className="text-xs uppercase tracking-widest text-[#9a6e82]">Votre sélection</div>
                   <div className="font-serif text-3xl my-3">{quiz}</div>
                   <p className="text-sm text-[#6b6166] mb-5">Nous avons sélectionné une création qui accompagne cette intention.</p>
-                  <Button
-                    onClick={() => openProduct(products.find((p) => p.collection === quiz) || products[0])}
-                    className="rounded-full bg-[#8d5e74]"
-                  >
-                    Voir la recommandation
-                  </Button>
+                  {products.length > 0 && (
+                    <Button
+                      onClick={() => openProduct(products.find((p) => p.collection === quiz) || products[0])}
+                      className="rounded-full bg-[#8d5e74]"
+                    >
+                      Voir la recommandation
+                    </Button>
+                  )}
                 </>
               ) : (
                 <>
@@ -1158,7 +1032,6 @@ export default function ZenoriaShop() {
               style={{ height: "100dvh" }}
               className="fixed right-0 top-0 h-full w-full max-w-md bg-[#fbf8f4] z-50 shadow-2xl flex flex-col"
             >
-              {/* En-tête */}
               <div className="flex-none flex justify-between items-center px-5 py-4 border-b border-[#eadfe4]">
                 <div className="min-w-0">
                   <h3 className="font-serif text-2xl leading-none">Votre panier</h3>
@@ -1191,7 +1064,6 @@ export default function ZenoriaShop() {
                 </div>
               ) : (
                 <>
-                  {/* Livraison offerte : toujours visible */}
                   <div className="flex-none px-5 pt-3 pb-2">
                     <div className="flex items-center gap-2 text-xs text-[#54434c]">
                       <Truck size={14} className="text-[#8f6075] shrink-0" />
@@ -1212,7 +1084,6 @@ export default function ZenoriaShop() {
                     )}
                   </div>
 
-                  {/* Liste : seule cette zone défile si vraiment il y a trop d'articles */}
                   <div className={`flex-1 min-h-0 overflow-y-auto px-5 py-2 ${cartDensity === "dense" ? "space-y-2" : "space-y-3"}`}>
                     {cartLines.map(({ product: p, qty }) => {
                       const avail = getAvailability(p, qty);
@@ -1260,7 +1131,7 @@ export default function ZenoriaShop() {
                                   <Plus size={13} />
                                 </button>
                               </div>
-                              <div className="font-medium text-sm">{formatPrice(p.price * qty)}</div>
+                              <div className="font-medium text-sm">{formatPrice(effectivePrice(p) * qty)}</div>
                             </div>
                           </div>
                         </div>
@@ -1268,7 +1139,6 @@ export default function ZenoriaShop() {
                     })}
                   </div>
 
-                  {/* Pied de panier : toujours visible */}
                   <div className={`flex-none border-t border-[#eadfe4] bg-white/80 px-5 ${tightFooter ? "py-3 space-y-2" : "py-4 space-y-3"}`}>
                     {promo ? (
                       <div className="flex items-center justify-between rounded-xl bg-emerald-50 text-emerald-700 px-3 py-2 text-sm">
@@ -1315,7 +1185,6 @@ export default function ZenoriaShop() {
                       </button>
                     )}
 
-                    {/* Récapitulatif */}
                     <div className={`text-[#54434c] ${tightFooter ? "text-xs space-y-0.5" : "text-sm space-y-1"}`}>
                       <div className="flex justify-between">
                         <span>Sous-total</span>
@@ -1374,7 +1243,7 @@ export default function ZenoriaShop() {
                 <button className="absolute right-5 top-5" onClick={() => setSelected(null)} aria-label="Fermer"><X /></button>
                 <div className="text-xs uppercase tracking-widest text-[#9a7384]">{selected.family} · {selected.collection}</div>
                 <h3 className="font-serif text-4xl mt-3">{selected.name}</h3>
-                <div className="text-2xl mt-4">{selected.price},00 €</div>
+                <PriceTag product={selected} className="text-2xl mt-4 block" />
                 <div className="mt-3">
                   <AvailabilityBadge product={selected} showDetail />
                 </div>
@@ -1384,8 +1253,7 @@ export default function ZenoriaShop() {
                 )}
                 <p className="text-sm leading-6 text-[#70656a] mt-3 italic">{selected.energy}</p>
 
-                {/* Composition en cristaux */}
-                {selected.crystals && selected.crystals.length > 0 ? (
+                {selected.crystals && selected.crystals.length > 0 && (
                   <div className="mt-6">
                     <div className="text-xs uppercase tracking-widest mb-2">Composition</div>
                     <p className="text-sm text-[#70656a] mb-3">
@@ -1403,12 +1271,6 @@ export default function ZenoriaShop() {
                       ))}
                     </ul>
                   </div>
-                ) : (
-                  process.env.NODE_ENV !== "production" && (
-                    <div className="mt-6 rounded-xl border border-dashed border-[#b88d9f] px-4 py-3 text-xs text-[#8b737e]">
-                      Aperçu local : la composition en cristaux de cette bague reste à renseigner dans le catalogue (champ « crystals »). Elle n&apos;apparaît pas sur le site en ligne tant qu&apos;elle est vide.
-                    </div>
-                  )
                 )}
 
                 <button

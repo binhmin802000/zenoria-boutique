@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase, getMediaUrl } from "@/lib/supabase";
 import AuthModal from "@/components/AuthModal";
+import SavoirFaire from "@/components/SavoirFaire";
 
 // ============================================================
 // RÉGLAGES DE LA BOUTIQUE (à adapter facilement)
@@ -629,11 +630,11 @@ export default function ZenoriaShop() {
     <div className="min-h-screen bg-[#fbf8f4] text-[#342b32] selection:bg-[#dcc8dd]">
       <Head>
         <title>Zenoria — L&apos;énergie du cristal, l&apos;harmonie de l&apos;âme</title>
-        <meta name="description" content="Bagues artisanales en cristaux. Collections Bleus, Roses, Nature et Violettes." />
+        <meta name="description" content="Bagues artisanales en cristaux Swarovski. Collections Bleus, Roses, Nature et Violettes." />
       </Head>
 
       <div className="bg-[#342434] text-white/85 text-[11px] py-2 px-4 text-center tracking-wide">
-        Livraison offerte dès {FREE_SHIPPING_THRESHOLD} € · Créations artisanales · Paiement sécurisé
+        Livraison offerte dès {FREE_SHIPPING_THRESHOLD} € · Créations artisanales en cristaux Swarovski · Paiement sécurisé
       </div>
 
       <header className="sticky top-0 z-40 bg-[#fbf8f4]/95 backdrop-blur border-b border-[#eadfe4]">
@@ -642,6 +643,7 @@ export default function ZenoriaShop() {
           <nav className="hidden lg:flex gap-7 text-sm">
             <button onClick={() => scrollToSection("collections")} className="hover:text-[#8f6075]">Collections</button>
             <button onClick={() => scrollToSection("energies")} className="hover:text-[#8f6075]">Nos énergies</button>
+            <button onClick={() => scrollToSection("savoir-faire")} className="hover:text-[#8f6075]">Savoir-faire</button>
             <button onClick={() => scrollToSection("philosophie")} className="hover:text-[#8f6075]">Notre histoire</button>
             <button onClick={() => scrollToSection("quiz")} className="hover:text-[#8f6075]">Quiz</button>
             <button onClick={() => scrollToSection("contact")} className="hover:text-[#8f6075]">Contact</button>
@@ -703,6 +705,7 @@ export default function ZenoriaShop() {
           <div className="lg:hidden px-6 pb-5 flex flex-col gap-3 text-sm">
             <button onClick={() => { scrollToSection("collections"); setMenu(false); }} className="text-left">Collections</button>
             <button onClick={() => { scrollToSection("energies"); setMenu(false); }} className="text-left">Nos énergies</button>
+            <button onClick={() => { scrollToSection("savoir-faire"); setMenu(false); }} className="text-left">Savoir-faire</button>
             <button onClick={() => { scrollToSection("philosophie"); setMenu(false); }} className="text-left">Notre histoire</button>
             <button onClick={() => { scrollToSection("quiz"); setMenu(false); }} className="text-left">Quiz</button>
             <button onClick={() => { scrollToSection("contact"); setMenu(false); }} className="text-left">Contact</button>
@@ -731,14 +734,14 @@ export default function ZenoriaShop() {
           <div className="max-w-7xl mx-auto px-6 py-20 grid lg:grid-cols-2 items-center gap-14 relative z-10">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
               <div className="text-xs uppercase tracking-[.3em] text-[#8b6578] mb-5">
-                {products.length > 0 ? `${products.length} collections · ` : ""}Bagues artisanales
+                {products.length > 0 ? `${products.length} collections · ` : ""}Cristaux Swarovski
               </div>
               <h1 className="font-serif text-6xl md:text-8xl leading-none mb-5 text-[#513642]">ZENORIA</h1>
               <p className="font-serif italic text-2xl md:text-3xl text-[#594856] mb-5">
                 L&apos;énergie du cristal,<br />l&apos;harmonie de l&apos;âme.
               </p>
               <p className="max-w-lg text-[#6e6268] leading-7 mb-8">
-                Des bagues artisanales imaginées comme des symboles d&apos;équilibre, façonnées pour révéler votre lumière intérieure.
+                Des bagues artisanales en cristaux Swarovski, imaginées comme des symboles d&apos;équilibre et façonnées pour révéler votre lumière intérieure.
               </p>
               <div className="flex flex-wrap gap-3">
                 <Button
@@ -757,13 +760,13 @@ export default function ZenoriaShop() {
               </div>
             </motion.div>
             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8 }} className="relative flex justify-center">
-              <div className="h-[420px] w-[420px] max-w-[88vw] rounded-full bg-white/35 border border-white shadow-[0_30px_100px_rgba(91,54,77,.2)] overflow-hidden relative">
+              <div className="w-[420px] max-w-[88vw] aspect-square rounded-full bg-white/35 border border-white shadow-[0_30px_100px_rgba(91,54,77,.2)] overflow-hidden relative">
                 {products[0] && <RingVisual product={products[0]} large circle video />}
               </div>
               <div className="absolute right-0 bottom-8 rounded-2xl bg-white/65 backdrop-blur p-4 shadow-lg">
                 <Gem className="text-[#9b6480] mb-2" />
                 <div className="font-serif">Pièce artisanale</div>
-                <div className="text-xs text-[#756a70]">Finition lumineuse</div>
+                <div className="text-xs text-[#756a70]">Cristaux Swarovski</div>
               </div>
             </motion.div>
           </div>
@@ -875,6 +878,9 @@ export default function ZenoriaShop() {
           </div>
         </section>
 
+        {/* SAVOIR-FAIRE */}
+        <SavoirFaire product={products[0]} />
+
         {/* PHILOSOPHIE */}
         <section id="philosophie" className="grid lg:grid-cols-2 min-h-[540px]">
           <div className="bg-gradient-to-br from-[#d8c4d9] via-[#f5e8e6] to-[#dbc9a9] grid place-items-center p-12">
@@ -888,7 +894,7 @@ export default function ZenoriaShop() {
               Plus qu&apos;un bijou,<br />un symbole d&apos;équilibre.
             </h2>
             <p className="text-white/70 leading-7 max-w-xl">
-              Chaque création Zenoria associe l&apos;élégance du cristal à un univers de sérénité. Nos bagues sont pensées pour accompagner les instants précieux et raconter une histoire personnelle.
+              Chaque création Zenoria associe l&apos;élégance des cristaux Swarovski à un univers de sérénité. Nos bagues sont pensées pour accompagner les instants précieux et raconter une histoire personnelle.
             </p>
             <Button variant="outline" className="mt-8 w-fit rounded-full border-white/40 bg-transparent text-white">
               Découvrir notre histoire
@@ -1017,7 +1023,12 @@ export default function ZenoriaShop() {
             </div>
           </div>
         </div>
-        <div className="max-w-7xl mx-auto px-6 mt-10 pt-6 border-t border-white/10 text-xs">© 2026 Zenoria. Prototype e-commerce.</div>
+        <div className="max-w-7xl mx-auto px-6 mt-10 pt-6 border-t border-white/10 text-xs">
+          <div>© 2026 Zenoria. Prototype e-commerce.</div>
+          <div className="mt-2 text-[11px] text-white/50">
+            Swarovski® est une marque de son propriétaire. Zenoria est une marque indépendante, non affiliée à Swarovski.
+          </div>
+        </div>
       </footer>
 
       {/* PANIER */}
@@ -1257,7 +1268,7 @@ export default function ZenoriaShop() {
                   <div className="mt-6">
                     <div className="text-xs uppercase tracking-widest mb-2">Composition</div>
                     <p className="text-sm text-[#70656a] mb-3">
-                      {selected.crystals.reduce((s, c) => s + c.count, 0)} cristaux en {selected.crystals.length} couleur{selected.crystals.length > 1 ? "s" : ""}
+                      {selected.crystals.reduce((s, c) => s + c.count, 0)} cristaux Swarovski en {selected.crystals.length} couleur{selected.crystals.length > 1 ? "s" : ""}
                     </p>
                     <ul className="space-y-1.5">
                       {selected.crystals.map((c) => (

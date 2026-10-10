@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Head from "next/head";
 import { Plus, Pencil, Trash2, X, LogOut, Tag, Package, ArrowLeft, Upload, Film, Users } from "lucide-react";
 import { supabase, getMediaUrl, uploadProductMedia, deleteProductMedia } from "@/lib/supabase";
 import AuthModal from "@/components/AuthModal";
 import AdminConnections from "@/components/AdminConnections";
+import PhotoCropper from "@/components/PhotoCropper";
+import VideoCropper from "@/components/VideoCropper";
 
 // ============================================================
 // PAGE D'ADMINISTRATION — /admin
@@ -70,6 +72,42 @@ const GRADIENT_OPTIONS = [
   { label: "Violet profond", value: "from-purple-500 via-violet-200 to-white" },
 ];
 
+const TIME_ZONE = "Europe/Paris";
+
+function formatDateTime(value) {
+  if (!value) return null;
+  return new Date(value).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short", timeZone: TIME_ZONE });
+}
+
+// Une ligne du suivi : « Créée le 10/10/2026 14:30 · adresse@exemple.fr ».
+// Les collections créées avant la mise en place du suivi n'ont pas d'auteur enregistré.
+function TraceLine({ label, at, by, missing }) {
+  const date = formatDateTime(at);
+  if (!date) return <div className="leading-4 text-[#8b737e]">{missing}</div>;
+  return (
+    <div className="leading-4">
+      <span className="text-[#8b737e]">{label} </span>
+      <span className="whitespace-nowrap">{date}</span>
+      <span className="text-[#8b737e]"> · {by ? by : "auteur non enregistré"}</span>
+    </div>
+  );
+}
+
+function Tracking({ p }) {
+  return (
+    <div className="text-[11px] text-[#54434c] space-y-1" data-testid="tracking">
+      <TraceLine label="Créée le" at={p.created_at} by={p.created_by_email} missing="Création : date non enregistrée" />
+      <TraceLine label="Modifiée le" at={p.updated_at} by={p.updated_by_email} missing="Jamais modifiée" />
+      <TraceLine
+        label={p.active ? "En ligne depuis le" : "Dernière mise en ligne le"}
+        at={p.published_at}
+        by={p.published_by_email}
+        missing={p.active ? "En ligne : date de mise en ligne non enregistrée" : "Jamais mise en ligne"}
+      />
+    </div>
+  );
+}
+
 function formatEUR(n) {
   if (n === null || n === undefined || n === "") return "—";
   return Number(n).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
@@ -98,6 +136,14 @@ export default function AdminPage() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [mediaError, setMediaError] = useState("");
+
+  // Fenêtre de cadrage des photos : { file, index, total } tant qu'une photo est en cours de cadrage
+  const [cropRequest, setCropRequest] = useState(null);
+  const cropResolver = useRef(null);
+
+  // Fenêtre de cadrage et de traitement d'une vidéo : { id, file } tant qu'elle est ouverte
+  const [videoRequest, setVideoRequest] = useState(null);
+  const videoResolver = useRef(null);
 
   // --- Authentification + vérification du rôle admin ---
   useEffect(() => {
@@ -207,7 +253,22 @@ export default function AdminPage() {
     setProductForm((f) => ({ ...f, crystals: f.crystals.filter((_, i) => i !== idx) }));
   };
 
+  // --- Cadrage des photos (fenêtre de cadrage avant l'envoi) ---
+  // Ouvre la fenêtre pour une photo et attend le choix de l'administratrice.
+  const askCrop = (file, index, total) =>
+    new Promise((resolve) => {
+      cropResolver.current = resolve;
+      setCropRequest({ file, index, total });
+    });
+
+  const finishCrop = (result) => {
+    setCropRequest(null);
+    if (cropResolver.current) cropResolver.current(result);
+    cropResolver.current = null;
+  };
+
   // --- Upload de photos ---
+  // Pour chaque photo : cadrage dans la fenêtre, puis recadrage + filigrane + compression + envoi.
   const handlePhotoUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     e.target.value = ""; // permet de resélectionner le même fichier plus tard
@@ -218,21 +279,34 @@ export default function AdminPage() {
       return;
     }
 
+    // Contrôle de tous les fichiers avant d'ouvrir la première fenêtre de cadrage
+    for (const file of files) {
+      if (!file.type.startsWith("image/")) {
+        setMediaError(`« ${file.name} » n'est pas une image.`);
+        return;
+      }
+      if (file.size > MAX_FILE_MB * 1024 * 1024) {
+        setMediaError(`« ${file.name} » dépasse ${MAX_FILE_MB} Mo.`);
+        return;
+      }
+    }
+
     setMediaError("");
     setUploadingPhoto(true);
     try {
-      const newPaths = [];
-      for (const file of files) {
-        if (!file.type.startsWith("image/")) {
-          throw new Error(`« ${file.name} » n'est pas une image.`);
-        }
-        if (file.size > MAX_FILE_MB * 1024 * 1024) {
-          throw new Error(`« ${file.name} » dépasse ${MAX_FILE_MB} Mo.`);
-        }
-        const path = await uploadProductMedia(file, productForm.slug.trim());
-        newPaths.push(path);
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const result = await askCrop(file, i + 1, files.length);
+        if (result.action === "cancel") break; // on arrête : les photos déjà envoyées sont conservées
+        if (result.action === "skip") continue;
+        const path = await uploadProductMedia(
+          file,
+          productForm.slug.trim(),
+          result.action === "crop" ? { crop: result.crop } : {}
+        );
+        // Ajoutée tout de suite à la liste : rien n'est perdu si une photo suivante échoue
+        setProductForm((f) => ({ ...f, photos: [...f.photos, path] }));
       }
-      setProductForm((f) => ({ ...f, photos: [...f.photos, ...newPaths] }));
     } catch (err) {
       setMediaError("Échec de l'envoi : " + err.message);
     } finally {
@@ -246,7 +320,23 @@ export default function AdminPage() {
     deleteProductMedia(path);
   };
 
+  // --- Cadrage et traitement des vidéos ---
+  // Ouvre la fenêtre pour une vidéo et attend le résultat : vidéo traitée à envoyer, ou abandon.
+  const askVideo = (file) =>
+    new Promise((resolve) => {
+      videoResolver.current = resolve;
+      setVideoRequest({ id: Date.now(), file });
+    });
+
+  const finishVideo = (result) => {
+    setVideoRequest(null);
+    if (videoResolver.current) videoResolver.current(result);
+    videoResolver.current = null;
+  };
+
   // --- Upload de vidéo ---
+  // La vidéo passe d'abord par la fenêtre de cadrage : recadrage, 720p, compression, sans le son,
+  // filigrane en bas à gauche. C'est la vidéo TRAITÉE qui est envoyée, jamais l'original.
   const handleVideoUpload = async (e) => {
     const file = e.target.files && e.target.files[0];
     e.target.value = "";
@@ -268,7 +358,9 @@ export default function AdminPage() {
     setMediaError("");
     setUploadingVideo(true);
     try {
-      const path = await uploadProductMedia(file, productForm.slug.trim());
+      const result = await askVideo(file);
+      if (result.action !== "use") return; // abandon : rien n'est envoyé
+      const path = await uploadProductMedia(result.file, productForm.slug.trim());
       setProductForm((f) => ({ ...f, video: path }));
     } catch (err) {
       setMediaError("Échec de l'envoi : " + err.message);
@@ -532,6 +624,7 @@ export default function AdminPage() {
                       <th className="px-4 py-3 font-medium">Prix</th>
                       <th className="px-4 py-3 font-medium">Stock</th>
                       <th className="px-4 py-3 font-medium">Statut</th>
+                      <th className="px-4 py-3 font-medium hidden lg:table-cell">Suivi</th>
                       <th className="px-4 py-3 font-medium text-right">Actions</th>
                     </tr>
                   </thead>
@@ -573,6 +666,9 @@ export default function AdminPage() {
                           >
                             {p.active ? "En ligne" : "Masquée"}
                           </button>
+                        </td>
+                        <td className="px-4 py-3 hidden lg:table-cell align-top">
+                          <Tracking p={p} />
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-1.5">
@@ -665,6 +761,13 @@ export default function AdminPage() {
               </div>
 
               {formError && <div className="mb-4 text-sm rounded-xl bg-red-50 text-red-600 px-4 py-3">{formError}</div>}
+
+              {productForm.id && (
+                <div className="mb-5 rounded-xl border border-[#eee2e5] bg-[#faf6f8] px-4 py-3">
+                  <div className="text-[10px] uppercase tracking-widest text-[#9a7384] mb-1.5">Suivi de la collection</div>
+                  <Tracking p={productForm} />
+                </div>
+              )}
 
               <div className="grid sm:grid-cols-2 gap-4">
                 <label className="text-sm">
@@ -811,7 +914,10 @@ export default function AdminPage() {
                       </label>
                     )}
                   </div>
-                  <p className="text-[11px] text-[#8b737e] mt-1.5">Formats acceptés : MP4, MOV, WebM. Taille maximale : {MAX_FILE_MB} Mo.</p>
+                  <p className="text-[11px] text-[#8b737e] mt-1.5">
+                    Formats acceptés : MP4, MOV, WebM ({MAX_FILE_MB} Mo au maximum, 60 s au maximum). La vidéo est recadrée, compressée,
+                    filigranée et enregistrée sans le son : le traitement se fait dans votre navigateur, en temps réel.
+                  </p>
                 </div>
 
                 {mediaError && (
@@ -929,6 +1035,20 @@ export default function AdminPage() {
             </form>
           </div>
         </>
+      )}
+
+      {/* CADRAGE ET TRAITEMENT DES VIDEOS */}
+      {videoRequest && <VideoCropper key={videoRequest.id} file={videoRequest.file} onResult={finishVideo} />}
+
+      {/* CADRAGE DES PHOTOS */}
+      {cropRequest && (
+        <PhotoCropper
+          key={cropRequest.index}
+          file={cropRequest.file}
+          index={cropRequest.index}
+          total={cropRequest.total}
+          onResult={finishCrop}
+        />
       )}
     </div>
   );

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase, getMediaUrl } from "@/lib/supabase";
 import AuthModal from "@/components/AuthModal";
+import MediaGuard from "@/components/MediaGuard";
 import SavoirFaire from "@/components/SavoirFaire";
 
 // ============================================================
@@ -628,6 +629,7 @@ export default function ZenoriaShop() {
 
   return (
     <div className="min-h-screen bg-[#fbf8f4] text-[#342b32] selection:bg-[#dcc8dd]">
+    <MediaGuard />
       <Head>
         <title>Zenoria — L&apos;énergie du cristal, l&apos;harmonie de l&apos;âme</title>
         <meta name="description" content="Bagues artisanales en cristaux Swarovski. Collections Bleus, Roses, Nature et Violettes." />

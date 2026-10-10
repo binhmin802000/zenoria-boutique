@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
 import Head from "next/head";
-import { Plus, Pencil, Trash2, X, LogOut, Tag, Package, ArrowLeft, Upload, Film } from "lucide-react";
+import { Plus, Pencil, Trash2, X, LogOut, Tag, Package, ArrowLeft, Upload, Film, Users } from "lucide-react";
 import { supabase, getMediaUrl, uploadProductMedia, deleteProductMedia } from "@/lib/supabase";
 import AuthModal from "@/components/AuthModal";
+import AdminConnections from "@/components/AdminConnections";
 
 // ============================================================
 // PAGE D'ADMINISTRATION — /admin
@@ -15,6 +16,10 @@ import AuthModal from "@/components/AuthModal";
 // Les photos et vidéos sont envoyées directement depuis cette page
 // vers Supabase Storage (voir supabase_storage_setup.sql) : plus
 // besoin de déposer des fichiers dans le code du site.
+//
+// L'onglet « Connexions » lit les comptes et le journal des connexions
+// via deux fonctions SQL réservées aux administrateurs
+// (voir supabase_admin_connections.sql).
 // ============================================================
 
 const MAX_FILE_MB = 95; // marge sous la limite de 100 Mo du bucket
@@ -76,7 +81,7 @@ export default function AdminPage() {
   const [isAdmin, setIsAdmin] = useState(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
-  const [tab, setTab] = useState("products"); // "products" | "promos"
+  const [tab, setTab] = useState("products"); // "products" | "promos" | "connections"
 
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
@@ -473,18 +478,24 @@ export default function AdminPage() {
             </button>
           </div>
         </div>
-        <div className="max-w-6xl mx-auto px-5 flex gap-1 pb-3">
+        <div className="max-w-6xl mx-auto px-5 flex gap-1 pb-3 overflow-x-auto">
           <button
             onClick={() => setTab("products")}
-            className={`flex items-center gap-1.5 rounded-full px-4 h-9 text-sm transition ${tab === "products" ? "bg-[#8f6075] text-white" : "bg-[#f5edf1] text-[#54434c]"}`}
+            className={`flex items-center gap-1.5 rounded-full px-4 h-9 text-sm transition whitespace-nowrap ${tab === "products" ? "bg-[#8f6075] text-white" : "bg-[#f5edf1] text-[#54434c]"}`}
           >
             <Package size={15} /> Collections
           </button>
           <button
             onClick={() => setTab("promos")}
-            className={`flex items-center gap-1.5 rounded-full px-4 h-9 text-sm transition ${tab === "promos" ? "bg-[#8f6075] text-white" : "bg-[#f5edf1] text-[#54434c]"}`}
+            className={`flex items-center gap-1.5 rounded-full px-4 h-9 text-sm transition whitespace-nowrap ${tab === "promos" ? "bg-[#8f6075] text-white" : "bg-[#f5edf1] text-[#54434c]"}`}
           >
             <Tag size={15} /> Codes promo
+          </button>
+          <button
+            onClick={() => setTab("connections")}
+            className={`flex items-center gap-1.5 rounded-full px-4 h-9 text-sm transition whitespace-nowrap ${tab === "connections" ? "bg-[#8f6075] text-white" : "bg-[#f5edf1] text-[#54434c]"}`}
+          >
+            <Users size={15} /> Connexions
           </button>
         </div>
       </header>
@@ -638,6 +649,8 @@ export default function AdminPage() {
             )}
           </>
         )}
+
+        {tab === "connections" && <AdminConnections />}
       </main>
 
       {/* FORMULAIRE PRODUIT */}

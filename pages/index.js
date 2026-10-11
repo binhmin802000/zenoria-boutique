@@ -8,6 +8,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase, getMediaUrl } from "@/lib/supabase";
+import { useSiteStatus } from "@/lib/siteStatus";
+import { formatReturnAt } from "@/lib/maintenance";
 import AuthModal from "@/components/AuthModal";
 import MediaGuard from "@/components/MediaGuard";
 import SavoirFaire from "@/components/SavoirFaire";
@@ -389,6 +391,14 @@ export default function ZenoriaShop() {
   // Médias dédiés gérés depuis /admin (onglet « Contenu du site ») : { hero_video, savoir_faire_photo }
   const [siteMedia, setSiteMedia] = useState({});
 
+  // --- État de la maintenance (onglet « Maintenance » de /admin) ---
+  // « shop_pause » : le catalogue reste visible, la commande est fermée.
+  // « full » : visible ici seulement pour un administrateur qui prévisualise le site pendant la coupure.
+  const siteStatus = useSiteStatus();
+  const shopPaused = siteStatus.mode === "shop_pause";
+  const previewingMaintenance = siteStatus.mode === "full";
+  const pauseReturn = siteStatus.returnAt ? formatReturnAt(siteStatus.returnAt) : "";
+
   // --- Panier ---
   const [cartItems, setCartItems] = useState([]);
   const [cartLoaded, setCartLoaded] = useState(false);
@@ -668,6 +678,20 @@ export default function ZenoriaShop() {
         <title>Zenoria — L&apos;énergie du cristal, l&apos;harmonie de l&apos;âme</title>
         <meta name="description" content="Bagues artisanales en cristaux Swarovski. Collections Bleus, Roses, Nature et Violettes." />
       </Head>
+
+      {previewingMaintenance && (
+        <div role="status" data-testid="maintenance-preview" className="bg-red-700 text-white text-[12px] py-2 px-4 text-center">
+          Mode maintenance actif : vous voyez le site grâce au lien d&apos;aperçu administrateur. Les visiteurs voient la page de maintenance.
+        </div>
+      )}
+
+      {shopPaused && (
+        <div role="status" data-testid="pause-banner" className="bg-amber-100 text-amber-900 text-[13px] py-2.5 px-4 text-center leading-5">
+          <strong>Boutique en pause</strong> · les commandes sont temporairement fermées.
+          {siteStatus.message ? ` ${siteStatus.message}` : ""}
+          {pauseReturn ? ` Retour prévu : ${pauseReturn}.` : ""}
+        </div>
+      )}
 
       <div className="bg-[#342434] text-white/85 text-[11px] py-2 px-4 text-center tracking-wide">
         Livraison offerte dès {FREE_SHIPPING_THRESHOLD} € · Créations artisanales en cristaux Swarovski · Paiement sécurisé
@@ -1052,6 +1076,7 @@ export default function ZenoriaShop() {
               <p>Livraison et retours</p>
               <p>FAQ</p>
               <p>Mentions légales</p>
+              <p><a href="/confidentialite" className="hover:text-white underline-offset-2 hover:underline">Politique de confidentialité</a></p>
             </div>
           </div>
           <div>
@@ -1259,11 +1284,17 @@ export default function ZenoriaShop() {
 
                     <button
                       onClick={() => setCheckoutNotice(true)}
-                      className={`w-full rounded-full bg-[#82576c] hover:bg-[#6d4659] text-white text-sm font-medium transition ${tightFooter ? "h-11" : "h-12"}`}
+                      disabled={shopPaused}
+                      data-testid="checkout-button"
+                      className={`w-full rounded-full bg-[#82576c] hover:bg-[#6d4659] text-white text-sm font-medium transition disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#82576c] ${tightFooter ? "h-11" : "h-12"}`}
                     >
-                      Commander
+                      {shopPaused ? "Commandes temporairement fermées" : "Commander"}
                     </button>
-                    {checkoutNotice ? (
+                    {shopPaused ? (
+                      <p data-testid="pause-note" className="text-[11px] text-center rounded-lg bg-amber-50 text-amber-800 px-3 py-1.5">
+                        La boutique est en pause{pauseReturn ? ` jusqu'au ${pauseReturn}` : ""}. Votre panier est conservé sur cet appareil.
+                      </p>
+                    ) : checkoutNotice ? (
                       <p className="text-[11px] text-center rounded-lg bg-[#f5edf1] text-[#6b4a5b] px-3 py-1.5">
                         Le paiement en ligne sera ajouté à la prochaine étape. Aucune transaction n&apos;est possible pour le moment.
                       </p>

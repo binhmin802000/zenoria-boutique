@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import Head from "next/head";
-import { Plus, Pencil, Trash2, X, LogOut, Tag, Package, ArrowLeft, Upload, Film, Users, Sparkles, Gauge } from "lucide-react";
+import { Plus, Pencil, Trash2, X, LogOut, Tag, Package, ArrowLeft, Upload, Film, Users, Sparkles, Gauge, Wrench, Activity, Settings, LogIn, Clock } from "lucide-react";
 import { supabase, getMediaUrl, uploadProductMedia, deleteProductMedia } from "@/lib/supabase";
 import AuthModal from "@/components/AuthModal";
 import AdminConnections from "@/components/AdminConnections";
@@ -8,6 +8,10 @@ import PhotoCropper from "@/components/PhotoCropper";
 import VideoCropper from "@/components/VideoCropper";
 import AdminSiteMedia from "@/components/AdminSiteMedia";
 import AdminQuotas, { QuotaBanner, useQuotaStatus, computeQuotaAlerts } from "@/components/AdminQuotas";
+import AdminMaintenance, { MaintenanceBanner, useMaintenanceStatus, isMaintenanceActive } from "@/components/AdminMaintenance";
+import AdminHealth from "@/components/AdminHealth";
+import { CrmAccounts, CrmRoadmap } from "@/components/AdminCrm";
+import { ADMIN_NAV, DEFAULT_NAV, parseAdminHash, buildAdminHash, isAuthCallbackHash, technicalAlertLevel } from "@/lib/adminNav";
 import { worstLevel } from "@/lib/quota";
 
 // ============================================================
@@ -29,6 +33,13 @@ import { worstLevel } from "@/lib/quota";
 // L'onglet « Contenu du site » gère la vidéo de la bannière d'accueil et la photo de
 // Savoir-faire (voir supabase_site_media.sql). L'onglet « Quotas » surveille Supabase et
 // Vercel, avec un bandeau d'alerte en haut de chaque onglet (voir supabase_admin_quotas.sql).
+//
+// L'onglet « Maintenance » met la boutique en pause ou coupe le site (voir supabase_maintenance.sql
+// et middleware.js). L'onglet « Santé » teste la chaîne complète et affiche le journal des erreurs
+// des visiteurs (voir supabase_admin_diagnostic.sql).
+//
+// NAVIGATION : trois groupes (Produits, CRM, Technique), chacun avec ses onglets. La structure est
+// décrite dans lib/adminNav.js et la position est conservée dans l'adresse (par exemple /admin#technique/sante).
 // ============================================================
 
 const MAX_FILE_MB = 95; // marge sous la limite de 100 Mo du bucket
@@ -120,13 +131,40 @@ function formatEUR(n) {
   return Number(n).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
 }
 
+const GROUP_ICONS = { produits: Package, crm: Users, technique: Settings };
+const TAB_ICONS = {
+  collections: Package,
+  promos: Tag,
+  site: Sparkles,
+  comptes: Users,
+  avenir: Clock,
+  connexions: LogIn,
+  quotas: Gauge,
+  maintenance: Wrench,
+  sante: Activity,
+};
+
 export default function AdminPage() {
   const [authLoading, setAuthLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
-  const [tab, setTab] = useState("products"); // "products" | "promos" | "connections" | "site" | "quotas"
+  // Navigation en deux niveaux : groupe (Produits, CRM, Technique), puis onglet. La position est conservée dans
+  // l'adresse (par exemple /admin#technique/sante) : un rechargement de la page ou un lien gardent le même écran.
+  const [nav, setNav] = useState(DEFAULT_NAV);
+  const [navReady, setNavReady] = useState(false);
+  const lastSubByGroup = useRef({}); // chaque groupe se souvient de son dernier onglet
+  const subBarRef = useRef(null);
+  const tab = nav.sub;
+
+  const goTo = (group, sub) => {
+    const g = ADMIN_NAV.find((x) => x.id === group);
+    if (!g) return;
+    const target = sub && g.tabs.some((t) => t.id === sub) ? sub : lastSubByGroup.current[group] || g.tabs[0].id;
+    lastSubByGroup.current[group] = target;
+    setNav({ group, sub: target });
+  };
 
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
@@ -155,6 +193,45 @@ export default function AdminPage() {
   // Quotas Supabase / Vercel : chargés une fois pour le bandeau d'alerte et l'onglet « Quotas »
   const quota = useQuotaStatus(isAdmin === true);
   const quotaLevel = worstLevel(computeQuotaAlerts(quota));
+
+  // Maintenance : chargée une fois pour le bandeau d'alerte et l'onglet « Maintenance »
+  const maintenance = useMaintenanceStatus(isAdmin === true);
+  const maintenanceActive = isMaintenanceActive(maintenance.row, Date.now());
+
+  // Le groupe « Technique » affiche le pire niveau d'alerte de ses onglets : une alerte ne doit jamais rester cachée dans un onglet fermé
+  const techLevel = technicalAlertLevel(quotaLevel, maintenanceActive && maintenance.row ? maintenance.row.mode : "off");
+  const currentGroup = ADMIN_NAV.find((g) => g.id === nav.group) || ADMIN_NAV[0];
+
+  // --- Navigation : lecture de l'adresse au chargement et quand elle change (lien, bouton Précédent) ---
+  useEffect(() => {
+    const apply = () => {
+      const parsed = parseAdminHash(window.location.hash);
+      if (parsed) {
+        lastSubByGroup.current[parsed.group] = parsed.sub;
+        setNav(parsed);
+      }
+    };
+    apply();
+    setNavReady(true);
+    window.addEventListener("hashchange", apply);
+    return () => window.removeEventListener("hashchange", apply);
+  }, []);
+
+  // --- Navigation : écriture de la position dans l'adresse ---
+  useEffect(() => {
+    if (!navReady) return;
+    const current = window.location.hash;
+    if (isAuthCallbackHash(current)) return; // lien de connexion reçu par e-mail : on n'y touche pas
+    const wanted = buildAdminHash(nav.group, nav.sub);
+    if (current !== wanted) window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search + wanted); // on garde l'état interne de Next.js
+  }, [nav, navReady]);
+
+  // --- Navigation : l'onglet actif reste visible dans la barre (utile sur téléphone) ---
+  useEffect(() => {
+    const bar = subBarRef.current;
+    const active = bar && bar.querySelector('[aria-selected="true"]');
+    if (active) bar.scrollTo({ left: Math.max(0, active.offsetLeft - (bar.clientWidth - active.offsetWidth) / 2) });
+  }, [nav, isAdmin, authLoading]);
 
   // --- Authentification + vérification du rôle admin ---
   useEffect(() => {
@@ -581,56 +658,90 @@ export default function AdminPage() {
             </button>
           </div>
         </div>
-        <div className="max-w-6xl mx-auto px-5 flex gap-1 pb-3 overflow-x-auto">
-          <button
-            onClick={() => setTab("products")}
-            className={`flex items-center gap-1.5 rounded-full px-4 h-9 text-sm transition whitespace-nowrap ${tab === "products" ? "bg-[#8f6075] text-white" : "bg-[#f5edf1] text-[#54434c]"}`}
-          >
-            <Package size={15} /> Collections
-          </button>
-          <button
-            onClick={() => setTab("promos")}
-            className={`flex items-center gap-1.5 rounded-full px-4 h-9 text-sm transition whitespace-nowrap ${tab === "promos" ? "bg-[#8f6075] text-white" : "bg-[#f5edf1] text-[#54434c]"}`}
-          >
-            <Tag size={15} /> Codes promo
-          </button>
-          <button
-            onClick={() => setTab("connections")}
-            className={`flex items-center gap-1.5 rounded-full px-4 h-9 text-sm transition whitespace-nowrap ${tab === "connections" ? "bg-[#8f6075] text-white" : "bg-[#f5edf1] text-[#54434c]"}`}
-          >
-            <Users size={15} /> Connexions
-          </button>
-          <button
-            onClick={() => setTab("site")}
-            className={`flex items-center gap-1.5 rounded-full px-4 h-9 text-sm transition whitespace-nowrap ${tab === "site" ? "bg-[#8f6075] text-white" : "bg-[#f5edf1] text-[#54434c]"}`}
-          >
-            <Sparkles size={15} /> Contenu du site
-          </button>
-          <button
-            onClick={() => setTab("quotas")}
-            className={`flex items-center gap-1.5 rounded-full px-4 h-9 text-sm transition whitespace-nowrap ${tab === "quotas" ? "bg-[#8f6075] text-white" : "bg-[#f5edf1] text-[#54434c]"}`}
-          >
-            <Gauge size={15} /> Quotas
-            {quotaLevel !== "ok" && (
-              <span
-                data-testid="quota-dot"
-                data-level={quotaLevel}
-                className={`h-2 w-2 rounded-full ${quotaLevel === "critical" ? "bg-red-500" : "bg-amber-400"}`}
-                aria-label={quotaLevel === "critical" ? "Quota critique" : "Quota à surveiller"}
-              />
-            )}
-          </button>
+        <div role="tablist" aria-label="Sections de l'administration" data-testid="group-bar" className="max-w-6xl mx-auto px-5 flex gap-1.5 sm:gap-2 pb-2 overflow-x-auto">
+          {ADMIN_NAV.map((g) => {
+            const GroupIcon = GROUP_ICONS[g.id];
+            const active = nav.group === g.id;
+            const level = g.id === "technique" ? techLevel : "ok";
+            return (
+              <button
+                key={g.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                data-testid={`group-${g.id}`}
+                onClick={() => goTo(g.id)}
+                className={`flex items-center gap-1.5 sm:gap-2 rounded-full px-3.5 sm:px-5 h-10 text-sm font-medium transition whitespace-nowrap shrink-0 ${
+                  active ? "bg-[#8f6075] text-white shadow-sm" : "bg-[#f5edf1] text-[#54434c] hover:bg-[#ead9e1]"
+                }`}
+              >
+                <GroupIcon size={16} /> {g.label}
+                {level !== "ok" && (
+                  <span
+                    data-testid={`group-dot-${g.id}`}
+                    data-level={level}
+                    className={`h-2.5 w-2.5 rounded-full ring-2 ${active ? "ring-[#8f6075]" : "ring-[#f5edf1]"} ${level === "critical" ? "bg-red-500" : "bg-amber-400"}`}
+                    aria-label={level === "critical" ? "Alerte critique dans ce groupe" : "Point d'attention dans ce groupe"}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+        <div
+          ref={subBarRef}
+          role="tablist"
+          aria-label={`Onglets ${currentGroup.label}`}
+          data-testid="sub-bar"
+          className="relative max-w-6xl mx-auto px-5 flex gap-1 pb-3 overflow-x-auto"
+        >
+          {currentGroup.tabs.map((t) => {
+            const TabIcon = TAB_ICONS[t.id];
+            const active = nav.sub === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                data-testid={`sub-${t.id}`}
+                onClick={() => goTo(currentGroup.id, t.id)}
+                className={`flex items-center gap-1.5 rounded-full px-3.5 h-8 text-[13px] transition whitespace-nowrap ${
+                  active ? "bg-[#f0e6ea] text-[#412f3b] font-medium ring-1 ring-[#d9c5cc]" : "text-[#54434c] hover:bg-[#f5edf1]"
+                }`}
+              >
+                <TabIcon size={14} /> {t.label}
+                {t.id === "quotas" && quotaLevel !== "ok" && (
+                  <span
+                    data-testid="quota-dot"
+                    data-level={quotaLevel}
+                    className={`h-2 w-2 rounded-full ${quotaLevel === "critical" ? "bg-red-500" : "bg-amber-400"}`}
+                    aria-label={quotaLevel === "critical" ? "Quota critique" : "Quota à surveiller"}
+                  />
+                )}
+                {t.id === "maintenance" && maintenanceActive && (
+                  <span
+                    data-testid="maintenance-dot"
+                    className={`h-2 w-2 rounded-full ${maintenance.row && maintenance.row.mode === "full" ? "bg-red-500" : "bg-amber-400"}`}
+                    aria-label={maintenance.row && maintenance.row.mode === "full" ? "Maintenance totale active" : "Boutique en pause"}
+                  />
+                )}
+              </button>
+            );
+          })}
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-5 py-8">
-        {tab !== "quotas" && <QuotaBanner status={quota} onOpen={() => setTab("quotas")} />}
+        {tab !== "maintenance" && <MaintenanceBanner status={maintenance} onOpen={() => goTo("technique", "maintenance")} />}
+
+        {tab !== "quotas" && <QuotaBanner status={quota} onOpen={() => goTo("technique", "quotas")} />}
 
         {toast && (
           <div className="mb-5 rounded-xl bg-emerald-50 text-emerald-700 px-4 py-3 text-sm">{toast}</div>
         )}
 
-        {tab === "products" && (
+        {tab === "collections" && (
           <>
             <div className="flex justify-between items-center mb-5">
               <div>
@@ -779,11 +890,19 @@ export default function AdminPage() {
           </>
         )}
 
-        {tab === "connections" && <AdminConnections />}
+        {tab === "connexions" && <AdminConnections />}
 
         {tab === "site" && <AdminSiteMedia />}
 
+        {tab === "comptes" && <CrmAccounts />}
+
+        {tab === "avenir" && <CrmRoadmap />}
+
         {tab === "quotas" && <AdminQuotas status={quota} />}
+
+        {tab === "maintenance" && <AdminMaintenance status={maintenance} />}
+
+        {tab === "sante" && <AdminHealth quotaAlerts={computeQuotaAlerts(quota)} quotaReady={!quota.loading && !quota.error} />}
       </main>
 
       {/* FORMULAIRE PRODUIT */}

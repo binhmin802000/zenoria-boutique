@@ -57,7 +57,24 @@ function badgeFor(fraction) {
   return { text: "filigrane coupé", style: "bg-[#f0e6ea] text-[#8b737e]" };
 }
 
-export default function PhotoCropper({ file, index = 1, total = 1, onResult }) {
+export default function PhotoCropper({
+  file,
+  index = 1,
+  total = 1,
+  onResult,
+  aspect = FRAME_ASPECT,           // rapport largeur / hauteur du cadre (1 = carre, pour les visuels en cercle)
+  maxFrameW = FRAME_WIDTH,         // largeur maximale du cadre de cadrage
+  views: viewsProp,                // vues du site a simuler (par defaut : fiche produit, carte, mobile, cercle)
+  position = "bas-gauche",         // position du filigrane : "bas-gauche" ou "cercle"
+  watermarkUrl,                    // fichier du filigrane (par defaut : public/filigrane.png)
+  maxSide = MAX_SIDE,              // cote le plus long du fichier enregistre
+  circleMask = false,              // montre le cercle visible sur le site par-dessus le cadre
+  allowWhole = true,               // propose « Garder la photo entière »
+  title = "Cadrer la photo",
+  minSourceWidth = MIN_SOURCE_WIDTH_WARN,
+}) {
+  const viewList = viewsProp || VIEWS;
+  const wmWhere = position === "cercle" ? "au centre, tout en bas" : "en bas à gauche";
   const [bitmap, setBitmap] = useState(null);
   const [wm, setWm] = useState(null);
   const [displayUrl, setDisplayUrl] = useState("");
@@ -65,7 +82,7 @@ export default function PhotoCropper({ file, index = 1, total = 1, onResult }) {
   const [zoom, setZoom] = useState(1);
   const [center, setCenter] = useState({ x: 0, y: 0 });
   const [guides, setGuides] = useState(true);
-  const [frameW, setFrameW] = useState(FRAME_WIDTH);
+  const [frameW, setFrameW] = useState(maxFrameW);
 
   const frameRef = useRef(null);
   const dragRef = useRef(null);
@@ -78,7 +95,7 @@ export default function PhotoCropper({ file, index = 1, total = 1, onResult }) {
     let url = "";
     (async () => {
       try {
-        const [bmp, watermark] = await Promise.all([decodeImage(file), loadWatermarkBitmap()]);
+        const [bmp, watermark] = await Promise.all([decodeImage(file), loadWatermarkBitmap(watermarkUrl)]);
         if (cancelled) return;
         // Image d'affichage allégée (les calculs restent faits sur la photo d'origine).
         const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
@@ -105,7 +122,7 @@ export default function PhotoCropper({ file, index = 1, total = 1, onResult }) {
 
   // ---- Largeur du cadre : 448 px au maximum, réduite sur petit écran ----
   useEffect(() => {
-    const update = () => setFrameW(Math.max(240, Math.min(FRAME_WIDTH, window.innerWidth - 72)));
+    const update = () => setFrameW(Math.max(240, Math.min(maxFrameW, window.innerWidth - 72)));
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
@@ -114,8 +131,8 @@ export default function PhotoCropper({ file, index = 1, total = 1, onResult }) {
   const ready = Boolean(bitmap && wm && displayUrl);
   const imgW = bitmap ? bitmap.width : 1;
   const imgH = bitmap ? bitmap.height : 1;
-  const rect = ready ? cropRect(imgW, imgH, FRAME_ASPECT, zoom, center.x, center.y) : null;
-  const frameH = frameW / FRAME_ASPECT;
+  const rect = ready ? cropRect(imgW, imgH, aspect, zoom, center.x, center.y) : null;
+  const frameH = frameW / aspect;
   const scale = rect ? frameW / rect.w : 1; // pixels d'écran par pixel de la photo
 
   latest.current = { zoom, center, imgW, imgH, ready };
@@ -123,7 +140,7 @@ export default function PhotoCropper({ file, index = 1, total = 1, onResult }) {
   // Applique un zoom et un centre en gardant le cadre à l'intérieur de la photo.
   const applyView = (nextZoom, cx, cy) => {
     const z = clamp(nextZoom, 1, MAX_ZOOM);
-    const r = cropRect(imgW, imgH, FRAME_ASPECT, z, cx, cy);
+    const r = cropRect(imgW, imgH, aspect, z, cx, cy);
     setZoom(z);
     setCenter({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
   };
@@ -152,7 +169,7 @@ export default function PhotoCropper({ file, index = 1, total = 1, onResult }) {
       if (!st.ready) return;
       e.preventDefault();
       const next = clamp(st.zoom * Math.exp(-e.deltaY * 0.0015), 1, MAX_ZOOM);
-      const r = cropRect(st.imgW, st.imgH, FRAME_ASPECT, next, st.center.x, st.center.y);
+      const r = cropRect(st.imgW, st.imgH, aspect, next, st.center.x, st.center.y);
       setZoom(next);
       setCenter({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
     };
@@ -175,11 +192,11 @@ export default function PhotoCropper({ file, index = 1, total = 1, onResult }) {
   };
 
   // ---- Taille du fichier enregistré et position du filigrane ----
-  const out = rect ? outputSize(rect.w, rect.h, MAX_SIDE) : null;
-  const box = out && wm ? watermarkBox(out.width, out.height, wm, "bas-gauche") : null;
+  const out = rect ? outputSize(rect.w, rect.h, maxSide) : null;
+  const box = out && wm ? watermarkBox(out.width, out.height, wm, position) : null;
   const views = useMemo(() => {
-    if (!out || !box) return VIEWS.map((v) => ({ ...v, frac: null }));
-    return VIEWS.map((v) => ({
+    if (!out || !box) return viewList.map((v) => ({ ...v, frac: null }));
+    return viewList.map((v) => ({
       ...v,
       frac: visibleFraction(box, out.width, out.height, v.w, v.h, Boolean(v.circle)),
     }));
@@ -191,8 +208,8 @@ export default function PhotoCropper({ file, index = 1, total = 1, onResult }) {
     if (!ready || !rect) return undefined;
     const id = requestAnimationFrame(() => {
       const fractions = toFractions(rect, imgW, imgH);
-      const full = renderPhoto(bitmap, fractions, wm, { maxSide: MAX_SIDE, previewWidth: FRAME_WIDTH });
-      VIEWS.forEach((v) => {
+      const full = renderPhoto(bitmap, fractions, wm, { maxSide, previewWidth: FRAME_WIDTH, position });
+      viewList.forEach((v) => {
         const canvas = canvasRefs.current[v.key];
         if (canvas) drawCover(canvas, full, v.w, v.h);
       });
@@ -206,7 +223,7 @@ export default function PhotoCropper({ file, index = 1, total = 1, onResult }) {
     onResult({ action: "crop", crop: toFractions(rect, imgW, imgH) });
   };
 
-  const lowRes = Boolean(rect && rect.w < MIN_SOURCE_WIDTH_WARN);
+  const lowRes = Boolean(rect && rect.w < minSourceWidth);
   const fr = rect ? toFractions(rect, imgW, imgH) : null;
 
   return (
@@ -215,13 +232,13 @@ export default function PhotoCropper({ file, index = 1, total = 1, onResult }) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Cadrer la photo"
+        aria-label={title}
         className="fixed z-50 inset-x-3 top-[3%] max-w-4xl mx-auto bg-white rounded-[2rem] shadow-2xl max-h-[94vh] overflow-y-auto"
       >
         <div className="p-5 sm:p-6">
           <div className="flex justify-between items-start gap-3 mb-2">
             <div className="min-w-0">
-              <h2 className="font-serif text-2xl">Cadrer la photo</h2>
+              <h2 className="font-serif text-2xl">{title}</h2>
               <p className="text-xs text-[#8b737e] truncate">
                 Photo {index} sur {total} · {file.name}
               </p>
@@ -239,7 +256,7 @@ export default function PhotoCropper({ file, index = 1, total = 1, onResult }) {
 
           <p className="text-sm text-[#70656a] mb-4 leading-5">
             Faites glisser la photo pour centrer la bague, puis réglez le zoom. Le fichier enregistré sera exactement ce
-            cadre, avec le filigrane « © 2026 ZENORIA » ajouté en bas à gauche.
+            cadre, avec le filigrane « © 2026 ZENORIA » ajouté {wmWhere}.
           </p>
 
           {error ? (
@@ -288,6 +305,15 @@ export default function PhotoCropper({ file, index = 1, total = 1, onResult }) {
                       <div className="absolute left-1/2 top-0 bottom-0 border-l border-dashed border-white/80" />
                       <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-white/80" />
                       <div className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/90" />
+                    </div>
+                  )}
+                  {circleMask && (
+                    <div className="pointer-events-none absolute inset-0" aria-hidden="true" data-testid="circle-mask">
+                      <div
+                        className="absolute inset-0"
+                        style={{ background: "radial-gradient(circle closest-side at 50% 50%, transparent 98%, rgba(20,14,18,.68) 100%)" }}
+                      />
+                      <div className="absolute inset-0 rounded-full border border-white/80" />
                     </div>
                   )}
                 </div>
@@ -395,14 +421,16 @@ export default function PhotoCropper({ file, index = 1, total = 1, onResult }) {
             >
               Valider le cadrage
             </button>
-            <button
-              type="button"
-              onClick={() => onResult({ action: "whole" })}
-              disabled={!ready}
-              className="rounded-full border border-[#d9c5cc] hover:bg-[#f5edf1] px-5 h-11 text-sm disabled:opacity-50"
-            >
-              Garder la photo entière
-            </button>
+            {allowWhole && (
+              <button
+                type="button"
+                onClick={() => onResult({ action: "whole" })}
+                disabled={!ready}
+                className="rounded-full border border-[#d9c5cc] hover:bg-[#f5edf1] px-5 h-11 text-sm disabled:opacity-50"
+              >
+                Garder la photo entière
+              </button>
+            )}
             <button
               type="button"
               onClick={() => onResult({ action: "skip" })}

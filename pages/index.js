@@ -213,6 +213,30 @@ function RingVisual({ product, large = false, circle = false, video = false }) {
   );
 }
 
+// Vidéo d'accueil dédiée (onglet « Contenu du site » de /admin) : en boucle, sans le son, dans le cercle de la bannière.
+// Si le fichier ne se charge pas, on revient à la vidéo de la première collection.
+function HeroVideo({ path, fallback }) {
+  const [failed, setFailed] = useState(false);
+  const src = getMediaUrl(path, "site");
+  if (failed || !src) {
+    return fallback ? <RingVisual product={fallback} large circle video /> : null;
+  }
+  return (
+    <div className="relative w-full h-full rounded-full overflow-hidden bg-black">
+      <video
+        key={src}
+        src={src}
+        autoPlay
+        loop
+        muted
+        playsInline
+        onError={() => setFailed(true)}
+        className="w-full h-full object-cover object-center"
+      />
+    </div>
+  );
+}
+
 // Petite vignette à taille variable, utilisée dans le panier
 function CartThumb({ product, size = "h-20 w-20" }) {
   const [imgError, setImgError] = useState(false);
@@ -362,6 +386,8 @@ export default function ZenoriaShop() {
   const [products, setProducts] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [promoCodes, setPromoCodes] = useState({});
+  // Médias dédiés gérés depuis /admin (onglet « Contenu du site ») : { hero_video, savoir_faire_photo }
+  const [siteMedia, setSiteMedia] = useState({});
 
   // --- Panier ---
   const [cartItems, setCartItems] = useState([]);
@@ -394,9 +420,10 @@ export default function ZenoriaShop() {
   useEffect(() => {
     let active = true;
     (async () => {
-      const [{ data: prodData, error: prodErr }, { data: promoData }] = await Promise.all([
+      const [{ data: prodData, error: prodErr }, { data: promoData }, { data: siteData }] = await Promise.all([
         supabase.from("products").select("*").eq("active", true).order("id"),
         supabase.from("promo_codes").select("*").eq("active", true),
+        supabase.from("site_media").select("*"),
       ]);
       if (!active) return;
 
@@ -408,6 +435,13 @@ export default function ZenoriaShop() {
         promoMap[p.code] = { type: p.type, value: Number(p.value), label: p.label };
       });
       setPromoCodes(promoMap);
+
+      // Si la table n'existe pas encore (script SQL non exécuté), siteData est vide : le site garde son comportement d'origine
+      const siteMap = {};
+      (siteData || []).forEach((r) => {
+        siteMap[r.slot] = r;
+      });
+      setSiteMedia(siteMap);
 
       try {
         const raw = window.localStorage.getItem(CART_STORAGE_KEY);
@@ -763,7 +797,11 @@ export default function ZenoriaShop() {
             </motion.div>
             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8 }} className="relative flex justify-center">
               <div className="w-[420px] max-w-[88vw] aspect-square rounded-full bg-white/35 border border-white shadow-[0_30px_100px_rgba(91,54,77,.2)] overflow-hidden relative">
-                {products[0] && <RingVisual product={products[0]} large circle video />}
+                {siteMedia.hero_video && siteMedia.hero_video.path ? (
+                  <HeroVideo path={siteMedia.hero_video.path} fallback={products[0]} />
+                ) : (
+                  products[0] && <RingVisual product={products[0]} large circle video />
+                )}
               </div>
               <div className="absolute right-0 bottom-8 rounded-2xl bg-white/65 backdrop-blur p-4 shadow-lg">
                 <Gem className="text-[#9b6480] mb-2" />
@@ -881,7 +919,7 @@ export default function ZenoriaShop() {
         </section>
 
         {/* SAVOIR-FAIRE */}
-        <SavoirFaire product={products[0]} />
+        <SavoirFaire product={products[0]} media={siteMedia.savoir_faire_photo} />
 
         {/* PHILOSOPHIE */}
         <section id="philosophie" className="grid lg:grid-cols-2 min-h-[540px]">

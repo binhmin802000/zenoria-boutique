@@ -45,12 +45,17 @@ const STEPS = [
   },
 ];
 
-export default function SavoirFaire({ product }) {
+// media : photo dédiée gérée depuis /admin (onglet « Contenu du site »), { path }.
+// Sans photo dédiée, on garde la première photo de la première collection.
+export default function SavoirFaire({ product, media }) {
   const [imgError, setImgError] = useState(false);
-  const photoSrc =
-    product && product.photos && product.photos[0]
-      ? getMediaUrl(product.photos[0], product.slug)
-      : null;
+  const customPath = media && media.path ? media.path : null;
+  const photoSrc = customPath
+    ? getMediaUrl(customPath, "site")
+    : product && product.photos && product.photos[0]
+    ? getMediaUrl(product.photos[0], product.slug)
+    : null;
+  const photoAlt = customPath ? "Une bague Zenoria réalisée à la main" : `Bague ${product ? product.name : ""} réalisée à la main`;
 
   return (
     <section id="savoir-faire" className="bg-[#fbf8f4] py-24">
@@ -68,7 +73,7 @@ export default function SavoirFaire({ product }) {
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={photoSrc}
-                alt={`Bague ${product.name} réalisée à la main`}
+                alt={photoAlt}
                 onError={() => setImgError(true)}
                 className="w-full h-full object-cover object-center"
               />

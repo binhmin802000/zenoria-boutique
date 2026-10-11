@@ -72,7 +72,23 @@ function formatSize(bytes) {
   return (bytes / 1048576).toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " Mo";
 }
 
-export default function VideoCropper({ file, onResult }) {
+export default function VideoCropper({
+  file,
+  onResult,
+  aspect = FRAME_ASPECT,           // rapport largeur / hauteur du cadre (1 = carre, pour les visuels en cercle)
+  maxFrameW = FRAME_WIDTH,         // largeur maximale du cadre de cadrage
+  views: viewsProp,                // vues du site a simuler (par defaut : fiche produit, mobile, cercle)
+  position = "bas-gauche",         // position du filigrane : "bas-gauche" ou "cercle"
+  watermarkUrl,                    // fichier du filigrane (par defaut : public/filigrane.png)
+  maxSeconds = MAX_VIDEO_SECONDS,  // duree maximale de la video
+  circleMask = false,              // montre le cercle visible sur le site par-dessus le cadre
+  allowWhole = true,               // propose « Garder la vidéo entière »
+  title = "Cadrer la vidéo",
+  minSourceWidth = MIN_SOURCE_WIDTH_WARN,
+}) {
+  const viewList = viewsProp || VIEWS;
+  const previewH = Math.round(FRAME_WIDTH / aspect);
+  const wmWhere = position === "cercle" ? "au centre, tout en bas" : "en bas à gauche";
   const [step, setStep] = useState("loading"); // loading | frame | processing | review | error
   const [error, setError] = useState({ message: "", fatal: false });
   const [url, setUrl] = useState("");
@@ -81,7 +97,7 @@ export default function VideoCropper({ file, onResult }) {
   const [zoom, setZoom] = useState(1);
   const [center, setCenter] = useState({ x: 0, y: 0 });
   const [guides, setGuides] = useState(true);
-  const [frameW, setFrameW] = useState(FRAME_WIDTH);
+  const [frameW, setFrameW] = useState(maxFrameW);
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
   const [progress, setProgress] = useState({ fraction: 0, seconds: 0 });
@@ -109,7 +125,7 @@ export default function VideoCropper({ file, onResult }) {
     const u = URL.createObjectURL(file);
     setUrl(u);
     let cancelled = false;
-    loadWatermarkBitmap()
+    loadWatermarkBitmap(watermarkUrl)
       .then((w) => {
         if (!cancelled) setWm(w);
       })
@@ -141,9 +157,9 @@ export default function VideoCropper({ file, onResult }) {
       setStep("error");
       return;
     }
-    if (v.duration > MAX_VIDEO_SECONDS) {
+    if (v.duration > maxSeconds) {
       setError({
-        message: "La vidéo dure " + Math.round(v.duration) + " s (maximum " + MAX_VIDEO_SECONDS + " s). Raccourcissez-la avant de l'ajouter.",
+        message: "La vidéo dure " + Math.round(v.duration) + " s (maximum " + maxSeconds + " s). Raccourcissez-la avant de l'ajouter.",
         fatal: true,
       });
       setStep("error");
@@ -182,7 +198,7 @@ export default function VideoCropper({ file, onResult }) {
 
   // ---- Largeur du cadre : 448 px au maximum, réduite sur petit écran ----
   useEffect(() => {
-    const update = () => setFrameW(Math.max(240, Math.min(FRAME_WIDTH, window.innerWidth - 72)));
+    const update = () => setFrameW(Math.max(240, Math.min(maxFrameW, window.innerWidth - 72)));
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
@@ -190,15 +206,15 @@ export default function VideoCropper({ file, onResult }) {
 
   const imgW = meta ? meta.w : 1;
   const imgH = meta ? meta.h : 1;
-  const rect = ready ? cropRect(imgW, imgH, FRAME_ASPECT, zoom, center.x, center.y) : null;
-  const frameH = frameW / FRAME_ASPECT;
+  const rect = ready ? cropRect(imgW, imgH, aspect, zoom, center.x, center.y) : null;
+  const frameH = frameW / aspect;
   const scale = rect ? frameW / rect.w : 1; // pixels d'écran par pixel de la vidéo
 
   latest.current = { zoom, center, imgW, imgH, ready, rect, wm };
 
   const applyView = (nextZoom, cx, cy) => {
     const z = clamp(nextZoom, 1, MAX_ZOOM);
-    const r = cropRect(imgW, imgH, FRAME_ASPECT, z, cx, cy);
+    const r = cropRect(imgW, imgH, aspect, z, cx, cy);
     setZoom(z);
     setCenter({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
   };
@@ -227,7 +243,7 @@ export default function VideoCropper({ file, onResult }) {
       if (!st.ready) return;
       e.preventDefault();
       const next = clamp(st.zoom * Math.exp(-e.deltaY * 0.0015), 1, MAX_ZOOM);
-      const r = cropRect(st.imgW, st.imgH, FRAME_ASPECT, next, st.center.x, st.center.y);
+      const r = cropRect(st.imgW, st.imgH, aspect, next, st.center.x, st.center.y);
       setZoom(next);
       setCenter({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
     };
@@ -263,10 +279,10 @@ export default function VideoCropper({ file, onResult }) {
 
   // ---- Taille du fichier enregistré et position du filigrane ----
   const out = rect ? videoOutputSize(rect.w, rect.h) : null;
-  const box = out && wm ? watermarkBox(out.width, out.height, wm, "bas-gauche") : null;
+  const box = out && wm ? watermarkBox(out.width, out.height, wm, position) : null;
   const views = useMemo(() => {
-    if (!out || !box) return VIEWS.map((v) => ({ ...v, frac: null }));
-    return VIEWS.map((v) => ({
+    if (!out || !box) return viewList.map((v) => ({ ...v, frac: null }));
+    return viewList.map((v) => ({
       ...v,
       frac: visibleFraction(box, out.width, out.height, v.w, v.h, Boolean(v.circle)),
     }));
@@ -282,16 +298,16 @@ export default function VideoCropper({ file, onResult }) {
     if (!off) {
       off = document.createElement("canvas");
       off.width = FRAME_WIDTH;
-      off.height = FRAME_HEIGHT;
+      off.height = previewH;
       offRef.current = off;
     }
     const octx = off.getContext("2d");
-    octx.drawImage(v, st.rect.x, st.rect.y, st.rect.w, st.rect.h, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+    octx.drawImage(v, st.rect.x, st.rect.y, st.rect.w, st.rect.h, 0, 0, FRAME_WIDTH, previewH);
     const o = videoOutputSize(st.rect.w, st.rect.h);
-    const b = watermarkBox(o.width, o.height, st.wm, "bas-gauche");
+    const b = watermarkBox(o.width, o.height, st.wm, position);
     const k = FRAME_WIDTH / o.width;
     octx.drawImage(st.wm, b.x * k, b.y * k, b.wmW * k, b.wmH * k);
-    VIEWS.forEach((view) => {
+    viewList.forEach((view) => {
       const canvas = canvasRefs.current[view.key];
       if (canvas) drawCover(canvas, off, view.w, view.h);
     });
@@ -344,6 +360,9 @@ export default function VideoCropper({ file, onResult }) {
     try {
       const res = await prepareVideoForWeb(file, {
         crop,
+        position,
+        watermarkUrl,
+        maxSeconds,
         signal: controller.signal,
         onProgress: (p) => {
           const now = performance.now();
@@ -389,7 +408,7 @@ export default function VideoCropper({ file, onResult }) {
     if (result) onResult({ action: "use", file: result.file });
   };
 
-  const lowRes = Boolean(rect && rect.w < MIN_SOURCE_WIDTH_WARN);
+  const lowRes = Boolean(rect && rect.w < minSourceWidth);
   const fr = rect ? toFractions(rect, imgW, imgH) : null;
   const percent = Math.round((progress.fraction || 0) * 100);
   const duration = meta ? meta.duration : 0;
@@ -400,14 +419,14 @@ export default function VideoCropper({ file, onResult }) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Cadrer la vidéo"
+        aria-label={title}
         className="fixed z-50 inset-x-3 top-[3%] max-w-4xl mx-auto bg-white rounded-[2rem] shadow-2xl max-h-[94vh] overflow-y-auto"
       >
         <div className="p-5 sm:p-6">
           <div className="flex justify-between items-start gap-3 mb-2">
             <div className="min-w-0">
               <h2 className="font-serif text-2xl">
-                {step === "processing" ? "Traitement de la vidéo" : step === "review" ? "Vérifier la vidéo" : "Cadrer la vidéo"}
+                {step === "processing" ? "Traitement de la vidéo" : step === "review" ? "Vérifier la vidéo" : title}
               </h2>
               <p className="text-xs text-[#8b737e] truncate">
                 {file.name}
@@ -437,7 +456,7 @@ export default function VideoCropper({ file, onResult }) {
           <div className={step === "frame" ? "" : "hidden"}>
             <p className="text-sm text-[#70656a] mb-4 leading-5">
               Faites glisser la vidéo pour centrer la bague, puis réglez le zoom. La vidéo enregistrée sera exactement ce
-              cadre, sans le son, avec le filigrane « © 2026 ZENORIA » en bas à gauche. Durée maximale : {MAX_VIDEO_SECONDS} s.
+              cadre, sans le son, avec le filigrane « © 2026 ZENORIA » {wmWhere}. Durée maximale : {maxSeconds} s.
             </p>
             <div className="grid md:grid-cols-[auto_1fr] gap-6">
               <div>
@@ -491,6 +510,15 @@ export default function VideoCropper({ file, onResult }) {
                       <div className="absolute left-1/2 top-0 bottom-0 border-l border-dashed border-white/80" />
                       <div className="absolute top-1/2 left-0 right-0 border-t border-dashed border-white/80" />
                       <div className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/90" />
+                    </div>
+                  )}
+                  {circleMask && (
+                    <div className="pointer-events-none absolute inset-0" aria-hidden="true" data-testid="circle-mask">
+                      <div
+                        className="absolute inset-0"
+                        style={{ background: "radial-gradient(circle closest-side at 50% 50%, transparent 98%, rgba(20,14,18,.68) 100%)" }}
+                      />
+                      <div className="absolute inset-0 rounded-full border border-white/80" />
                     </div>
                   )}
                 </div>
@@ -656,7 +684,7 @@ export default function VideoCropper({ file, onResult }) {
                   muted
                   playsInline
                   controls
-                  className="rounded-2xl bg-black mx-auto md:mx-0"
+                  className={`${circleMask ? "rounded-full" : "rounded-2xl"} bg-black mx-auto md:mx-0`}
                   style={{ width: Math.min(frameW, 448), aspectRatio: `${result.width} / ${result.height}`, maxHeight: 460 }}
                 />
               </div>
@@ -670,7 +698,7 @@ export default function VideoCropper({ file, onResult }) {
                     Poids : {formatSize(result.file.size)} · Durée : {formatClock(result.duration)}
                   </li>
                   <li>Fluidité : {result.fps} images par seconde</li>
-                  <li>Sans le son · filigrane « © 2026 ZENORIA » en bas à gauche</li>
+                  <li>Sans le son · filigrane « © 2026 ZENORIA » {wmWhere}</li>
                 </ul>
                 {!result.smooth && (
                   <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 leading-4" role="status" data-testid="not-smooth">
@@ -697,14 +725,16 @@ export default function VideoCropper({ file, onResult }) {
                 >
                   Valider le cadrage
                 </button>
-                <button
-                  type="button"
-                  onClick={() => startProcessing(null)}
-                  disabled={!ready}
-                  className="rounded-full border border-[#d9c5cc] hover:bg-[#f5edf1] px-5 h-11 text-sm disabled:opacity-50"
-                >
-                  Garder la vidéo entière
-                </button>
+                {allowWhole && (
+                  <button
+                    type="button"
+                    onClick={() => startProcessing(null)}
+                    disabled={!ready}
+                    className="rounded-full border border-[#d9c5cc] hover:bg-[#f5edf1] px-5 h-11 text-sm disabled:opacity-50"
+                  >
+                    Garder la vidéo entière
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => onResult({ action: "skip" })}

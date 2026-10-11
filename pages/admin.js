@@ -1,11 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import Head from "next/head";
-import { Plus, Pencil, Trash2, X, LogOut, Tag, Package, ArrowLeft, Upload, Film, Users } from "lucide-react";
+import { Plus, Pencil, Trash2, X, LogOut, Tag, Package, ArrowLeft, Upload, Film, Users, Sparkles, Gauge } from "lucide-react";
 import { supabase, getMediaUrl, uploadProductMedia, deleteProductMedia } from "@/lib/supabase";
 import AuthModal from "@/components/AuthModal";
 import AdminConnections from "@/components/AdminConnections";
 import PhotoCropper from "@/components/PhotoCropper";
 import VideoCropper from "@/components/VideoCropper";
+import AdminSiteMedia from "@/components/AdminSiteMedia";
+import AdminQuotas, { QuotaBanner, useQuotaStatus, computeQuotaAlerts } from "@/components/AdminQuotas";
+import { worstLevel } from "@/lib/quota";
 
 // ============================================================
 // PAGE D'ADMINISTRATION — /admin
@@ -22,6 +25,10 @@ import VideoCropper from "@/components/VideoCropper";
 // L'onglet « Connexions » lit les comptes et le journal des connexions
 // via deux fonctions SQL réservées aux administrateurs
 // (voir supabase_admin_connections.sql).
+//
+// L'onglet « Contenu du site » gère la vidéo de la bannière d'accueil et la photo de
+// Savoir-faire (voir supabase_site_media.sql). L'onglet « Quotas » surveille Supabase et
+// Vercel, avec un bandeau d'alerte en haut de chaque onglet (voir supabase_admin_quotas.sql).
 // ============================================================
 
 const MAX_FILE_MB = 95; // marge sous la limite de 100 Mo du bucket
@@ -119,7 +126,7 @@ export default function AdminPage() {
   const [isAdmin, setIsAdmin] = useState(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
-  const [tab, setTab] = useState("products"); // "products" | "promos" | "connections"
+  const [tab, setTab] = useState("products"); // "products" | "promos" | "connections" | "site" | "quotas"
 
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
@@ -144,6 +151,10 @@ export default function AdminPage() {
   // Fenêtre de cadrage et de traitement d'une vidéo : { id, file } tant qu'elle est ouverte
   const [videoRequest, setVideoRequest] = useState(null);
   const videoResolver = useRef(null);
+
+  // Quotas Supabase / Vercel : chargés une fois pour le bandeau d'alerte et l'onglet « Quotas »
+  const quota = useQuotaStatus(isAdmin === true);
+  const quotaLevel = worstLevel(computeQuotaAlerts(quota));
 
   // --- Authentification + vérification du rôle admin ---
   useEffect(() => {
@@ -589,10 +600,32 @@ export default function AdminPage() {
           >
             <Users size={15} /> Connexions
           </button>
+          <button
+            onClick={() => setTab("site")}
+            className={`flex items-center gap-1.5 rounded-full px-4 h-9 text-sm transition whitespace-nowrap ${tab === "site" ? "bg-[#8f6075] text-white" : "bg-[#f5edf1] text-[#54434c]"}`}
+          >
+            <Sparkles size={15} /> Contenu du site
+          </button>
+          <button
+            onClick={() => setTab("quotas")}
+            className={`flex items-center gap-1.5 rounded-full px-4 h-9 text-sm transition whitespace-nowrap ${tab === "quotas" ? "bg-[#8f6075] text-white" : "bg-[#f5edf1] text-[#54434c]"}`}
+          >
+            <Gauge size={15} /> Quotas
+            {quotaLevel !== "ok" && (
+              <span
+                data-testid="quota-dot"
+                data-level={quotaLevel}
+                className={`h-2 w-2 rounded-full ${quotaLevel === "critical" ? "bg-red-500" : "bg-amber-400"}`}
+                aria-label={quotaLevel === "critical" ? "Quota critique" : "Quota à surveiller"}
+              />
+            )}
+          </button>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-5 py-8">
+        {tab !== "quotas" && <QuotaBanner status={quota} onOpen={() => setTab("quotas")} />}
+
         {toast && (
           <div className="mb-5 rounded-xl bg-emerald-50 text-emerald-700 px-4 py-3 text-sm">{toast}</div>
         )}
@@ -747,6 +780,10 @@ export default function AdminPage() {
         )}
 
         {tab === "connections" && <AdminConnections />}
+
+        {tab === "site" && <AdminSiteMedia />}
+
+        {tab === "quotas" && <AdminQuotas status={quota} />}
       </main>
 
       {/* FORMULAIRE PRODUIT */}

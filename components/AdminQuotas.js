@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import AdminStorageOrphans from "@/components/AdminStorageOrphans";
 import {
   WARN_PERCENT,
   CRITICAL_PERCENT,
@@ -519,6 +520,9 @@ export default function AdminQuotas({ status }) {
         </div>
       </section>
 
+      {/* Fichiers orphelins : liste, cases à cocher, suppression */}
+      <AdminStorageOrphans onChanged={refreshAll} />
+
       {/* Aide-mémoire */}
       <section className="rounded-2xl bg-[#faf6f8] border border-[#eee2e5] p-5 text-[13px] leading-5 text-[#54434c]">
         <h2 className="font-serif text-lg mb-2">Aide-mémoire hebdomadaire</h2>
@@ -529,8 +533,8 @@ export default function AdminQuotas({ status }) {
           <li>Enregistrez le relevé : une jauge orange ou rouge déclenche le bandeau d&apos;alerte sur toutes les pages de l&apos;administration.</li>
         </ol>
         <p className="mt-3">
-          <strong>Que faire en cas d&apos;alerte ?</strong> Supprimez les fichiers inutiles (liste ci-dessus), réduisez la durée ou le poids des vidéos, ou passez au
-          forfait supérieur avant d&apos;atteindre la limite.
+          <strong>Que faire en cas d&apos;alerte ?</strong> Supprimez les fichiers orphelins (section « Fichiers orphelins » ci-dessus), réduisez la durée ou le poids des
+          vidéos, ou passez au forfait supérieur avant d&apos;atteindre la limite.
         </p>
         <p className="mt-2 text-[12px] text-[#8b737e]">
           Les alertes par e-mail ne sont pas encore actives : elles nécessitent un domaine d&apos;envoi vérifié.

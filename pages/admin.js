@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import Head from "next/head";
-import { Plus, Pencil, Trash2, X, LogOut, Tag, Package, ArrowLeft, Upload, Film, Users, Sparkles, Gauge, Wrench, Activity, Settings, LogIn, Clock } from "lucide-react";
+import { Plus, Pencil, Trash2, X, LogOut, Tag, Package, ArrowLeft, Upload, Film, Users, Sparkles, Gauge, Wrench, Activity, Settings, LogIn, Clock, Palette } from "lucide-react";
 import { supabase, getMediaUrl, uploadProductMedia, deleteProductMedia } from "@/lib/supabase";
 import AuthModal from "@/components/AuthModal";
 import AdminConnections from "@/components/AdminConnections";
@@ -10,6 +10,11 @@ import AdminSiteMedia from "@/components/AdminSiteMedia";
 import AdminQuotas, { QuotaBanner, useQuotaStatus, computeQuotaAlerts } from "@/components/AdminQuotas";
 import AdminMaintenance, { MaintenanceBanner, useMaintenanceStatus, isMaintenanceActive } from "@/components/AdminMaintenance";
 import AdminHealth from "@/components/AdminHealth";
+import AdminFamilies, { useFamilies, FamilyBadge } from "@/components/AdminFamilies";
+import AdminBanners from "@/components/AdminBanners";
+import { isoToParisLocal } from "@/lib/parisTime";
+import { legacyFamilyText, validateDominantColors, cleanDominantColors, DOMINANT_MAX, DOMINANT_NAME_MAX } from "@/lib/families";
+import { promoCodeStatus, validatePromoDates, formatParis } from "@/lib/banners";
 import { CrmAccounts, CrmRoadmap } from "@/components/AdminCrm";
 import { ADMIN_NAV, DEFAULT_NAV, parseAdminHash, buildAdminHash, isAuthCallbackHash, technicalAlertLevel } from "@/lib/adminNav";
 import { worstLevel } from "@/lib/quota";
@@ -48,14 +53,15 @@ const emptyProduct = {
   id: null,
   slug: "",
   name: "",
-  family: "Collection Bleus",
+  family_id: null,
+  neighbour_family_id: null,
   collection: "",
   energy: "",
   price: "",
   promo_price: "",
   stock: 5,
   pitch: "",
-  crystals: [],
+  dominant_colors: [],
   photos: [],
   video: "",
   color: "from-rose-300 via-pink-100 to-white",
@@ -68,10 +74,12 @@ const emptyPromo = {
   type: "percent",
   value: "",
   label: "",
+  starts_at: "",
+  ends_at: "",
   active: true,
 };
 
-const FAMILIES = ["Collection Bleus", "Collection Roses", "Collection Nature", "Collection Violettes"];
+// Les familles (saisons) viennent de la base de données : onglet Familles, liste lue par useFamilies().
 
 // Liste fermée de dégradés de couleur (utilisés comme visuel de secours si une
 // photo ne charge pas). On utilise une liste fermée plutôt qu'un champ libre
@@ -134,6 +142,7 @@ function formatEUR(n) {
 const GROUP_ICONS = { produits: Package, crm: Users, technique: Settings };
 const TAB_ICONS = {
   collections: Package,
+  familles: Palette,
   promos: Tag,
   site: Sparkles,
   comptes: Users,
@@ -192,6 +201,9 @@ export default function AdminPage() {
 
   // Quotas Supabase / Vercel : chargés une fois pour le bandeau d'alerte et l'onglet « Quotas »
   const quota = useQuotaStatus(isAdmin === true);
+  // Familles (saisons) : lues dans la base, utilisées par la fiche collection, le tableau et l'onglet Familles
+  const familiesStatus = useFamilies(isAdmin === true);
+  const familyById = (id) => familiesStatus.families.find((f) => String(f.id) === String(id)) || null;
   const quotaLevel = worstLevel(computeQuotaAlerts(quota));
 
   // Maintenance : chargée une fois pour le bandeau d'alerte et l'onglet « Maintenance »
@@ -321,24 +333,21 @@ export default function AdminPage() {
       price: p.price ?? "",
       promo_price: p.promo_price ?? "",
       photos: Array.isArray(p.photos) ? p.photos : [],
-      crystals: Array.isArray(p.crystals) ? p.crystals : [],
+      dominant_colors: Array.isArray(p.dominant_colors) ? p.dominant_colors : [],
     });
   };
 
   const closeProductForm = () => setProductForm(null);
 
-  const addCrystalRow = () => {
-    setProductForm((f) => ({ ...f, crystals: [...f.crystals, { color: "", count: 1, hex: "#e9dde3" }] }));
+  // --- Couleurs dominantes de la bague (0 à 3) : lues par le quiz couleurs ---
+  const addDominantColor = () => {
+    setProductForm((f) => (f.dominant_colors.length >= DOMINANT_MAX ? f : { ...f, dominant_colors: [...f.dominant_colors, { name: "", hex: "#a0764f" }] }));
   };
-  const updateCrystalRow = (idx, field, value) => {
-    setProductForm((f) => {
-      const crystals = [...f.crystals];
-      crystals[idx] = { ...crystals[idx], [field]: field === "count" ? Number(value) || 0 : value };
-      return { ...f, crystals };
-    });
+  const updateDominantColor = (idx, field, value) => {
+    setProductForm((f) => ({ ...f, dominant_colors: f.dominant_colors.map((c, i) => (i === idx ? { ...c, [field]: value } : c)) }));
   };
-  const removeCrystalRow = (idx) => {
-    setProductForm((f) => ({ ...f, crystals: f.crystals.filter((_, i) => i !== idx) }));
+  const removeDominantColor = (idx) => {
+    setProductForm((f) => ({ ...f, dominant_colors: f.dominant_colors.filter((_, i) => i !== idx) }));
   };
 
   // --- Cadrage des photos (fenêtre de cadrage avant l'envoi) ---
@@ -472,17 +481,34 @@ export default function AdminPage() {
       return;
     }
 
+    const colorError = validateDominantColors(productForm.dominant_colors);
+    if (colorError) {
+      setFormError(colorError);
+      return;
+    }
+    const chosenFamily = familyById(productForm.family_id);
+    if (!chosenFamily) {
+      setFormError("Choisissez une famille pour cette collection.");
+      return;
+    }
+    if (productForm.neighbour_family_id && String(productForm.neighbour_family_id) === String(productForm.family_id)) {
+      setFormError("La saison voisine doit être différente de la famille de la collection.");
+      return;
+    }
     const payload = {
       slug: productForm.slug.trim(),
       name: productForm.name.trim(),
-      family: productForm.family,
+      family_id: Number(productForm.family_id),
+      neighbour_family_id: productForm.neighbour_family_id ? Number(productForm.neighbour_family_id) : null,
+      // L'ancien libellé (« Collection Bleus »...) n'est écrit qu'à la création, la colonne étant obligatoire : le site actuel le lit encore, et une collection existante garde le sien.
+      ...(productForm.id ? {} : { family: legacyFamilyText(chosenFamily.name) }),
       collection: productForm.collection.trim(),
       energy: productForm.energy.trim(),
       price: Number(productForm.price),
       promo_price: productForm.promo_price === "" ? null : Number(productForm.promo_price),
       stock: Number(productForm.stock) || 0,
       pitch: productForm.pitch,
-      crystals: productForm.crystals.filter((c) => c.color && c.count > 0),
+      dominant_colors: cleanDominantColors(productForm.dominant_colors),
       photos: productForm.photos,
       video: productForm.video || null,
       color: productForm.color,
@@ -531,7 +557,7 @@ export default function AdminPage() {
   };
   const openEditPromo = (p) => {
     setFormError("");
-    setPromoForm({ ...p });
+    setPromoForm({ ...p, starts_at: isoToParisLocal(p.starts_at), ends_at: isoToParisLocal(p.ends_at) });
   };
   const closePromoForm = () => setPromoForm(null);
 
@@ -544,11 +570,18 @@ export default function AdminPage() {
       return;
     }
 
+    const dates = validatePromoDates(promoForm.starts_at, promoForm.ends_at);
+    if (dates.error) {
+      setFormError(dates.error);
+      return;
+    }
     const payload = {
       code: promoForm.code.trim().toUpperCase(),
       type: promoForm.type,
       value: Number(promoForm.value) || 0,
       label: promoForm.label.trim(),
+      starts_at: dates.startsAt,
+      ends_at: dates.endsAt,
       active: promoForm.active,
     };
 
@@ -564,6 +597,14 @@ export default function AdminPage() {
       result = await supabase.from("promo_codes").insert(payload);
     }
     setSaving(false);
+    if (isRename && !result.error) {
+      // Les bandeaux qui utilisaient l'ancien nom du code suivent le renommage
+      try {
+        await supabase.from("banners").update({ code: payload.code }).eq("code", promoForm.originalCode);
+      } catch (err) {
+        // table des bandeaux absente : rien à mettre à jour
+      }
+    }
 
     if (result.error) {
       setFormError(
@@ -580,7 +621,15 @@ export default function AdminPage() {
   };
 
   const deletePromo = async (p) => {
-    if (!window.confirm(`Supprimer le code « ${p.code} » ?`)) return;
+    let usedBy = 0;
+    try {
+      const { count } = await supabase.from("banners").select("id", { count: "exact", head: true }).eq("code", p.code);
+      usedBy = count || 0;
+    } catch (err) {
+      usedBy = 0;
+    }
+    const warning = usedBy > 0 ? " Attention : " + usedBy + " bandeau(x) utilise(nt) ce code." : "";
+    if (!window.confirm("Supprimer le code « " + p.code + " » ?" + warning)) return;
     const { error } = await supabase.from("promo_codes").delete().eq("code", p.code);
     if (!error) {
       setToast("Code promo supprimé.");
@@ -791,7 +840,9 @@ export default function AdminPage() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-3 hidden md:table-cell text-[#54434c]">{p.family.replace("Collection ", "")}</td>
+                        <td className="px-4 py-3 hidden md:table-cell text-[#54434c]">
+                          <FamilyBadge family={familyById(p.family_id)} loading={familiesStatus.loading} />
+                        </td>
                         <td className="px-4 py-3">
                           {p.promo_price ? (
                             <>
@@ -857,6 +908,7 @@ export default function AdminPage() {
                     <tr className="bg-[#f5edf1] text-left text-[#8b737e]">
                       <th className="px-4 py-3 font-medium">Code</th>
                       <th className="px-4 py-3 font-medium">Avantage</th>
+                      <th className="px-4 py-3 font-medium">Période</th>
                       <th className="px-4 py-3 font-medium">Statut</th>
                       <th className="px-4 py-3 font-medium text-right">Actions</th>
                     </tr>
@@ -866,9 +918,20 @@ export default function AdminPage() {
                       <tr key={p.code} className="border-t border-[#eee2e5]">
                         <td className="px-4 py-3 font-medium">{p.code}</td>
                         <td className="px-4 py-3 text-[#54434c]">{p.label}</td>
+                        <td className="px-4 py-3 text-xs text-[#54434c]">
+                          {p.starts_at || p.ends_at ? (
+                            <>
+                              <span className="whitespace-nowrap">{p.starts_at ? formatParis(p.starts_at) : "dès maintenant"}</span>
+                              <span className="text-[#b0a3a9]"> → </span>
+                              <span className="whitespace-nowrap">{p.ends_at ? formatParis(p.ends_at) : "sans fin"}</span>
+                            </>
+                          ) : (
+                            <span className="text-[#8b737e]">Sans limite de dates</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3">
-                          <span className={`rounded-full px-3 py-1 text-xs ${p.active ? "bg-emerald-50 text-emerald-700" : "bg-[#f0e6ea] text-[#8b737e]"}`}>
-                            {p.active ? "Actif" : "Inactif"}
+                          <span className={"rounded-full px-3 py-1 text-xs " + promoCodeStatus(p, Date.now()).style}>
+                            {promoCodeStatus(p, Date.now()).label}
                           </span>
                         </td>
                         <td className="px-4 py-3">
@@ -890,6 +953,8 @@ export default function AdminPage() {
           </>
         )}
 
+        {tab === "familles" && <AdminFamilies status={familiesStatus} products={products} onProductsChanged={loadProducts} />}
+        {tab === "promos" && <AdminBanners promoCodes={promoCodes} onCodesChanged={loadPromoCodes} siteMode={maintenanceActive && maintenance.row ? maintenance.row.mode : "off"} />}
         {tab === "connexions" && <AdminConnections />}
 
         {tab === "site" && <AdminSiteMedia />}
@@ -939,11 +1004,29 @@ export default function AdminPage() {
                 </label>
 
                 <label className="text-sm">
-                  <span className="text-xs text-[#8b737e]">Famille</span>
-                  <select value={productForm.family} onChange={(e) => setProductForm({ ...productForm, family: e.target.value })}
-                    className="mt-1 w-full rounded-xl border border-[#eadfe4] px-3 h-10 outline-none focus:border-[#8f6075] bg-white">
-                    {FAMILIES.map((f) => <option key={f} value={f}>{f}</option>)}
+                  <span className="text-xs text-[#8b737e]">Famille (saison)</span>
+                  <select
+                    required
+                    value={productForm.family_id ?? ""}
+                    onChange={(e) => {
+                      const id = e.target.value ? Number(e.target.value) : null;
+                      setProductForm({
+                        ...productForm,
+                        family_id: id,
+                        neighbour_family_id: id && String(productForm.neighbour_family_id) === String(id) ? null : productForm.neighbour_family_id,
+                      });
+                    }}
+                    className="mt-1 w-full rounded-xl border border-[#eadfe4] px-3 h-10 outline-none focus:border-[#8f6075] bg-white"
+                  >
+                    <option value="">Choisir une famille…</option>
+                    {familiesStatus.families.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name}
+                        {f.active ? "" : " (masquée)"}
+                      </option>
+                    ))}
                   </select>
+                  {familiesStatus.error && <span className="text-[11px] text-red-600">{familiesStatus.error}</span>}
                 </label>
                 <label className="text-sm">
                   <span className="text-xs text-[#8b737e]">Intention (ex. Sérénité, Amour...)</span>
@@ -955,6 +1038,24 @@ export default function AdminPage() {
                   <span className="text-xs text-[#8b737e]">Phrase d&apos;énergie (sous-titre affiché sur la fiche)</span>
                   <input value={productForm.energy} onChange={(e) => setProductForm({ ...productForm, energy: e.target.value })}
                     className="mt-1 w-full rounded-xl border border-[#eadfe4] px-3 h-10 outline-none focus:border-[#8f6075]" />
+                </label>
+                <label className="text-sm sm:col-span-2">
+                  <span className="text-xs text-[#8b737e]">Saison voisine (facultatif)</span>
+                  <select
+                    value={productForm.neighbour_family_id ?? ""}
+                    onChange={(e) => setProductForm({ ...productForm, neighbour_family_id: e.target.value ? Number(e.target.value) : null })}
+                    className="mt-1 w-full rounded-xl border border-[#eadfe4] px-3 h-10 outline-none focus:border-[#8f6075] bg-white"
+                  >
+                    <option value="">Aucune</option>
+                    {familiesStatus.families
+                      .filter((f) => f.is_season && String(f.id) !== String(productForm.family_id))
+                      .map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.name}
+                        </option>
+                      ))}
+                  </select>
+                  <span className="text-[11px] text-[#8b737e]">Le quiz couleurs peut proposer cette collection aux profils voisins de sa saison.</span>
                 </label>
 
                 <label className="text-sm">
@@ -1097,27 +1198,31 @@ export default function AdminPage() {
 
                 <div className="sm:col-span-2">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-[#8b737e]">Composition en cristaux</span>
-                    <button type="button" onClick={addCrystalRow} className="text-xs text-[#8f6075] underline">+ Ajouter une couleur</button>
+                    <span className="text-xs text-[#8b737e]">Couleurs dominantes de la bague (0 à 3)</span>
+                    {productForm.dominant_colors.length < DOMINANT_MAX && (
+                      <button type="button" onClick={addDominantColor} className="text-xs text-[#8f6075] underline">+ Ajouter une couleur</button>
+                    )}
                   </div>
-                  {productForm.crystals.length === 0 && (
-                    <p className="text-xs text-[#8b737e] italic">Aucune composition renseignée pour le moment.</p>
+                  {productForm.dominant_colors.length === 0 && (
+                    <p className="text-xs text-[#8b737e] italic">Aucune couleur dominante renseignée pour le moment.</p>
                   )}
                   <div className="space-y-2">
-                    {productForm.crystals.map((c, idx) => (
+                    {productForm.dominant_colors.map((c, idx) => (
                       <div key={idx} className="flex gap-2 items-center">
-                        <input value={c.color} onChange={(e) => updateCrystalRow(idx, "color", e.target.value)} placeholder="Couleur (ex. Bleu océan)"
+                        <input value={c.name} maxLength={DOMINANT_NAME_MAX} onChange={(e) => updateDominantColor(idx, "name", e.target.value)} placeholder="Nom (ex. Brun doré)"
                           className="flex-1 min-w-0 rounded-lg border border-[#eadfe4] px-2.5 h-9 text-sm outline-none focus:border-[#8f6075]" />
-                        <input type="number" min="0" value={c.count} onChange={(e) => updateCrystalRow(idx, "count", e.target.value)} placeholder="Nb"
-                          className="w-16 rounded-lg border border-[#eadfe4] px-2 h-9 text-sm outline-none focus:border-[#8f6075]" />
-                        <input type="color" value={c.hex || "#e9dde3"} onChange={(e) => updateCrystalRow(idx, "hex", e.target.value)}
+                        <input type="color" value={c.hex || "#a0764f"} onChange={(e) => updateDominantColor(idx, "hex", e.target.value)} aria-label="Couleur"
                           className="h-9 w-9 rounded-lg border border-[#eadfe4]" />
-                        <button type="button" onClick={() => removeCrystalRow(idx)} className="h-9 w-9 shrink-0 grid place-items-center rounded-full hover:bg-[#f0e6ea] text-[#9a7384]">
+                        <button type="button" onClick={() => removeDominantColor(idx)} aria-label="Retirer cette couleur"
+                          className="h-9 w-9 shrink-0 grid place-items-center rounded-full hover:bg-[#f0e6ea] text-[#9a7384]">
                           <Trash2 size={15} />
                         </button>
                       </div>
                     ))}
                   </div>
+                  <p className="text-[11px] text-[#8b737e] mt-1.5">
+                    Le quiz couleurs s&apos;en sert pour expliquer pourquoi une bague va à une cliente (par exemple : ce brun chocolat rappelle vos cheveux).
+                  </p>
                 </div>
               </div>
 
@@ -1174,6 +1279,19 @@ export default function AdminPage() {
                   <input required value={promoForm.label} onChange={(e) => setPromoForm({ ...promoForm, label: e.target.value })}
                     className="mt-1 w-full rounded-xl border border-[#eadfe4] px-3 h-10 outline-none focus:border-[#8f6075]" />
                 </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-sm block">
+                    <span className="text-xs text-[#8b737e]">Valable à partir du (facultatif)</span>
+                    <input type="datetime-local" value={promoForm.starts_at || ""} onChange={(e) => setPromoForm({ ...promoForm, starts_at: e.target.value })}
+                      className="mt-1 w-full rounded-xl border border-[#eadfe4] px-3 h-10 text-sm outline-none focus:border-[#8f6075]" />
+                  </label>
+                  <label className="text-sm block">
+                    <span className="text-xs text-[#8b737e]">Jusqu&apos;au (facultatif)</span>
+                    <input type="datetime-local" value={promoForm.ends_at || ""} onChange={(e) => setPromoForm({ ...promoForm, ends_at: e.target.value })}
+                      className="mt-1 w-full rounded-xl border border-[#eadfe4] px-3 h-10 text-sm outline-none focus:border-[#8f6075]" />
+                  </label>
+                </div>
+                <p className="text-[11px] text-[#8b737e] -mt-2">Heure de Paris. Sans dates, le code est valable en permanence ; hors période, la boutique ne l&apos;accepte plus.</p>
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={promoForm.active} onChange={(e) => setPromoForm({ ...promoForm, active: e.target.checked })} className="h-4 w-4" />
                   <span>Code actif</span>

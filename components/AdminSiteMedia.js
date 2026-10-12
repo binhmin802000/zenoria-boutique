@@ -15,6 +15,7 @@ import { WATERMARK_CIRCLE_URL } from "@/lib/prepareImage";
 import { CIRCLE_ASPECT, CIRCLE_FRAME_SIZE, CIRCLE_PHOTO_MAX_SIDE, HERO_VIDEO_MAX_SECONDS } from "@/lib/cropMath";
 import PhotoCropper from "@/components/PhotoCropper";
 import VideoCropper from "@/components/VideoCropper";
+import AdminSeasonFx from "@/components/AdminSeasonFx";
 
 // ============================================================
 // ONGLET « CONTENU DU SITE » de l'administration (/admin)
@@ -288,6 +289,9 @@ export default function AdminSiteMedia() {
           );
         })}
       </div>
+
+      {/* ANIMATION SAISONNIÈRE DE LA PAGE D'ACCUEIL (automatique, forcée ou désactivée) */}
+      <AdminSeasonFx />
 
       {/* CADRAGE ET TRAITEMENT DE LA VIDÉO D'ACCUEIL */}
       {videoRequest && (

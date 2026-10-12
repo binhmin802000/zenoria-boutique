@@ -18,9 +18,10 @@ import SeasonFx from "@/components/SeasonFx";
 import SeasonIcon from "@/components/SeasonIcon";
 import {
   visibleFamilies, buildSeasonCards, buildFamilyChips, filterByFamily, productLabel, familyOfProduct,
-  parseFxSetting, resolveFxSeason, fxPillText,
+  parseFxSetting, resolveFxSeason,
 } from "@/lib/seasons";
 import { pickPublicBanner, bannerKey, readClosedKeys, writeClosedKeys, getSessionStorage } from "@/lib/publicBanner";
+import { SITE_SETTINGS_TABLE, SEASON_FX_KEY, parseSeasonFxSetting, pickFxSeason } from "@/lib/siteSettings";
 
 // ============================================================
 // RÉGLAGES DE LA BOUTIQUE (à adapter facilement)
@@ -440,7 +441,7 @@ export default function ZenoriaShop() {
   const [families, setFamilies] = useState([]);
   const [bannerRows, setBannerRows] = useState([]);
   const [closedBanners, setClosedBanners] = useState([]);
-  const [fxSetting] = useState(() => parseFxSetting(null)); // « automatique » : le réglage de l'administration (forcée, désactivée) sera branché ici
+  const [fxSetting, setFxSetting] = useState(() => parseSeasonFxSetting(null)); // réglage de l'animation (onglet « Contenu du site » de /admin) : automatique tant qu'il n'est pas lu
   const [fxClicked, setFxClicked] = useState(null); // saison choisie par un clic : elle donne son ambiance à la page
   const [nowMs, setNowMs] = useState(null); // renseigné après l'affichage : le rendu du serveur ne dépend jamais de l'heure
 
@@ -455,12 +456,13 @@ export default function ZenoriaShop() {
   useEffect(() => {
     let active = true;
     (async () => {
-      const [{ data: prodData, error: prodErr }, { data: promoData }, { data: siteData }, famRes, banRes] = await Promise.all([
+      const [{ data: prodData, error: prodErr }, { data: promoData }, { data: siteData }, famRes, banRes, fxRes] = await Promise.all([
         supabase.from("products").select("*").eq("active", true).order("id"),
         supabase.from("promo_codes").select("*").eq("active", true),
         supabase.from("site_media").select("*"),
         optionalQuery(supabase.from("families").select("*").order("sort_order", { ascending: true })),
         optionalQuery(supabase.from("banners").select("*")),
+        optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").eq("key", SEASON_FX_KEY)),
       ]);
       if (!active) return;
 
@@ -483,6 +485,9 @@ export default function ZenoriaShop() {
       // Familles et bandeaux : si une table n'existe pas encore, le site garde son comportement d'origine
       setFamilies(visibleFamilies(famRes && famRes.data));
       setBannerRows((banRes && Array.isArray(banRes.data) && banRes.data) || []);
+      // Animation : si la table n'existe pas encore (script SQL non exécuté), le site reste en mode automatique
+      const fxRow = fxRes && Array.isArray(fxRes.data) ? fxRes.data[0] : null;
+      setFxSetting(parseSeasonFxSetting(fxRow ? fxRow.value : null));
 
       try {
         const raw = window.localStorage.getItem(CART_STORAGE_KEY);
@@ -714,16 +719,24 @@ export default function ZenoriaShop() {
     setSelectedFamily(family ? key : null);
     setFxClicked(family && family.is_season ? key : null);
   };
-  // Un clic sur une carte saison la choisit ; un second clic revient à l'état initial.
-  const handleSeasonClick = (key) => chooseFamily(selectedFamily === key ? null : key);
+  // Descend au catalogue. On s'arrête 28 px avant le haut de la section : le titre se lit sous le menu fixe au lieu d'être collé contre lui.
+  const scrollToCatalogue = () => {
+    const catalogue = document.getElementById("collections");
+    if (catalogue) window.scrollTo({ top: Math.max(0, catalogue.getBoundingClientRect().top + window.scrollY - 28), behavior: "smooth" });
+  };
+  // Un clic sur une carte saison la choisit et descend directement au catalogue ; un second clic revient à l'état initial (toutes les créations).
+  const handleSeasonClick = (key) => {
+    chooseFamily(selectedFamily === key ? null : key);
+    scrollToCatalogue();
+  };
 
   const filteredProducts = selectedFamily ? filterByFamily(products, families, selectedFamily) : products;
   const selectedFamilyData = selectedFamily ? families.find((f) => f.key === selectedFamily) || null : null;
 
   // Saison animée : réglage de l'administration, ou clic de la visiteuse, ou saison du moment
-  const fxSeason = nowMs === null ? null : resolveFxSeason(fxSetting, fxClicked, new Date(nowMs));
-  const fxCard = fxSeason ? seasonCards.find((c) => c.key === fxSeason) || null : null;
-  const fxPill = fxCard ? fxPillText(fxSetting, fxClicked, fxCard.name) : null;
+  // Le réglage de l'administration est lu avant tout affichage de l'animation (catalogLoading), pour qu'une animation désactivée ou forcée ne clignote pas au chargement.
+  const fxAutoSeason = nowMs === null ? null : resolveFxSeason(parseFxSetting(null), fxClicked, new Date(nowMs));
+  const fxSeason = nowMs === null || catalogLoading ? null : pickFxSeason(fxSetting, fxAutoSeason);
 
   // Bandeau : fermeture (mémorisée le temps de la visite) et bouton
   const closeBanner = () => {
@@ -740,7 +753,7 @@ export default function ZenoriaShop() {
     }
     if (typeof target === "string" && target.startsWith("season:")) {
       chooseFamily(target.slice(7));
-      scrollToSection("collections");
+      scrollToCatalogue();
       return;
     }
     scrollToSection("collections"); // « collections » et « quiz » (la page Quiz arrivera plus tard)
@@ -923,12 +936,6 @@ export default function ZenoriaShop() {
                 <p className="text-[#6e6268] mt-3 max-w-2xl mx-auto leading-7">
                   Chaque saison réunit des bagues dont les couleurs s&apos;accordent entre elles, et avec votre carnation.
                 </p>
-                {fxPill && (
-                  <div data-testid="season-now" className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/70 border border-[#eadfe4] px-4 py-1.5 text-xs text-[#6b5a63]">
-                    <span className="text-[#8f6075]"><SeasonIcon season={fxSeason} size={16} /></span>
-                    {fxPill.prefix} <strong className="font-medium text-[#412f3b]">{fxPill.name}</strong>
-                  </div>
-                )}
               </div>
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4" data-testid="season-cards">
                 {seasonCards.map((c) => (
@@ -961,22 +968,7 @@ export default function ZenoriaShop() {
                 ))}
               </div>
               <div className="mt-6 text-center text-sm text-[#6b5a63] min-h-[40px]" data-testid="season-strip">
-                {selectedFamilyData ? (
-                  <span className="inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
-                    <span>
-                      <strong className="font-medium text-[#412f3b]">{selectedFamilyData.name}</strong> · {filteredProducts.length} création{filteredProducts.length > 1 ? "s" : ""}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => scrollToSection("collections")}
-                      className="rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-5 h-9 text-sm inline-flex items-center gap-2"
-                    >
-                      Voir les créations {selectedFamilyData.name} <ArrowRight size={14} />
-                    </button>
-                  </span>
-                ) : (
-                  <span className="text-[#8b737e]">Touchez une saison pour la découvrir.</span>
-                )}
+                {!selectedFamilyData && <span className="text-[#8b737e]">Touchez une saison pour la découvrir.</span>}
               </div>
             </div>
             <SeasonFx season={fxSeason} />
@@ -989,9 +981,16 @@ export default function ZenoriaShop() {
             <div className="flex justify-between items-end mb-9">
               <div>
                 <div className="text-xs tracking-[.3em] text-[#9c7285] uppercase mb-3">La collection</div>
-                <h2 className="font-serif text-4xl">
-                  {selectedFamilyData ? `Collection ${selectedFamilyData.name}` : "Nos créations"}
-                </h2>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <h2 className="font-serif text-4xl">
+                    {selectedFamilyData ? `Collection ${selectedFamilyData.name}` : "Nos créations"}
+                  </h2>
+                  {selectedFamilyData && (
+                    <span data-testid="collection-count" className="rounded-full bg-[#f5edf1] px-3.5 py-1 text-sm text-[#6b5a63] whitespace-nowrap">
+                      {filteredProducts.length} création{filteredProducts.length > 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
               </div>
               {selectedFamily ? (
                 <button onClick={() => chooseFamily(null)} className="text-sm border-b border-[#6d4e5c]">
@@ -1147,7 +1146,7 @@ export default function ZenoriaShop() {
                     <button
                       type="button"
                       data-testid="footer-season"
-                      onClick={() => { chooseFamily(c.key); scrollToSection("collections"); }}
+                      onClick={() => { chooseFamily(c.key); scrollToCatalogue(); }}
                       className="text-left hover:text-white underline-offset-2 hover:underline"
                     >
                       {c.name}

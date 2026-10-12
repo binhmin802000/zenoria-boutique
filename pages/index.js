@@ -3,7 +3,7 @@ import Head from "next/head";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShoppingBag, Search, User, Heart, Menu, X, Sparkles, ArrowRight,
-  Star, Leaf, Shield, Gem, Instagram, LogOut, Minus, Plus, Trash2, Tag, Truck, Settings
+  Gem, Instagram, LogOut, Minus, Plus, Trash2, Tag, Truck, Settings
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,6 +13,14 @@ import { formatReturnAt } from "@/lib/maintenance";
 import AuthModal from "@/components/AuthModal";
 import MediaGuard from "@/components/MediaGuard";
 import SavoirFaire from "@/components/SavoirFaire";
+import BannerBar from "@/components/BannerBar";
+import SeasonFx from "@/components/SeasonFx";
+import SeasonIcon from "@/components/SeasonIcon";
+import {
+  visibleFamilies, buildSeasonCards, buildFamilyChips, filterByFamily, productLabel, familyOfProduct,
+  parseFxSetting, resolveFxSeason, fxPillText,
+} from "@/lib/seasons";
+import { pickPublicBanner, bannerKey, readClosedKeys, writeClosedKeys, getSessionStorage } from "@/lib/publicBanner";
 
 // ============================================================
 // RÉGLAGES DE LA BOUTIQUE (à adapter facilement)
@@ -33,6 +41,9 @@ const CART_STORAGE_KEY = "zenoria_cart_v2";
 // et les anciennes collections dont les médias sont dans /public/images.
 // ============================================================
 
+// Requête dont l'échec ne doit jamais empêcher le site de s'afficher (table pas encore créée, réseau coupé...).
+const optionalQuery = (query) => Promise.resolve(query).then((res) => res, () => ({ data: null, error: true }));
+
 const formatPrice = (n) =>
   n.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
 
@@ -48,14 +59,16 @@ function mapDbProduct(row) {
     id: row.id,
     slug: row.slug,
     name: row.name,
-    family: row.family,
+    family: row.family, // ancien texte (« Collection Bleus »), gardé en secours si les familles ne peuvent pas être lues
+    familyId: row.family_id ?? null,
+    neighbourFamilyId: row.neighbour_family_id ?? null,
+    dominantColors: Array.isArray(row.dominant_colors) ? row.dominant_colors : [],
     collection: row.collection,
     energy: row.energy,
     price: Number(row.price),
     promoPrice: row.promo_price !== null && row.promo_price !== undefined ? Number(row.promo_price) : null,
     stock: typeof row.stock === "number" ? row.stock : 0,
     pitch: row.pitch || "",
-    crystals: Array.isArray(row.crystals) ? row.crystals : [],
     photos,
     video: row.video || null,
     color: row.color || "from-rose-300 via-pink-100 to-white",
@@ -118,14 +131,8 @@ function pickCartDensity(lineCount, viewportHeight, extraHeight = 0) {
   return ["comfort", "compact"].find((d) => lineCount * CART_DENSITY[d].rowH <= available) || "dense";
 }
 
-// Thème visuel de chaque famille (le nombre de créations, lui, est calculé
-// dynamiquement à partir du catalogue chargé depuis la base de données).
-const ENERGY_THEMES = [
-  { name: "Bleus", theme: "Sérénité et protection", icon: Shield, bg: "from-sky-100 to-indigo-200" },
-  { name: "Roses", theme: "Amour et joie", icon: Heart, bg: "from-rose-100 to-pink-200" },
-  { name: "Nature", theme: "Ancrage et abondance", icon: Leaf, bg: "from-emerald-100 to-amber-100" },
-  { name: "Violettes", theme: "Intuition et éveil", icon: Sparkles, bg: "from-violet-100 to-purple-200" },
-];
+// Les familles (les 4 saisons et les familles supplémentaires) sont lues dans la base de données (table « families »,
+// onglet Familles de /admin). Leur mise en forme est dans lib/seasons.js.
 
 function CrystalLogo({ mode = 1, compact = false }) {
   const styles = [
@@ -255,6 +262,18 @@ function CartThumb({ product, size = "h-20 w-20" }) {
     <div className={`${size} shrink-0 rounded-xl bg-gradient-to-br ${product.color} grid place-items-center text-xl`}>
       {product.stone}
     </div>
+  );
+}
+
+// Pastille de la famille (saison) d'une bague, posée sur sa photo dans le catalogue
+function FamilyPill({ product, families }) {
+  const family = familyOfProduct(product, families);
+  if (!family) return null;
+  return (
+    <span data-testid="family-pill" className="pointer-events-none absolute left-4 top-4 z-10 inline-flex items-center gap-1.5 rounded-full bg-white/85 backdrop-blur px-3 py-1 text-xs">
+      <i className="h-2 w-2 rounded-full" style={{ background: family.accent || "#8f6075" }} />
+      {family.name}
+    </span>
   );
 }
 
@@ -416,8 +435,14 @@ export default function ZenoriaShop() {
   const [selected, setSelected] = useState(null);
   const [selectedMode, setSelectedMode] = useState("video");
   const logo = 1;
-  const [quiz, setQuiz] = useState(null);
-  const [selectedFamily, setSelectedFamily] = useState(null);
+  // Familles (saisons), bandeau et animation, lus dans la base de données
+  const [selectedFamily, setSelectedFamily] = useState(null); // identifiant technique de la famille choisie (par exemple « automne »)
+  const [families, setFamilies] = useState([]);
+  const [bannerRows, setBannerRows] = useState([]);
+  const [closedBanners, setClosedBanners] = useState([]);
+  const [fxSetting] = useState(() => parseFxSetting(null)); // « automatique » : le réglage de l'administration (forcée, désactivée) sera branché ici
+  const [fxClicked, setFxClicked] = useState(null); // saison choisie par un clic : elle donne son ambiance à la page
+  const [nowMs, setNowMs] = useState(null); // renseigné après l'affichage : le rendu du serveur ne dépend jamais de l'heure
 
   // --- Authentification (Supabase) ---
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -430,10 +455,12 @@ export default function ZenoriaShop() {
   useEffect(() => {
     let active = true;
     (async () => {
-      const [{ data: prodData, error: prodErr }, { data: promoData }, { data: siteData }] = await Promise.all([
+      const [{ data: prodData, error: prodErr }, { data: promoData }, { data: siteData }, famRes, banRes] = await Promise.all([
         supabase.from("products").select("*").eq("active", true).order("id"),
         supabase.from("promo_codes").select("*").eq("active", true),
         supabase.from("site_media").select("*"),
+        optionalQuery(supabase.from("families").select("*").order("sort_order", { ascending: true })),
+        optionalQuery(supabase.from("banners").select("*")),
       ]);
       if (!active) return;
 
@@ -452,6 +479,10 @@ export default function ZenoriaShop() {
         siteMap[r.slot] = r;
       });
       setSiteMedia(siteMap);
+
+      // Familles et bandeaux : si une table n'existe pas encore, le site garde son comportement d'origine
+      setFamilies(visibleFamilies(famRes && famRes.data));
+      setBannerRows((banRes && Array.isArray(banRes.data) && banRes.data) || []);
 
       try {
         const raw = window.localStorage.getItem(CART_STORAGE_KEY);
@@ -476,6 +507,14 @@ export default function ZenoriaShop() {
     return () => {
       active = false;
     };
+  }, []);
+
+  // Heure du navigateur, rafraîchie chaque minute : un bandeau échu disparaît et le compte à rebours avance sans recharger la page.
+  useEffect(() => {
+    setNowMs(Date.now());
+    setClosedBanners(readClosedKeys(getSessionStorage()));
+    const id = setInterval(() => setNowMs(Date.now()), 60000);
+    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
@@ -575,15 +614,22 @@ export default function ZenoriaShop() {
   const tightFooter = cartDensity === "dense";
   const dens = CART_DENSITY[cartDensity];
 
-  // --- Familles d'énergie, avec comptage dynamique à partir du catalogue ---
-  const energies = useMemo(
-    () =>
-      ENERGY_THEMES.map((e) => ({
-        ...e,
-        count: products.filter((p) => p.family.includes(e.name)).length,
-      })),
-    [products]
-  );
+  // --- Familles (saisons) : cartes, filtres et libellés, avec le nombre de créations du catalogue ---
+  const seasonCards = useMemo(() => buildSeasonCards(families, products), [families, products]);
+  const familyChips = useMemo(() => buildFamilyChips(families, products), [families, products]);
+  const familiesReady = seasonCards.length > 0; // sinon (table illisible) : le catalogue s'affiche sans les saisons
+
+  // --- Bandeau : le plus prioritaire, jamais pendant une pause ou une maintenance, jamais avec un code devenu invalide ---
+  const validCodes = useMemo(() => new Set(Object.keys(promoCodes)), [promoCodes]);
+  const currentBanner =
+    nowMs === null || catalogLoading
+      ? null
+      : pickPublicBanner(bannerRows, nowMs, {
+          paused: shopPaused || previewingMaintenance,
+          closedKeys: closedBanners,
+          validCodes,
+          checkStart: isAdmin, // un administrateur reçoit aussi les bandeaux programmés : on vérifie leur début
+        });
 
   // --- Actions du panier ---
   const addToCart = (p) => {
@@ -662,21 +708,50 @@ export default function ZenoriaShop() {
     }
   };
 
-  const handleEnergyClick = (energyName) => {
-    setSelectedFamily((prev) => (prev === energyName ? null : energyName));
-    scrollToSection("collections");
+  // Choisit une famille (ou aucune) : le catalogue est filtré, et une saison donne son ambiance animée à la page.
+  const chooseFamily = (key) => {
+    const family = key ? families.find((f) => f.key === key) : null;
+    setSelectedFamily(family ? key : null);
+    setFxClicked(family && family.is_season ? key : null);
   };
+  // Un clic sur une carte saison la choisit ; un second clic revient à l'état initial.
+  const handleSeasonClick = (key) => chooseFamily(selectedFamily === key ? null : key);
 
-  const filteredProducts = selectedFamily
-    ? products.filter((p) => p.family.includes(selectedFamily))
-    : products;
+  const filteredProducts = selectedFamily ? filterByFamily(products, families, selectedFamily) : products;
+  const selectedFamilyData = selectedFamily ? families.find((f) => f.key === selectedFamily) || null : null;
+
+  // Saison animée : réglage de l'administration, ou clic de la visiteuse, ou saison du moment
+  const fxSeason = nowMs === null ? null : resolveFxSeason(fxSetting, fxClicked, new Date(nowMs));
+  const fxCard = fxSeason ? seasonCards.find((c) => c.key === fxSeason) || null : null;
+  const fxPill = fxCard ? fxPillText(fxSetting, fxClicked, fxCard.name) : null;
+
+  // Bandeau : fermeture (mémorisée le temps de la visite) et bouton
+  const closeBanner = () => {
+    if (!currentBanner) return;
+    const next = [...closedBanners, bannerKey(currentBanner)];
+    setClosedBanners(next);
+    writeClosedKeys(getSessionStorage(), next);
+  };
+  const handleBannerButton = (target, url) => {
+    if (target === "custom" && url) {
+      if (url.startsWith("/")) window.location.assign(url);
+      else window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (typeof target === "string" && target.startsWith("season:")) {
+      chooseFamily(target.slice(7));
+      scrollToSection("collections");
+      return;
+    }
+    scrollToSection("collections"); // « collections » et « quiz » (la page Quiz arrivera plus tard)
+  };
 
   return (
     <div className="min-h-screen bg-[#fbf8f4] text-[#342b32] selection:bg-[#dcc8dd]">
     <MediaGuard />
       <Head>
         <title>Zenoria — L&apos;énergie du cristal, l&apos;harmonie de l&apos;âme</title>
-        <meta name="description" content="Bagues artisanales en cristaux Swarovski. Collections Bleus, Roses, Nature et Violettes." />
+        <meta name="description" content="Bagues faites à la main en cristaux Swarovski, rassemblées en quatre saisons : Printemps, Été, Automne et Hiver." />
       </Head>
 
       {previewingMaintenance && (
@@ -693,8 +768,12 @@ export default function ZenoriaShop() {
         </div>
       )}
 
+      {currentBanner && (
+        <BannerBar banner={currentBanner} nowMs={nowMs} onClose={closeBanner} onButton={handleBannerButton} />
+      )}
+
       <div className="bg-[#342434] text-white/85 text-[11px] py-2 px-4 text-center tracking-wide">
-        Livraison offerte dès {FREE_SHIPPING_THRESHOLD} € · Créations artisanales en cristaux Swarovski · Paiement sécurisé
+        Livraison offerte dès {FREE_SHIPPING_THRESHOLD} € · Créations faites à la main en cristaux Swarovski · Paiement sécurisé
       </div>
 
       <header className="sticky top-0 z-40 bg-[#fbf8f4]/95 backdrop-blur border-b border-[#eadfe4]">
@@ -702,10 +781,9 @@ export default function ZenoriaShop() {
           <CrystalLogo compact mode={logo} />
           <nav className="hidden lg:flex gap-7 text-sm">
             <button onClick={() => scrollToSection("collections")} className="hover:text-[#8f6075]">Collections</button>
-            <button onClick={() => scrollToSection("energies")} className="hover:text-[#8f6075]">Nos énergies</button>
+            {familiesReady && <button onClick={() => scrollToSection("seasons")} className="hover:text-[#8f6075]">Les saisons</button>}
             <button onClick={() => scrollToSection("savoir-faire")} className="hover:text-[#8f6075]">Savoir-faire</button>
             <button onClick={() => scrollToSection("philosophie")} className="hover:text-[#8f6075]">Notre histoire</button>
-            <button onClick={() => scrollToSection("quiz")} className="hover:text-[#8f6075]">Quiz</button>
             <button onClick={() => scrollToSection("contact")} className="hover:text-[#8f6075]">Contact</button>
           </nav>
           <div className="flex items-center gap-2">
@@ -764,10 +842,9 @@ export default function ZenoriaShop() {
         {menu && (
           <div className="lg:hidden px-6 pb-5 flex flex-col gap-3 text-sm">
             <button onClick={() => { scrollToSection("collections"); setMenu(false); }} className="text-left">Collections</button>
-            <button onClick={() => { scrollToSection("energies"); setMenu(false); }} className="text-left">Nos énergies</button>
+            {familiesReady && <button onClick={() => { scrollToSection("seasons"); setMenu(false); }} className="text-left">Les saisons</button>}
             <button onClick={() => { scrollToSection("savoir-faire"); setMenu(false); }} className="text-left">Savoir-faire</button>
             <button onClick={() => { scrollToSection("philosophie"); setMenu(false); }} className="text-left">Notre histoire</button>
-            <button onClick={() => { scrollToSection("quiz"); setMenu(false); }} className="text-left">Quiz</button>
             <button onClick={() => { scrollToSection("contact"); setMenu(false); }} className="text-left">Contact</button>
             {!authLoading && (
               user ? (
@@ -794,21 +871,21 @@ export default function ZenoriaShop() {
           <div className="max-w-7xl mx-auto px-6 py-20 grid lg:grid-cols-2 items-center gap-14 relative z-10">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
               <div className="text-xs uppercase tracking-[.3em] text-[#8b6578] mb-5">
-                {products.length > 0 ? `${products.length} collections · ` : ""}Cristaux Swarovski
+                {products.length > 0 ? `${products.length} collections · ` : ""}Faites à la main · 4 saisons
               </div>
               <h1 className="font-serif text-6xl md:text-8xl leading-none mb-5 text-[#513642]">ZENORIA</h1>
               <p className="font-serif italic text-2xl md:text-3xl text-[#594856] mb-5">
                 L&apos;énergie du cristal,<br />l&apos;harmonie de l&apos;âme.
               </p>
               <p className="max-w-lg text-[#6e6268] leading-7 mb-8">
-                Des bagues artisanales en cristaux Swarovski, imaginées comme des symboles d&apos;équilibre et façonnées pour révéler votre lumière intérieure.
+                Des bagues faites à la main, façonnées avec soin en cristaux Swarovski et rassemblées en quatre saisons de couleurs. Trouvez celle qui s&apos;accorde à votre teint, à vos yeux et à vos cheveux.
               </p>
               <div className="flex flex-wrap gap-3">
                 <Button
-                  onClick={() => scrollToSection("collections")}
+                  onClick={() => scrollToSection(familiesReady ? "seasons" : "collections")}
                   className="rounded-full bg-[#8f6075] hover:bg-[#71485b] px-7 h-12"
                 >
-                  Découvrir la collection <ArrowRight className="ml-2" size={17} />
+                  Découvrir les saisons <ArrowRight className="ml-2" size={17} />
                 </Button>
                 <Button
                   onClick={() => scrollToSection("philosophie")}
@@ -829,39 +906,82 @@ export default function ZenoriaShop() {
               </div>
               <div className="absolute right-0 bottom-8 rounded-2xl bg-white/65 backdrop-blur p-4 shadow-lg">
                 <Gem className="text-[#9b6480] mb-2" />
-                <div className="font-serif">Pièce artisanale</div>
+                <div className="font-serif">Faite à la main</div>
                 <div className="text-xs text-[#756a70]">Cristaux Swarovski</div>
               </div>
             </motion.div>
           </div>
         </section>
 
-        {/* ENERGIES / FAMILLES */}
-        <section id="energies" className="max-w-7xl mx-auto px-6 py-20">
-          <div className="text-center mb-10">
-            <div className="text-xs tracking-[.3em] text-[#9c7285] uppercase mb-3">Votre intention, votre bijou</div>
-            <h2 className="font-serif text-4xl">Trouvez l&apos;énergie qui vous ressemble</h2>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {energies.map((e) => (
-              <motion.div
-                whileHover={{ y: -7 }}
-                key={e.name}
-                onClick={() => handleEnergyClick(e.name)}
-                role="button"
-                tabIndex={0}
-                className={`cursor-pointer rounded-[2rem] p-6 min-h-48 bg-gradient-to-br ${e.bg} border shadow-sm transition ${
-                  selectedFamily === e.name ? "border-[#8f6075] ring-2 ring-[#8f6075]" : "border-white"
-                }`}
-              >
-                <e.icon className="mb-8 text-[#725464]" />
-                <div className="font-serif text-2xl mb-2">{e.name}</div>
-                <div className="text-sm text-[#665c61]">{e.count} création{e.count > 1 ? "s" : ""} · {e.theme}</div>
-                <ArrowRight className="mt-5" size={18} />
-              </motion.div>
-            ))}
-          </div>
-        </section>
+        {/* LES SAISONS (familles) : quatre cartes lues dans la base, avec l'animation saisonnière discrète */}
+        {familiesReady && (
+          <section id="seasons" className="relative overflow-hidden">
+            <div className="relative max-w-7xl mx-auto px-6 py-20">
+              <div className="text-center mb-10">
+                <div className="text-xs tracking-[.3em] text-[#9c7285] uppercase mb-3">Une palette pour chaque saison</div>
+                <h2 className="font-serif text-4xl">Quelle saison vous ressemble ?</h2>
+                <p className="text-[#6e6268] mt-3 max-w-2xl mx-auto leading-7">
+                  Chaque saison réunit des bagues dont les couleurs s&apos;accordent entre elles, et avec votre carnation.
+                </p>
+                {fxPill && (
+                  <div data-testid="season-now" className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/70 border border-[#eadfe4] px-4 py-1.5 text-xs text-[#6b5a63]">
+                    <span className="text-[#8f6075]"><SeasonIcon season={fxSeason} size={16} /></span>
+                    {fxPill.prefix} <strong className="font-medium text-[#412f3b]">{fxPill.name}</strong>
+                  </div>
+                )}
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4" data-testid="season-cards">
+                {seasonCards.map((c) => (
+                  <motion.button
+                    type="button"
+                    whileHover={{ y: -7 }}
+                    key={c.key}
+                    onClick={() => handleSeasonClick(c.key)}
+                    aria-pressed={selectedFamily === c.key}
+                    data-testid="season-card"
+                    data-key={c.key}
+                    style={{ background: c.grad }}
+                    className={`text-left rounded-[2rem] p-6 min-h-[13rem] border shadow-sm transition ${
+                      selectedFamily === c.key ? "border-[#8f6075] ring-2 ring-[#8f6075]" : "border-white"
+                    }`}
+                  >
+                    <div className="mb-6 text-[#5c4452]"><SeasonIcon season={c.key} size={28} /></div>
+                    <div className="font-serif text-2xl mb-1">{c.name}</div>
+                    {c.tagline && <div className="text-sm text-[#5f5359]">{c.tagline}</div>}
+                    {c.description && <div className="text-xs text-[#7a6a72] mt-1">{c.description}</div>}
+                    <div className="flex items-center justify-between mt-5">
+                      <div className="flex gap-1.5">
+                        {c.palette.map((d, i) => (
+                          <i key={i} className="h-4 w-4 rounded-full border border-white/70" style={{ background: d }} />
+                        ))}
+                      </div>
+                      <span className="text-xs text-[#5f5359]">{c.count} création{c.count > 1 ? "s" : ""}</span>
+                    </div>
+                  </motion.button>
+                ))}
+              </div>
+              <div className="mt-6 text-center text-sm text-[#6b5a63] min-h-[40px]" data-testid="season-strip">
+                {selectedFamilyData ? (
+                  <span className="inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
+                    <span>
+                      <strong className="font-medium text-[#412f3b]">{selectedFamilyData.name}</strong> · {filteredProducts.length} création{filteredProducts.length > 1 ? "s" : ""}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => scrollToSection("collections")}
+                      className="rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-5 h-9 text-sm inline-flex items-center gap-2"
+                    >
+                      Voir les créations {selectedFamilyData.name} <ArrowRight size={14} />
+                    </button>
+                  </span>
+                ) : (
+                  <span className="text-[#8b737e]">Touchez une saison pour la découvrir.</span>
+                )}
+              </div>
+            </div>
+            <SeasonFx season={fxSeason} />
+          </section>
+        )}
 
         {/* COLLECTIONS / CATALOGUE */}
         <section id="collections" className="py-20 bg-white">
@@ -870,17 +990,48 @@ export default function ZenoriaShop() {
               <div>
                 <div className="text-xs tracking-[.3em] text-[#9c7285] uppercase mb-3">La collection</div>
                 <h2 className="font-serif text-4xl">
-                  {selectedFamily ? `Collection ${selectedFamily}` : "Nos créations"}
+                  {selectedFamilyData ? `Collection ${selectedFamilyData.name}` : "Nos créations"}
                 </h2>
               </div>
               {selectedFamily ? (
-                <button onClick={() => setSelectedFamily(null)} className="text-sm border-b border-[#6d4e5c]">
+                <button onClick={() => chooseFamily(null)} className="text-sm border-b border-[#6d4e5c]">
                   Voir toute la collection
                 </button>
               ) : (
                 <button className="text-sm border-b border-[#6d4e5c]">Voir toute la collection</button>
               )}
             </div>
+
+            {familiesReady && (
+              <div className="flex flex-wrap gap-2 mb-8" data-testid="family-chips">
+                <button
+                  type="button"
+                  onClick={() => chooseFamily(null)}
+                  aria-pressed={!selectedFamily}
+                  className={`inline-flex items-center gap-2 rounded-full border px-4 h-10 text-sm transition ${
+                    !selectedFamily ? "bg-[#8f6075] text-white border-[#8f6075]" : "bg-white text-[#54434c] border-[#d9c5cc] hover:bg-[#f5edf1]"
+                  }`}
+                >
+                  Toutes
+                </button>
+                {familyChips.map((c) => (
+                  <button
+                    key={c.key}
+                    type="button"
+                    data-testid="family-chip"
+                    data-key={c.key}
+                    onClick={() => chooseFamily(c.key)}
+                    aria-pressed={selectedFamily === c.key}
+                    className={`inline-flex items-center gap-2 rounded-full border px-4 h-10 text-sm transition ${
+                      selectedFamily === c.key ? "bg-[#8f6075] text-white border-[#8f6075]" : "bg-white text-[#54434c] border-[#d9c5cc] hover:bg-[#f5edf1]"
+                    }`}
+                  >
+                    <i className="h-2.5 w-2.5 rounded-full" style={{ background: c.accent }} />
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {catalogLoading ? (
               <p className="text-sm text-[#8b737e] text-center py-10">Chargement des créations...</p>
@@ -894,6 +1045,7 @@ export default function ZenoriaShop() {
                   <Card key={p.id} className="overflow-hidden rounded-[1.5rem] border-[#eee2e5] group">
                     <div className="relative">
                       <RingVisual product={p} />
+                      <FamilyPill product={p} families={families} />
                       <button
                         onClick={() => setFav(fav.includes(p.id) ? fav.filter((x) => x !== p.id) : [...fav, p.id])}
                         className="absolute right-4 top-4 h-10 w-10 bg-white/80 rounded-full grid place-items-center z-10"
@@ -904,7 +1056,7 @@ export default function ZenoriaShop() {
                       <button className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition z-[5]" onClick={() => openProduct(p)} aria-label={`Voir ${p.name}`} />
                     </div>
                     <CardContent className="p-5">
-                      <div className="text-xs uppercase tracking-widest text-[#9a7384]">{p.family} · {p.collection}</div>
+                      <div className="text-xs uppercase tracking-widest text-[#9a7384]">{productLabel(p, families, familiesReady)}</div>
                       <div className="flex justify-between items-start mt-2 gap-3">
                         <div className="min-w-0">
                           <div className="font-serif text-xl truncate">{p.name}</div>
@@ -955,90 +1107,14 @@ export default function ZenoriaShop() {
           <div className="bg-[#3b2b39] text-white p-12 lg:p-20 flex flex-col justify-center">
             <div className="text-xs tracking-[.3em] uppercase text-[#d7b4c3] mb-4">Notre philosophie</div>
             <h2 className="font-serif text-4xl md:text-5xl leading-tight mb-6">
-              Plus qu&apos;un bijou,<br />un symbole d&apos;équilibre.
+              Quatre saisons,<br />un geste à la main.
             </h2>
             <p className="text-white/70 leading-7 max-w-xl">
-              Chaque création Zenoria associe l&apos;élégance des cristaux Swarovski à un univers de sérénité. Nos bagues sont pensées pour accompagner les instants précieux et raconter une histoire personnelle.
+              Chaque bague Zenoria est façonnée à la main, avec soin, en cristaux Swarovski. Nous l&apos;avons rangée par saison : une façon de choisir un bijou comme on choisit une couleur, avec le cœur et avec l&apos;œil.
             </p>
             <Button variant="outline" className="mt-8 w-fit rounded-full border-white/40 bg-transparent text-white">
               Découvrir notre histoire
             </Button>
-          </div>
-        </section>
-
-        {/* QUIZ */}
-        <section id="quiz" className="max-w-6xl mx-auto px-6 py-24">
-          <div className="rounded-[2.5rem] p-8 md:p-14 bg-gradient-to-r from-[#eee3f5] to-[#f6e3df] grid lg:grid-cols-[1.2fr_.8fr] gap-10">
-            <div>
-              <Sparkles className="text-[#956d83] mb-5" />
-              <h2 className="font-serif text-4xl mb-4">Quelle énergie recherchez-vous aujourd&apos;hui ?</h2>
-              <p className="text-[#6d6068] mb-7">Choisissez votre intention et découvrez la création Zenoria qui lui correspond.</p>
-              <div className="flex flex-wrap gap-3">
-                {["Sérénité", "Amour", "Protection", "Abondance", "Éveil spirituel"].map((x) => (
-                  <button
-                    key={x}
-                    type="button"
-                    onClick={() => setQuiz(x)}
-                    style={{ color: quiz === x ? "#ffffff" : "#54434c" }}
-                    className={`rounded-full px-5 h-10 text-sm font-medium border transition ${
-                      quiz === x
-                        ? "bg-[#82566d] border-[#82566d]"
-                        : "bg-white border-[#d9c5cc] hover:bg-[#f5edf1]"
-                    }`}
-                  >
-                    {x}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="rounded-3xl bg-white/70 p-7 min-h-52 flex flex-col justify-center">
-              {quiz ? (
-                <>
-                  <div className="text-xs uppercase tracking-widest text-[#9a6e82]">Votre sélection</div>
-                  <div className="font-serif text-3xl my-3">{quiz}</div>
-                  <p className="text-sm text-[#6b6166] mb-5">Nous avons sélectionné une création qui accompagne cette intention.</p>
-                  {products.length > 0 && (
-                    <Button
-                      onClick={() => openProduct(products.find((p) => p.collection === quiz) || products[0])}
-                      className="rounded-full bg-[#8d5e74]"
-                    >
-                      Voir la recommandation
-                    </Button>
-                  )}
-                </>
-              ) : (
-                <>
-                  <Gem className="text-[#9b6980] mb-4" size={34} />
-                  <div className="font-serif text-2xl">Votre recommandation apparaîtra ici</div>
-                </>
-              )}
-            </div>
-          </div>
-        </section>
-
-        {/* TEMOIGNAGES */}
-        <section className="bg-white py-20">
-          <div className="max-w-6xl mx-auto px-6">
-            <div className="text-center mb-10">
-              <h2 className="font-serif text-4xl">Elles parlent de Zenoria</h2>
-            </div>
-            <div className="grid md:grid-cols-3 gap-5">
-              {[
-                "Une création délicate, encore plus belle portée.",
-                "Le soin du détail et l'univers de la marque m'ont séduite.",
-                "Un cadeau lumineux, présenté avec beaucoup d'élégance.",
-              ].map((t, i) => (
-                <div key={t} className="rounded-3xl bg-[#fbf7f5] p-7">
-                  <div className="flex mb-4">
-                    {[1, 2, 3, 4, 5].map((x) => (
-                      <Star key={x} size={16} fill="#b88966" className="text-[#b88966]" />
-                    ))}
-                  </div>
-                  <p className="font-serif text-xl italic">&ldquo;{t}&rdquo;</p>
-                  <div className="mt-5 text-xs uppercase tracking-widest text-[#8b737e]">Cliente Zenoria {i + 1}</div>
-                </div>
-              ))}
-            </div>
           </div>
         </section>
 
@@ -1065,9 +1141,22 @@ export default function ZenoriaShop() {
           <div>
             <div className="text-white mb-3">Boutique</div>
             <div className="text-sm space-y-2">
-              <p>Collections</p>
-              <p>Nouveautés</p>
-              <p>Éditions limitées</p>
+              {familiesReady ? (
+                seasonCards.map((c) => (
+                  <p key={c.key}>
+                    <button
+                      type="button"
+                      data-testid="footer-season"
+                      onClick={() => { chooseFamily(c.key); scrollToSection("collections"); }}
+                      className="text-left hover:text-white underline-offset-2 hover:underline"
+                    >
+                      {c.name}
+                    </button>
+                  </p>
+                ))
+              ) : (
+                <p>Collections</p>
+              )}
             </div>
           </div>
           <div>
@@ -1129,7 +1218,7 @@ export default function ZenoriaShop() {
                   <div>
                     <ShoppingBag className="mx-auto text-[#b88d9f] mb-4" size={40} />
                     <div className="font-serif text-2xl mb-2">Votre panier est vide</div>
-                    <p className="text-sm text-[#756a70] mb-6">Découvrez nos créations et laissez-vous guider par votre énergie.</p>
+                    <p className="text-sm text-[#756a70] mb-6">Découvrez nos créations et laissez-vous guider par vos couleurs.</p>
                     <button
                       onClick={() => { setCartOpen(false); scrollToSection("collections"); }}
                       className="rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-6 h-11 text-sm"
@@ -1323,7 +1412,7 @@ export default function ZenoriaShop() {
               <ProductMedia product={selected} initialMode={selectedMode} />
               <div className="p-8 relative">
                 <button className="absolute right-5 top-5" onClick={() => setSelected(null)} aria-label="Fermer"><X /></button>
-                <div className="text-xs uppercase tracking-widest text-[#9a7384]">{selected.family} · {selected.collection}</div>
+                <div className="text-xs uppercase tracking-widest text-[#9a7384]">{productLabel(selected, families, familiesReady)}</div>
                 <h3 className="font-serif text-4xl mt-3">{selected.name}</h3>
                 <PriceTag product={selected} className="text-2xl mt-4 block" />
                 <div className="mt-3">
@@ -1334,26 +1423,6 @@ export default function ZenoriaShop() {
                   <p className="text-[15px] leading-7 text-[#54434c] mt-5">{selected.pitch}</p>
                 )}
                 <p className="text-sm leading-6 text-[#70656a] mt-3 italic">{selected.energy}</p>
-
-                {selected.crystals && selected.crystals.length > 0 && (
-                  <div className="mt-6">
-                    <div className="text-xs uppercase tracking-widest mb-2">Composition</div>
-                    <p className="text-sm text-[#70656a] mb-3">
-                      {selected.crystals.reduce((s, c) => s + c.count, 0)} cristaux Swarovski en {selected.crystals.length} couleur{selected.crystals.length > 1 ? "s" : ""}
-                    </p>
-                    <ul className="space-y-1.5">
-                      {selected.crystals.map((c) => (
-                        <li key={c.color} className="flex items-center gap-3 text-sm text-[#54434c]">
-                          <span
-                            className="h-4 w-4 rounded-full border border-black/10"
-                            style={{ background: c.hex || "#e9dde3" }}
-                          />
-                          <span>{c.count} × {c.color}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
 
                 <button
                   onClick={() => { addToCart(selected); setSelected(null); }}

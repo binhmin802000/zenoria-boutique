@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import Head from "next/head";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -16,6 +16,7 @@ import SavoirFaire from "@/components/SavoirFaire";
 import BannerBar from "@/components/BannerBar";
 import SeasonFx from "@/components/SeasonFx";
 import SeasonIcon from "@/components/SeasonIcon";
+import Mannequin from "@/components/Mannequin";
 import {
   visibleFamilies, buildSeasonCards, buildFamilyChips, filterByFamily, productLabel, familyOfProduct,
   parseFxSetting, resolveFxSeason,
@@ -756,8 +757,56 @@ export default function ZenoriaShop() {
       scrollToCatalogue();
       return;
     }
-    scrollToSection("collections"); // « collections » et « quiz » (la page Quiz arrivera plus tard)
+    if (target === "quiz") {
+      window.location.assign("/quiz");
+      return;
+    }
+    scrollToSection("collections");
   };
+
+  // Liens venus d'une autre page (le quiz) : « /#panier » ouvre le panier, « /#bague=nom » ouvre une fiche bague,
+  // « /#saison=automne » filtre le catalogue. L'adresse est lue une seule fois, quand le catalogue est chargé, puis nettoyée.
+  const linkHandled = useRef(false);
+  useEffect(() => {
+    if (linkHandled.current || catalogLoading || typeof window === "undefined") return;
+    linkHandled.current = true;
+    const hash = window.location.hash || "";
+    let handled = false;
+    if (hash === "#panier") {
+      setCartOpen(true);
+      handled = true;
+    } else if (hash.startsWith("#bague=")) {
+      let slug = "";
+      try {
+        slug = decodeURIComponent(hash.slice(7));
+      } catch (e) {
+        slug = "";
+      }
+      const product = products.find((p) => p.slug === slug);
+      if (product) openProduct(product);
+      handled = true;
+    } else if (hash.startsWith("#saison=")) {
+      let key = "";
+      try {
+        key = decodeURIComponent(hash.slice(8));
+      } catch (e) {
+        key = "";
+      }
+      if (families.some((f) => f.key === key)) {
+        chooseFamily(key);
+        setTimeout(scrollToCatalogue, 80);
+      }
+      handled = true;
+    }
+    if (handled) {
+      try {
+        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      } catch (e) {
+        // adresse non modifiable : sans effet
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalogLoading]);
 
   return (
     <div className="min-h-screen bg-[#fbf8f4] text-[#342b32] selection:bg-[#dcc8dd]">
@@ -797,6 +846,7 @@ export default function ZenoriaShop() {
             {familiesReady && <button onClick={() => scrollToSection("seasons")} className="hover:text-[#8f6075]">Les saisons</button>}
             <button onClick={() => scrollToSection("savoir-faire")} className="hover:text-[#8f6075]">Savoir-faire</button>
             <button onClick={() => scrollToSection("philosophie")} className="hover:text-[#8f6075]">Notre histoire</button>
+            <a href="/quiz" data-testid="nav-quiz" className="hover:text-[#8f6075]">Quiz</a>
             <button onClick={() => scrollToSection("contact")} className="hover:text-[#8f6075]">Contact</button>
           </nav>
           <div className="flex items-center gap-2">
@@ -858,6 +908,7 @@ export default function ZenoriaShop() {
             {familiesReady && <button onClick={() => { scrollToSection("seasons"); setMenu(false); }} className="text-left">Les saisons</button>}
             <button onClick={() => { scrollToSection("savoir-faire"); setMenu(false); }} className="text-left">Savoir-faire</button>
             <button onClick={() => { scrollToSection("philosophie"); setMenu(false); }} className="text-left">Notre histoire</button>
+            <a href="/quiz" data-testid="nav-quiz-mobile" onClick={() => setMenu(false)} className="text-left">Quiz</a>
             <button onClick={() => { scrollToSection("contact"); setMenu(false); }} className="text-left">Contact</button>
             {!authLoading && (
               user ? (
@@ -900,13 +951,13 @@ export default function ZenoriaShop() {
                 >
                   Découvrir les saisons <ArrowRight className="ml-2" size={17} />
                 </Button>
-                <Button
-                  onClick={() => scrollToSection("philosophie")}
-                  variant="outline"
-                  className="rounded-full border-[#9b7a89] px-7 h-12 bg-white/35"
+                <a
+                  href="/quiz"
+                  data-testid="hero-quiz-link"
+                  className="inline-flex items-center justify-center rounded-full border border-[#9b7a89] px-7 h-12 bg-white/35 hover:bg-white/70 text-sm font-medium transition"
                 >
-                  Notre philosophie
-                </Button>
+                  Faire le quiz couleurs
+                </a>
               </div>
             </motion.div>
             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8 }} className="relative flex justify-center">
@@ -1112,6 +1163,30 @@ export default function ZenoriaShop() {
             <Button variant="outline" className="mt-8 w-fit rounded-full border-white/40 bg-transparent text-white">
               Découvrir notre histoire
             </Button>
+          </div>
+        </section>
+
+        {/* QUIZ COULEURS (invitation) : la page du quiz est /quiz */}
+        <section id="quiz" className="max-w-6xl mx-auto px-6 py-20">
+          <div className="rounded-[2.5rem] p-8 md:p-12 grid lg:grid-cols-[1.2fr_.8fr] gap-10 items-center" style={{ background: "linear-gradient(120deg,#eee3f5,#f6e3df)" }}>
+            <div>
+              <div className="text-xs tracking-[.3em] text-[#956d83] uppercase mb-3">Quiz couleurs</div>
+              <h2 className="font-serif text-4xl mb-4">Quelle bague vous va le mieux ?</h2>
+              <p className="text-[#6d6068] leading-7 mb-6">
+                Choisissez la couleur de vos cheveux, de vos yeux et de votre peau. Nous vous proposons les bagues — et les couleurs de vêtements — qui vous mettent en valeur.
+              </p>
+              <a
+                href="/quiz"
+                data-testid="teaser-quiz-link"
+                className="inline-flex items-center gap-2 rounded-full bg-[#8d5e74] hover:bg-[#7a4e63] text-white px-7 h-12 text-sm font-medium transition"
+              >
+                Lancer le quiz <ArrowRight size={16} />
+              </a>
+              <div className="text-xs text-[#8b737e] mt-3">3 choix · moins de 2 minutes · rien n&apos;est enregistré</div>
+            </div>
+            <div className="max-w-[260px] mx-auto w-full">
+              <Mannequin hair="#8b6a4a" eye="#8a5a2b" skin="#e0b184" garment="#c8643b" decorative />
+            </div>
           </div>
         </section>
 

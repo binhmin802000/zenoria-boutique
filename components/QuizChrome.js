@@ -38,8 +38,22 @@ function CrystalLogo({ light = false }) {
   );
 }
 
-export function QuizHeader({ cartCount = 0 }) {
+// onCartClick : si elle est fournie, l'icône du panier appelle cette fonction (la page du quiz pose alors sa question) ;
+// sinon, c'est un simple lien vers le panier de l'accueil.
+export function QuizHeader({ cartCount = 0, onCartClick }) {
   const [menu, setMenu] = useState(false);
+  const cartLabel = cartCount > 0 ? `Ouvrir le panier (${cartCount} article${cartCount > 1 ? "s" : ""})` : "Ouvrir le panier";
+  const cartClass = "relative h-10 w-10 grid place-items-center rounded-full hover:bg-[#f0e6ea]";
+  const cartInner = (
+    <>
+      <ShoppingBag size={19} />
+      {cartCount > 0 && (
+        <span data-testid="header-cart-count" className="absolute right-0 top-0 h-5 min-w-5 px-1 rounded-full bg-[#9a667c] text-white text-[10px] grid place-items-center">
+          {cartCount}
+        </span>
+      )}
+    </>
+  );
   return (
     <header className="sticky top-0 z-40 bg-[#fbf8f4]/95 backdrop-blur border-b border-[#eadfe4]">
       <div className="max-w-7xl mx-auto px-5 h-20 flex items-center justify-between">
@@ -57,14 +71,15 @@ export function QuizHeader({ cartCount = 0 }) {
           ))}
         </nav>
         <div className="flex items-center gap-1">
-          <a href="/#panier" aria-label={cartCount > 0 ? `Ouvrir le panier (${cartCount} article${cartCount > 1 ? "s" : ""})` : "Ouvrir le panier"} data-testid="header-cart" className="relative h-10 w-10 grid place-items-center rounded-full hover:bg-[#f0e6ea]">
-            <ShoppingBag size={19} />
-            {cartCount > 0 && (
-              <span data-testid="header-cart-count" className="absolute right-0 top-0 h-5 min-w-5 px-1 rounded-full bg-[#9a667c] text-white text-[10px] grid place-items-center">
-                {cartCount}
-              </span>
-            )}
-          </a>
+          {onCartClick ? (
+            <button type="button" onClick={onCartClick} aria-label={cartLabel} data-testid="header-cart" className={cartClass}>
+              {cartInner}
+            </button>
+          ) : (
+            <a href="/#panier" aria-label={cartLabel} data-testid="header-cart" className={cartClass}>
+              {cartInner}
+            </a>
+          )}
           <button type="button" className="lg:hidden h-10 w-10 grid place-items-center rounded-full hover:bg-[#f0e6ea]" onClick={() => setMenu(!menu)} aria-expanded={menu} aria-label={menu ? "Fermer le menu" : "Ouvrir le menu"} data-testid="quiz-menu-toggle">
             {menu ? <X size={20} /> : <Menu size={20} />}
           </button>

@@ -17,6 +17,10 @@ import BannerBar from "@/components/BannerBar";
 import SeasonFx from "@/components/SeasonFx";
 import SeasonIcon from "@/components/SeasonIcon";
 import Mannequin from "@/components/Mannequin";
+import { RingVisual, AvailabilityBadge, PriceTag } from "@/components/ProductParts";
+import ProductSheet from "@/components/ProductSheet";
+import { formatPrice, getAvailability } from "@/lib/shopUtils";
+import { parseCartReturnHash, encodeResultHash } from "@/lib/quizState";
 import {
   visibleFamilies, buildSeasonCards, buildFamilyChips, filterByFamily, productLabel, familyOfProduct,
   parseFxSetting, resolveFxSeason,
@@ -30,7 +34,7 @@ import { SITE_SETTINGS_TABLE, SEASON_FX_KEY, parseSeasonFxSetting, pickFxSeason 
 const SHIPPING_FEE = 4.9;               // frais de livraison sous le seuil (France)
 const FREE_SHIPPING_THRESHOLD = 50;     // livraison offerte à partir de ce montant (après remise)
 const MAX_QTY_PER_PRODUCT = 10;         // quantité max par bague (stock + fabrication sur commande)
-const BACKORDER_LEAD_TIME = "5 jours";  // délai de fabrication une fois le stock épuisé
+// Le délai de fabrication une fois le stock épuisé (BACKORDER_LEAD_TIME) se règle dans lib/shopUtils.js
 const CART_STORAGE_KEY = "zenoria_cart_v2";
 
 // ============================================================
@@ -45,9 +49,6 @@ const CART_STORAGE_KEY = "zenoria_cart_v2";
 
 // Requête dont l'échec ne doit jamais empêcher le site de s'afficher (table pas encore créée, réseau coupé...).
 const optionalQuery = (query) => Promise.resolve(query).then((res) => res, () => ({ data: null, error: true }));
-
-const formatPrice = (n) =>
-  n.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -96,29 +97,6 @@ function computeTotals(lines, promo) {
 }
 
 // ============================================================
-// DISPONIBILITÉ D'UNE BAGUE
-// - qty <= stock      -> disponible immédiatement
-// - qty > stock        -> la partie au-delà du stock est fabriquée sur
-//                         commande, avec un délai de quelques jours.
-// - stock === 0        -> rupture de stock, fabrication sur commande uniquement.
-// ============================================================
-function getAvailability(product, qty = 0) {
-  const stock = typeof product.stock === "number" ? product.stock : 0;
-  if (stock <= 0) {
-    return { state: "backorder", stock, label: "Rupture de stock", detail: `Fabriquée sur commande · délai ${BACKORDER_LEAD_TIME}` };
-  }
-  if (qty > stock) {
-    return {
-      state: "partial-backorder",
-      stock,
-      label: `${stock} disponible${stock > 1 ? "s" : ""}`,
-      detail: `${qty - stock} exemplaire${qty - stock > 1 ? "s" : ""} fabriqué${qty - stock > 1 ? "s" : ""} sur commande · délai ${BACKORDER_LEAD_TIME}`,
-    };
-  }
-  return { state: "in-stock", stock, label: `${stock} disponible${stock > 1 ? "s" : ""}`, detail: "" };
-}
-
-// ============================================================
 // AFFICHAGE ADAPTATIF DU PANIER
 // ============================================================
 const CART_DENSITY = {
@@ -156,70 +134,6 @@ function CrystalLogo({ mode = 1, compact = false }) {
         <div className={`${compact ? "text-xl" : "text-3xl"} tracking-[.22em] font-serif text-[#412f3b]`}>ZENORIA</div>
         {!compact && <div className="text-[10px] tracking-wide text-[#755f6e] italic">L&apos;énergie du cristal, l&apos;harmonie de l&apos;âme.</div>}
       </div>
-    </div>
-  );
-}
-
-// Visuel produit : utilise la vraie photo (ou la vidéo pour le Hero) si présente,
-// qu'elle vienne de Supabase Storage (upload via /admin) ou de /public/images
-// (anciennes collections), sinon affiche un visuel graphique de remplacement.
-function RingVisual({ product, large = false, circle = false, video = false }) {
-  const [imgError, setImgError] = useState(false);
-  const imgSrc = product.photos && product.photos[0] ? getMediaUrl(product.photos[0], product.slug) : null;
-  const videoSrc = product.video ? getMediaUrl(product.video, product.slug) : null;
-
-  if (circle && video && videoSrc && !imgError) {
-    return (
-      <div className="relative w-full h-full rounded-full overflow-hidden bg-black">
-        <video
-          key={videoSrc}
-          src={videoSrc}
-          autoPlay
-          loop
-          muted
-          playsInline
-          onError={() => setImgError(true)}
-          className="w-full h-full object-cover object-center"
-        />
-      </div>
-    );
-  }
-
-  if (imgSrc && !imgError) {
-    if (circle) {
-      return (
-        <div className="relative w-full h-full rounded-full overflow-hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={imgSrc}
-            alt={product.name}
-            onError={() => setImgError(true)}
-            className="w-full h-full object-cover object-center"
-          />
-        </div>
-      );
-    }
-    return (
-      <div className={`relative overflow-hidden ${large ? "h-[360px]" : "h-56"}`}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={imgSrc}
-          alt={product.name}
-          onError={() => setImgError(true)}
-          className="w-full h-full object-cover object-center"
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div className={`relative overflow-hidden bg-gradient-to-br ${product.color} ${large ? "h-[360px]" : "h-56"} flex items-center justify-center`}>
-      <div className={`${large ? "h-44 w-44" : "h-28 w-28"} rounded-full border-[10px] border-[#d2a66d] shadow-[inset_0_0_18px_rgba(89,53,31,.28),0_20px_35px_rgba(78,45,67,.18)] relative`}>
-        <div className={`absolute left-1/2 -translate-x-1/2 -top-10 ${large ? "h-24 w-24 text-5xl" : "h-16 w-16 text-3xl"} rotate-45 rounded-2xl bg-white/75 backdrop-blur border border-white shadow-xl flex items-center justify-center`}>
-          <span className="-rotate-45">{product.stone}</span>
-        </div>
-      </div>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(255,255,255,.9),transparent_18%),radial-gradient(circle_at_72%_18%,rgba(255,255,255,.75),transparent_10%)]" />
     </div>
   );
 }
@@ -279,131 +193,6 @@ function FamilyPill({ product, families }) {
   );
 }
 
-// Pastille de disponibilité
-function AvailabilityBadge({ product, qty = 0, showDetail = false }) {
-  const a = getAvailability(product, qty);
-  const color = a.state === "in-stock" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700";
-  const dot = a.state === "in-stock" ? "bg-emerald-500" : "bg-amber-500";
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs ${color}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
-      {a.label}
-      {showDetail && a.detail ? ` · ${a.detail}` : ""}
-    </span>
-  );
-}
-
-// Affiche un prix, avec le prix barré si une promotion est active
-function PriceTag({ product, className = "" }) {
-  const hasPromo = product.promoPrice != null && product.promoPrice < product.price;
-  if (!hasPromo) {
-    return <span className={className}>{formatPrice(product.price)}</span>;
-  }
-  return (
-    <span className={className}>
-      <span className="line-through text-[#b0a3a9] mr-1.5 font-normal">{formatPrice(product.price)}</span>
-      <span className="text-[#b2544a]">{formatPrice(product.promoPrice)}</span>
-    </span>
-  );
-}
-
-// Visuel affiché dans la fiche produit (modal).
-function ProductMedia({ product, initialMode = "video" }) {
-  const [videoError, setVideoError] = useState(false);
-  const [mode, setMode] = useState(initialMode);
-  const [photoIndex, setPhotoIndex] = useState(0);
-  const videoSrc = product.video ? getMediaUrl(product.video, product.slug) : null;
-  const photos = product.photos || [];
-
-  useEffect(() => {
-    setMode(initialMode);
-    setPhotoIndex(0);
-    setVideoError(false);
-  }, [product.slug, initialMode]);
-
-  const hasVideo = Boolean(videoSrc) && !videoError;
-  const hasPhotos = photos.length > 0;
-
-  const goPrevPhoto = () => setPhotoIndex((i) => (i === 0 ? photos.length - 1 : i - 1));
-  const goNextPhoto = () => setPhotoIndex((i) => (i === photos.length - 1 ? 0 : i + 1));
-
-  return (
-    <div>
-      <div className="relative overflow-hidden h-[360px] bg-black">
-        {mode === "video" && hasVideo ? (
-          <video
-            key={videoSrc}
-            src={videoSrc}
-            autoPlay
-            loop
-            muted
-            playsInline
-            controls
-            onError={() => setVideoError(true)}
-            className="w-full h-full object-cover object-center"
-          />
-        ) : hasPhotos ? (
-          <div className="relative w-full h-full">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              key={photos[photoIndex]}
-              src={getMediaUrl(photos[photoIndex], product.slug)}
-              alt={`${product.name} - photo ${photoIndex + 1}`}
-              className="w-full h-full object-cover object-center"
-            />
-            {photos.length > 1 && (
-              <>
-                <button
-                  onClick={goPrevPhoto}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-white/80 hover:bg-white grid place-items-center"
-                  aria-label="Photo précédente"
-                >
-                  ‹
-                </button>
-                <button
-                  onClick={goNextPhoto}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-white/80 hover:bg-white grid place-items-center"
-                  aria-label="Photo suivante"
-                >
-                  ›
-                </button>
-                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-                  {photos.map((_, i) => (
-                    <span
-                      key={i}
-                      className={`h-1.5 w-1.5 rounded-full ${i === photoIndex ? "bg-white" : "bg-white/50"}`}
-                    />
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        ) : (
-          <RingVisual product={product} large />
-        )}
-      </div>
-      <div className="flex gap-2 px-8 pt-4">
-        {hasVideo && (
-          <button
-            onClick={() => setMode("video")}
-            className={`rounded-full px-3 py-1 text-xs ${mode === "video" ? "bg-[#8f6075] text-white" : "bg-[#f5edf1] text-[#826d77]"}`}
-          >
-            Vidéo
-          </button>
-        )}
-        {hasPhotos && (
-          <button
-            onClick={() => setMode("photo")}
-            className={`rounded-full px-3 py-1 text-xs ${mode === "photo" ? "bg-[#8f6075] text-white" : "bg-[#f5edf1] text-[#826d77]"}`}
-          >
-            {photos.length} photo{photos.length > 1 ? "s" : ""}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function ZenoriaShop() {
   // --- Catalogue et codes promo, chargés depuis Supabase ---
   const [products, setProducts] = useState([]);
@@ -434,6 +223,7 @@ export default function ZenoriaShop() {
   const [fav, setFav] = useState([]);
   const [menu, setMenu] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
+  const [quizReturn, setQuizReturn] = useState(""); // adresse « /quiz#r=… » quand la visiteuse vient du quiz et veut y revenir
   const [selected, setSelected] = useState(null);
   const [selectedMode, setSelectedMode] = useState("video");
   const logo = 1;
@@ -615,7 +405,7 @@ export default function ZenoriaShop() {
   const cartDensity = pickCartDensity(
     cartLines.length,
     viewportH,
-    (promoOpen && !promo ? 44 : 0) + (cartNotice ? 44 : 0)
+    (promoOpen && !promo ? 44 : 0) + (cartNotice ? 44 : 0) + (quizReturn ? 56 : 0)
   );
   const tightFooter = cartDensity === "dense";
   const dens = CART_DENSITY[cartDensity];
@@ -772,7 +562,10 @@ export default function ZenoriaShop() {
     linkHandled.current = true;
     const hash = window.location.hash || "";
     let handled = false;
-    if (hash === "#panier") {
+    if (hash === "#panier" || hash.startsWith("#panier-quiz=")) {
+      // « #panier-quiz=… » : la visiteuse vient du quiz et veut y revenir (le résultat est dans l'adresse)
+      const back = parseCartReturnHash(hash);
+      if (back) setQuizReturn("/quiz" + encodeResultHash(back));
       setCartOpen(true);
       handled = true;
     } else if (hash.startsWith("#bague=")) {
@@ -1297,6 +1090,13 @@ export default function ZenoriaShop() {
                     >
                       Continuer mes achats
                     </button>
+                    {quizReturn && (
+                      <div className="mt-3">
+                        <a href={quizReturn} data-testid="cart-back-quiz" className="inline-flex items-center justify-center rounded-full border border-[#8f6075] text-[#8f6075] hover:bg-[#8f6075] hover:text-white px-6 h-11 text-sm font-medium transition">
+                          Retour au quiz
+                        </a>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -1451,6 +1251,11 @@ export default function ZenoriaShop() {
                     >
                       {shopPaused ? "Commandes temporairement fermées" : "Commander"}
                     </button>
+                    {quizReturn && (
+                      <a href={quizReturn} data-testid="cart-back-quiz" className="flex w-full items-center justify-center rounded-full border border-[#8f6075] text-[#8f6075] hover:bg-[#8f6075] hover:text-white text-sm font-medium transition h-11">
+                        Retour au quiz
+                      </a>
+                    )}
                     {shopPaused ? (
                       <p data-testid="pause-note" className="text-[11px] text-center rounded-lg bg-amber-50 text-amber-800 px-3 py-1.5">
                         La boutique est en pause{pauseReturn ? ` jusqu'au ${pauseReturn}` : ""}. Votre panier est conservé sur cet appareil.
@@ -1470,43 +1275,14 @@ export default function ZenoriaShop() {
         )}
       </AnimatePresence>
 
-      {/* FICHE PRODUIT */}
-      <AnimatePresence>
-        {selected && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50" onClick={() => setSelected(null)} />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="fixed z-50 inset-x-4 top-[6%] max-w-4xl mx-auto bg-[#fbf8f4] rounded-[2rem] overflow-hidden shadow-2xl grid md:grid-cols-2 max-h-[88vh] overflow-y-auto"
-            >
-              <ProductMedia product={selected} initialMode={selectedMode} />
-              <div className="p-8 relative">
-                <button className="absolute right-5 top-5" onClick={() => setSelected(null)} aria-label="Fermer"><X /></button>
-                <div className="text-xs uppercase tracking-widest text-[#9a7384]">{productLabel(selected, families, familiesReady)}</div>
-                <h3 className="font-serif text-4xl mt-3">{selected.name}</h3>
-                <PriceTag product={selected} className="text-2xl mt-4 block" />
-                <div className="mt-3">
-                  <AvailabilityBadge product={selected} showDetail />
-                </div>
-
-                {selected.pitch && (
-                  <p className="text-[15px] leading-7 text-[#54434c] mt-5">{selected.pitch}</p>
-                )}
-                <p className="text-sm leading-6 text-[#70656a] mt-3 italic">{selected.energy}</p>
-
-                <button
-                  onClick={() => { addToCart(selected); setSelected(null); }}
-                  className="w-full mt-7 rounded-full h-12 bg-[#855a6f] hover:bg-[#6f4a5c] text-white text-sm font-medium transition"
-                >
-                  Ajouter au panier
-                </button>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      {/* FICHE PRODUIT (composant partagé avec la page du quiz : components/ProductSheet.js) */}
+      <ProductSheet
+        product={selected}
+        initialMode={selectedMode}
+        label={selected ? productLabel(selected, families, familiesReady) : ""}
+        onClose={() => setSelected(null)}
+        onAdd={(p) => { addToCart(p); setSelected(null); }}
+      />
 
       {/* AUTHENTIFICATION */}
       <AuthModal open={authModalOpen} onClose={() => setAuthModalOpen(false)} />

@@ -7,11 +7,13 @@ import BannerBar from "@/components/BannerBar";
 import { QuizHeader, QuizFooter, ShippingStrip } from "@/components/QuizChrome";
 import QuizSteps from "@/components/QuizSteps";
 import QuizResult from "@/components/QuizResult";
+import ProductSheet from "@/components/ProductSheet";
+import QuizCartDialog from "@/components/QuizCartDialog";
 import { visibleFamilies, buildSeasonCards, gradientFor } from "@/lib/seasons";
 import { pickPublicBanner, bannerKey, readClosedKeys, writeClosedKeys, getSessionStorage } from "@/lib/publicBanner";
 import { recommend, isValidProfile, SEASON_KEYS, SEASON_NAMES } from "@/lib/colorEngine";
 import { SEASON_DEFAULTS } from "@/lib/quizOutfits";
-import { QUIZ_STEPS, mapCatalog, seasonNamesFrom, encodeResultHash, parseResultHash, addToStoredCart, cartCount as readCartCount } from "@/lib/quizState";
+import { QUIZ_STEPS, mapCatalog, seasonNamesFrom, encodeResultHash, encodeCartReturnHash, parseResultHash, addToStoredCart, cartCount as readCartCount } from "@/lib/quizState";
 
 // ============================================================
 // PAGE /quiz — le quiz couleurs : un mannequin qui se colore à chaque choix (cheveux, yeux, peau), puis des bagues,
@@ -56,6 +58,8 @@ export default function QuizPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [cartCount, setCartCount] = useState(0);
   const [toast, setToast] = useState(null);
+  const [sheet, setSheet] = useState(null); // { product, why } : la fiche ouverte par « Voir la bague », sans quitter le quiz
+  const [cartAsk, setCartAsk] = useState(false); // la question « revenir au quiz après le panier ? »
   const siteStatus = useSiteStatus();
   const shopPaused = siteStatus.mode === "shop_pause";
   const previewingMaintenance = siteStatus.mode === "full";
@@ -130,10 +134,22 @@ export default function QuizPage() {
   }, [showResult, profile, hydrated]);
 
   useEffect(() => {
-    if (!toast) return undefined;
+    if (!toast || cartAsk) return undefined; // le message reste affiché tant que la question du panier est ouverte
     const t = setTimeout(() => setToast(null), 6000);
     return () => clearTimeout(t);
-  }, [toast]);
+  }, [toast, cartAsk]);
+
+  // Échap ferme la question du panier, ou à défaut la fiche bague ; le quiz et son résultat restent tels quels
+  useEffect(() => {
+    if (!sheet && !cartAsk) return undefined;
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      if (cartAsk) setCartAsk(false);
+      else setSheet(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sheet, cartAsk]);
 
   // --- noms, couleurs et textes des saisons : ceux de l'onglet Familles, avec des valeurs de secours ---
   const seasonNames = useMemo(() => seasonNamesFrom(catalog.families, SEASON_NAMES), [catalog.families]);
@@ -232,6 +248,21 @@ export default function QuizPage() {
     setOccasion(key);
     setOutfitIndex(0);
   };
+  // « Voir la bague » : la fiche de l'accueil s'ouvre par-dessus le quiz ; en la fermant, on retrouve le résultat
+  const openSheet = (product, pick) => setSheet({ product, why: pick && pick.why ? pick.why : "" });
+  const closeSheet = () => setSheet(null);
+  const hasResult = showResult && isValidProfile(profile);
+  // Voir le panier : avec un résultat affiché, on demande si la visiteuse veut revenir au quiz ensuite ;
+  // sans résultat (pendant les questions), il n'y a rien à retrouver : on ouvre simplement le panier de l'accueil.
+  const openCart = () => {
+    if (hasResult) setCartAsk(true);
+    else window.location.assign("/#panier");
+  };
+  const leaveToCart = (comeBack) => {
+    window.location.assign(comeBack && hasResult ? "/" + encodeCartReturnHash(profile) : "/#panier");
+  };
+  const sheetLabel = sheet ? [sheet.product.seasonKey ? seasonNames[sheet.product.seasonKey] : "", sheet.product.collection].filter(Boolean).join(" · ") : "";
+
   const addToCart = (product) => {
     const storage = getLocalStorage();
     const r = addToStoredCart(storage, product.id);
@@ -255,7 +286,7 @@ export default function QuizPage() {
 
       {currentBanner && <BannerBar banner={currentBanner} nowMs={nowMs} onClose={closeBanner} onButton={handleBannerButton} />}
       <ShippingStrip />
-      <QuizHeader cartCount={cartCount} />
+      <QuizHeader cartCount={cartCount} onCartClick={openCart} />
 
       <main className="max-w-6xl mx-auto px-5 sm:px-6 py-10 md:py-14">
         {!showResult && (
@@ -284,6 +315,7 @@ export default function QuizPage() {
             onRestart={restart}
             onEdit={edit}
             onAdd={addToCart}
+            onView={openSheet}
           />
         )}
       </main>
@@ -297,14 +329,35 @@ export default function QuizPage() {
         <div role="status" data-testid="quiz-toast" className={`fixed bottom-5 left-1/2 -translate-x-1/2 z-50 max-w-[92vw] rounded-2xl px-5 py-3 text-sm shadow-xl flex flex-wrap items-center gap-x-4 gap-y-1 ${toast.kind === "ok" ? "bg-[#3b2b39] text-white" : "bg-amber-100 text-amber-900"}`}>
           <span>{toast.text}</span>
           {toast.kind === "ok" && (
-            <a href="/#panier" className="underline underline-offset-2 text-[#f0d79a]">
+            <button type="button" onClick={openCart} data-testid="quiz-toast-cart" className="underline underline-offset-2 text-[#f0d79a]">
               Voir le panier
-            </a>
+            </button>
           )}
         </div>
       )}
 
       <QuizFooter seasons={footerSeasons} />
+
+      {/* Fiche bague : le même composant que sur l'accueil, avec « Pourquoi elle vous va » en plus */}
+      <ProductSheet
+        product={sheet ? sheet.product : null}
+        initialMode="video"
+        label={sheetLabel}
+        onClose={closeSheet}
+        onAdd={(p) => {
+          closeSheet();
+          addToCart(p);
+        }}
+        extra={
+          sheet && sheet.why ? (
+            <p data-testid="sheet-why" className="text-sm leading-6 text-[#54434c] mt-4 rounded-xl bg-[#faf6f8] border border-[#eee2e5] px-4 py-3">
+              <strong className="font-medium">Pourquoi elle vous va.</strong> {sheet.why}
+            </p>
+          ) : null
+        }
+      />
+
+      <QuizCartDialog open={cartAsk} onStay={() => setCartAsk(false)} onYes={() => leaveToCart(true)} onNo={() => leaveToCart(false)} />
     </div>
   );
 }

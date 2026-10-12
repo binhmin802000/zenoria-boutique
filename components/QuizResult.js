@@ -38,7 +38,7 @@ function Dots({ colors, className = "h-6 w-6 border-2 border-white shadow" }) {
   return (colors || []).map((d, i) => <i key={i} className={`rounded-full ${className}`} style={{ background: d }} />);
 }
 
-export default function QuizResult({ profile, rec, views, catalog, productsBySlug, occasion, outfitIndex, onOccasion, onOutfit, onRestart, onEdit, onAdd }) {
+export default function QuizResult({ profile, rec, views, catalog, productsBySlug, occasion, outfitIndex, onOccasion, onOutfit, onRestart, onEdit, onAdd, onView }) {
   const revRef = useRef(null);
   const headingRef = useRef(null);
   const [barVisible, setBarVisible] = useState(false);
@@ -191,9 +191,15 @@ export default function QuizResult({ profile, rec, views, catalog, productsBySlu
                   <strong className="font-medium">Pourquoi elle vous va.</strong> {p.why}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <a href={`/#bague=${encodeURIComponent(p.collection.slug)}`} className="rounded-full border border-[#b88d9f] px-4 py-1.5 text-sm text-[#54434c] hover:bg-[#f5edf1]">
-                    Voir la bague
-                  </a>
+                  {prod && onView ? (
+                    <button type="button" onClick={() => onView(prod, p)} data-testid="quiz-view" className="rounded-full border border-[#b88d9f] px-4 py-1.5 text-sm text-[#54434c] hover:bg-[#f5edf1]">
+                      Voir la bague
+                    </button>
+                  ) : (
+                    <a href={`/#bague=${encodeURIComponent(p.collection.slug)}`} data-testid="quiz-view-link" className="rounded-full border border-[#b88d9f] px-4 py-1.5 text-sm text-[#54434c] hover:bg-[#f5edf1]">
+                      Voir la bague
+                    </a>
+                  )}
                   {prod && (
                     <button type="button" onClick={() => onAdd(prod)} data-testid="quiz-add" className="rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-4 py-1.5 text-sm">
                       Ajouter au panier

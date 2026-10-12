@@ -992,12 +992,10 @@ export default function ZenoriaShop() {
                   )}
                 </div>
               </div>
-              {selectedFamily ? (
+              {selectedFamily && (
                 <button onClick={() => chooseFamily(null)} className="text-sm border-b border-[#6d4e5c]">
                   Voir toute la collection
                 </button>
-              ) : (
-                <button className="text-sm border-b border-[#6d4e5c]">Voir toute la collection</button>
               )}
             </div>
 
@@ -1097,9 +1095,9 @@ export default function ZenoriaShop() {
         <SavoirFaire product={products[0]} media={siteMedia.savoir_faire_photo} />
 
         {/* PHILOSOPHIE */}
-        <section id="philosophie" className="grid lg:grid-cols-2 min-h-[540px]">
-          <div className="bg-gradient-to-br from-[#d8c4d9] via-[#f5e8e6] to-[#dbc9a9] grid place-items-center p-12">
-            <div className="h-80 w-80 rounded-full border border-white/60 bg-white/30 shadow-2xl grid place-items-center">
+        <section id="philosophie" className="grid grid-cols-1 lg:grid-cols-2 min-h-[540px]">
+          <div className="bg-gradient-to-br from-[#d8c4d9] via-[#f5e8e6] to-[#dbc9a9] grid grid-cols-1 place-items-center p-6 sm:p-12">
+            <div className="w-80 max-w-full aspect-square rounded-full border border-white/60 bg-white/30 shadow-2xl grid place-items-center">
               <CrystalLogo mode={logo} />
             </div>
           </div>

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Gem, Palette, Link2, Circle } from "lucide-react";
 import { getMediaUrl } from "@/lib/supabase";
+import RingHandsVideo from "@/components/RingHandsVideo";
 
 // ============================================================
 // SECTION « SAVOIR-FAIRE » — présentation de la fabrication
@@ -47,7 +48,7 @@ const STEPS = [
 
 // media : photo dédiée gérée depuis /admin (onglet « Contenu du site »), { path }.
 // Sans photo dédiée, on garde la première photo de la première collection.
-export default function SavoirFaire({ product, media }) {
+export default function SavoirFaire({ product, media, accent }) {
   const [imgError, setImgError] = useState(false);
   const customPath = media && media.path ? media.path : null;
   const photoSrc = customPath
@@ -56,6 +57,9 @@ export default function SavoirFaire({ product, media }) {
     ? getMediaUrl(product.photos[0], product.slug)
     : null;
   const photoAlt = customPath ? "Une bague Zenoria réalisée à la main" : `Bague ${product ? product.name : ""} réalisée à la main`;
+
+  // Couleur du cœur, du halo et des étincelles de l'animation : l'accent de la saison active (secours : le mauve Zenoria)
+  const heartColor = /^#[0-9a-fA-F]{6}$/.test(accent || "") ? accent : "#8f6075";
 
   return (
     <section id="savoir-faire" className="bg-[#fbf8f4] py-24">
@@ -141,6 +145,11 @@ export default function SavoirFaire({ product, media }) {
             non affiliée à Swarovski.
           </p>
         </motion.div>
+      </div>
+
+      {/* Animation « Le geste » : jouée une seule fois quand elle entre dans l'écran */}
+      <div className="max-w-4xl mx-auto px-6 mt-20">
+        <RingHandsVideo crystalColor={heartColor} />
       </div>
     </section>
   );

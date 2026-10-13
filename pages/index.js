@@ -936,7 +936,7 @@ export default function ZenoriaShop() {
         </section>
 
         {/* SAVOIR-FAIRE */}
-        <SavoirFaire product={products[0]} media={siteMedia.savoir_faire_photo} />
+        <SavoirFaire product={products[0]} media={siteMedia.savoir_faire_photo} accent={(families.find((f) => f.key === fxSeason) || {}).accent} />
 
         {/* PHILOSOPHIE */}
         <section id="philosophie" className="grid grid-cols-1 lg:grid-cols-2 min-h-[540px]">

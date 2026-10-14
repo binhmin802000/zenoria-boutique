@@ -78,16 +78,16 @@ test("formatPrice : euros, virgule, espace insécable", () => {
   assert.equal(U.formatPrice(1234.5).replace(/\u202f|\u00a0/g, " "), "1 234,50 €");
 });
 test("getAvailability : en stock, stock partiel, rupture (mêmes textes que dans le panier)", () => {
-  assert.equal(U.BACKORDER_LEAD_TIME, "5 jours");
+  assert.equal(U.BACKORDER_LEAD_TIME, "30 jours");
   assert.deepEqual(U.getAvailability({ stock: 5 }), { state: "in-stock", stock: 5, label: "5 disponibles", detail: "" });
   assert.deepEqual(U.getAvailability({ stock: 1 }), { state: "in-stock", stock: 1, label: "1 disponible", detail: "" });
   const partial = U.getAvailability({ stock: 3 }, 5);
   assert.equal(partial.state, "partial-backorder");
   assert.equal(partial.label, "3 disponibles");
-  assert.equal(partial.detail, "2 exemplaires fabriqués sur commande · délai 5 jours");
-  assert.equal(U.getAvailability({ stock: 3 }, 4).detail, "1 exemplaire fabriqué sur commande · délai 5 jours");
+  assert.equal(partial.detail, "2 exemplaires fabriqués sur commande · délai 30 jours");
+  assert.equal(U.getAvailability({ stock: 3 }, 4).detail, "1 exemplaire fabriqué sur commande · délai 30 jours");
   const out = U.getAvailability({ stock: 0 });
-  assert.deepEqual([out.state, out.label, out.detail], ["backorder", "Rupture de stock", "Fabriquée sur commande · délai 5 jours"]);
+  assert.deepEqual([out.state, out.label, out.detail], ["backorder", "Épuisé", "Fabriquée sur commande · délai 30 jours"]);
 });
 test("getAvailability : stock absent ou faux -> rupture, sans erreur", () => {
   for (const p of [{}, { stock: null }, { stock: "5" }, { stock: -2 }]) assert.equal(U.getAvailability(p).state, "backorder", JSON.stringify(p));

@@ -3,7 +3,7 @@ import { Info, RefreshCw, ArrowRight } from "lucide-react";
 import Mannequin from "@/components/Mannequin";
 import SeasonIcon from "@/components/SeasonIcon";
 import { getMediaUrl } from "@/lib/supabase";
-import { HAIR, EYES, SKIN, SEASON_WHY, metalRemark, traitLabels, borderlineNote } from "@/lib/colorEngine";
+import { HAIR, EYES, SKIN, SEASON_WHY, traitLabels, borderlineNote } from "@/lib/colorEngine";
 import { OCCASIONS, AVOID, outfitFor, occasionByKey, flatteringGarment } from "@/lib/quizOutfits";
 
 // ============================================================
@@ -140,11 +140,6 @@ export default function QuizResult({ profile, rec, views, catalog, productsBySlu
                 {choice("Cheveux", h)}
                 {choice("Yeux", e)}
                 {choice("Peau", s)}
-                {(profile.metal === 1 || profile.metal === -1) && (
-                  <span className="inline-flex items-center gap-2 rounded-full bg-white border border-[#e3d3da] px-3 py-1 text-sm">
-                    <span className="text-[#8b737e] text-xs">Métal</span> {profile.metal === 1 ? "Or" : "Argent"}
-                  </span>
-                )}
                 <span className="text-[#8f6075]" aria-hidden="true"><ArrowRight size={16} /></span>
                 <span className="font-serif text-lg text-[#412f3b]">{P.name}</span>
               </div>
@@ -215,13 +210,10 @@ export default function QuizResult({ profile, rec, views, catalog, productsBySlu
             <strong className="font-medium text-[#54434c]">Peu de bagues {P.name} pour l&apos;instant.</strong> Nous avons complété avec la saison voisine.
           </div>
         )}
-        <div className="rounded-2xl bg-[#faf6f8] border border-[#eee2e5] px-5 py-3.5 text-sm text-[#6b5a63] leading-6" data-testid="quiz-metal-remark">
-          <strong className="font-medium text-[#54434c]">Une remarque sur la monture.</strong> {metalRemark(result.primary)}
-        </div>
         <div className="rounded-2xl bg-[#faf6f8] border border-[#eee2e5] px-5 py-3.5 text-sm text-[#6b5a63] leading-6 flex gap-3" data-testid="quiz-handmade">
           <span className="mt-0.5 text-[#8f6075] shrink-0"><Info size={16} /></span>
           <span>
-            <strong className="font-medium text-[#54434c]">Faite à la main, à l&apos;image près.</strong> Chaque bague est façonnée à la main : de légères variations de teinte d&apos;une pièce à l&apos;autre sont normales, et la couleur affichée à l&apos;écran peut différer de celle du cristal.
+            <strong className="font-medium text-[#54434c]">Façonnée à la main, à l&apos;image près.</strong> Chaque bague est façonnée à la main : de légères variations de teinte d&apos;une pièce à l&apos;autre sont normales, et la couleur affichée à l&apos;écran peut différer de celle du cristal.
           </span>
         </div>
       </div>

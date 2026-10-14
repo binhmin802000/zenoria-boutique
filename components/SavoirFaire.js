@@ -8,8 +8,8 @@ import RingAnimationSection from "@/components/RingAnimationSection";
 // SECTION « SAVOIR-FAIRE » — présentation de la fabrication
 //
 // Contenu basé uniquement sur les informations fournies :
-// - bagues entièrement faites à la main
-// - 50 mini cristaux (ou perles) Swarovski par bague, de couleurs différentes selon le modèle
+// - bagues entièrement façonnées à la main
+// - 50 mini cristaux Swarovski par bague, de couleurs différentes selon le modèle
 // - un cabochon central, de couleur différente selon le modèle
 // - cristaux superposés et liés par un fil de nylon
 // - montés sur une bague en laiton de couleur cuivre
@@ -27,7 +27,7 @@ const STEPS = [
   {
     icon: Palette,
     title: "Le choix des couleurs",
-    text: "Chaque modèle suit sa propre palette : les mini cristaux Swarovski, ou perles, sont choisis dans des couleurs différentes pour composer l'harmonie de la bague.",
+    text: "Chaque modèle suit sa propre palette : les mini cristaux Swarovski sont choisis dans des couleurs différentes pour composer l'harmonie de la bague.",
   },
   {
     icon: Gem,
@@ -37,12 +37,12 @@ const STEPS = [
   {
     icon: Link2,
     title: "L'assemblage à la main",
-    text: "Les 50 mini cristaux Swarovski, ou perles, sont superposés puis liés grâce à un fil de nylon, un geste réalisé entièrement à la main.",
+    text: "Superposés puis liés par un fil de nylon, les 50 mini cristaux Swarovski prennent forme entre nos mains, avec la précision et l'exigence que demande chaque bague.",
   },
   {
     icon: Circle,
     title: "La monture en laiton cuivré",
-    text: "L'ensemble est posé sur une bague en laiton de couleur cuivre, qui encadre la création.",
+    text: "Les cristaux reposent sur une monture en laiton aux reflets cuivrés, traitée d'un vernis spécial pour métaux, qui protège la peau et encadre la création.",
   },
 ];
 
@@ -110,7 +110,7 @@ export default function SavoirFaire({ product, media, accent }) {
           </h2>
           <p className="text-[#6e6268] leading-7 max-w-xl mb-8">
             Chez Zenoria, chaque bague est entièrement réalisée à la main. Cinquante mini cristaux
-            Swarovski, ou perles, sont assemblés autour d&apos;un cabochon central, dans une
+            Swarovski sont assemblés autour d&apos;un cabochon central, dans une
             palette de couleurs pensée pour chaque modèle.
           </p>
 

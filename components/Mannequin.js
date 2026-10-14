@@ -31,8 +31,8 @@ export default function Mannequin({ hair, eye, skin, garment, label = "Mannequin
           <radialGradient id={`${uid}-iris`} cx="50%" cy="45%" r="60%">
             <stop offset="0" stopColor="#000" stopOpacity=".0"/><stop offset=".72" stopColor="#000" stopOpacity=".10"/><stop offset="1" stopColor="#000" stopOpacity=".38"/>
           </radialGradient>
-          <clipPath id={`${uid}-clipL`}><path d="M142 207 Q161 192 180 207 Q161 221 142 207Z"/></clipPath>
-          <clipPath id={`${uid}-clipR`}><path d="M220 207 Q239 192 258 207 Q239 221 220 207Z"/></clipPath>
+          <clipPath id={`${uid}-clipL`}><path d="M142 207 Q161 192 180 207 Q161 215.5 142 207Z"/></clipPath>
+          <clipPath id={`${uid}-clipR`}><path d="M220 207 Q239 192 258 207 Q239 215.5 220 207Z"/></clipPath>
           <clipPath id={`${uid}-circ`}><circle cx="200" cy="262" r="198"/></clipPath>
         </defs>
 
@@ -60,8 +60,8 @@ export default function Mannequin({ hair, eye, skin, garment, label = "Mannequin
           {/* visage */}
           <path data-part="skin" className="zq-t" fill={c.skin} d="M200 112 C150 112 122 150 122 206 C122 252 144 296 174 314 C190 323 210 323 226 314 C256 296 278 252 278 206 C278 150 250 112 200 112Z"/>
           <path d="M200 112 C150 112 122 150 122 206 C122 252 144 296 174 314 C190 323 210 323 226 314 C256 296 278 252 278 206 C278 150 250 112 200 112Z" fill={`url(#${uid}-face)`}/>
-          <ellipse data-part="blush" className="zq-t" fill={c.blush} opacity=".38" cx="150" cy="248" rx="20" ry="12"/>
-          <ellipse data-part="blush" className="zq-t" fill={c.blush} opacity=".38" cx="250" cy="248" rx="20" ry="12"/>
+          <ellipse data-part="blush" className="zq-t" fill={c.blush} opacity=".5" cx="149" cy="243" rx="22" ry="13"/>
+          <ellipse data-part="blush" className="zq-t" fill={c.blush} opacity=".5" cx="251" cy="243" rx="22" ry="13"/>
 
           {/* sourcils */}
           <path data-part="brow" className="zq-t" fill={c.brow} d="M140 183 Q160 170 183 179 Q162 177 142 189Z"/>
@@ -69,7 +69,7 @@ export default function Mannequin({ hair, eye, skin, garment, label = "Mannequin
 
           {/* yeux */}
           <g transform="translate(161 207) scale(1.22) translate(-161 -207)">
-            <path d="M142 207 Q161 192 180 207 Q161 221 142 207Z" fill="#fbfbfb"/>
+            <path d="M142 207 Q161 192 180 207 Q161 215.5 142 207Z" fill="#fbfbfb"/>
             <g clipPath={`url(#${uid}-clipL)`}>
               <circle data-part="eye" className="zq-t" fill={c.eye} cx="162" cy="207" r="14"/>
               <circle cx="162" cy="207" r="14" fill={`url(#${uid}-iris)`}/>
@@ -78,10 +78,10 @@ export default function Mannequin({ hair, eye, skin, garment, label = "Mannequin
               <path d="M142 207 Q161 186 180 207 Q161 196 142 207Z" fill="#000" opacity=".16"/>
             </g>
             <path data-part="lash" className="zq-t" stroke={c.lash} d="M141 208 Q161 189 181 208" fill="none" strokeWidth="3.4" strokeLinecap="round"/>
-            <path d="M146 213 Q161 222 176 213" fill="none" stroke="#000" strokeOpacity=".10" strokeWidth="1.6" strokeLinecap="round"/>
+            <path d="M146 208.6 Q161 217.6 176 208.6" fill="none" stroke="#000" strokeOpacity=".10" strokeWidth="1.6" strokeLinecap="round"/>
           </g>
           <g transform="translate(239 207) scale(1.22) translate(-239 -207)">
-            <path d="M220 207 Q239 192 258 207 Q239 221 220 207Z" fill="#fbfbfb"/>
+            <path d="M220 207 Q239 192 258 207 Q239 215.5 220 207Z" fill="#fbfbfb"/>
             <g clipPath={`url(#${uid}-clipR)`}>
               <circle data-part="eye" className="zq-t" fill={c.eye} cx="238" cy="207" r="14"/>
               <circle cx="238" cy="207" r="14" fill={`url(#${uid}-iris)`}/>
@@ -90,7 +90,7 @@ export default function Mannequin({ hair, eye, skin, garment, label = "Mannequin
               <path d="M220 207 Q239 186 258 207 Q239 196 220 207Z" fill="#000" opacity=".16"/>
             </g>
             <path data-part="lash" className="zq-t" stroke={c.lash} d="M219 208 Q239 189 259 208" fill="none" strokeWidth="3.4" strokeLinecap="round"/>
-            <path d="M224 213 Q239 222 254 213" fill="none" stroke="#000" strokeOpacity=".10" strokeWidth="1.6" strokeLinecap="round"/>
+            <path d="M224 208.6 Q239 217.6 254 208.6" fill="none" stroke="#000" strokeOpacity=".10" strokeWidth="1.6" strokeLinecap="round"/>
           </g>
 
           {/* nez */}
@@ -98,8 +98,11 @@ export default function Mannequin({ hair, eye, skin, garment, label = "Mannequin
           <path d="M190 264 Q200 270 210 264" fill="none" stroke="#000" strokeOpacity=".18" strokeWidth="2.2" strokeLinecap="round"/>
 
           {/* bouche */}
-          <path data-part="lip" className="zq-t" fill={c.lip} d="M175 288 Q187 280 200 285 Q213 280 225 288 Q212 304 200 305 Q188 304 175 288Z"/>
-          <path d="M175 288 Q200 294 225 288" fill="none" stroke="#000" strokeOpacity=".18" strokeWidth="1.6" strokeLinecap="round"/>
+          <path data-part="lip" className="zq-t" fill={c.lip} d="M171 284 Q186 277 200 281 Q214 277 229 284 Q200 299 171 284Z"/>
+          <path data-part="lip" className="zq-t" fill={c.lip} opacity=".92" d="M174 287 Q200 302 226 287 Q215 306 200 307 Q185 306 174 287Z"/>
+          <path d="M171 284 Q200 299 229 284" fill="none" stroke="#000" strokeOpacity=".28" strokeWidth="1.8" strokeLinecap="round"/>
+          <path d="M168 280 Q165 285 170 290" fill="none" stroke="#000" strokeOpacity=".14" strokeWidth="1.6" strokeLinecap="round"/>
+          <path d="M232 280 Q235 285 230 290" fill="none" stroke="#000" strokeOpacity=".14" strokeWidth="1.6" strokeLinecap="round"/>
 
           {/* cheveux, avant (raie sur le côté) */}
           <path data-part="hair" className="zq-t" fill={c.hair} d="M200 54 C132 54 108 112 112 176 C122 150 142 128 170 118 C196 132 232 140 262 138 C276 156 284 178 288 204 C296 150 276 54 200 54Z"/>

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { Check, Info } from "lucide-react";
+import { Check } from "lucide-react";
 import Mannequin from "@/components/Mannequin";
 import { HAIR, EYES, SKIN } from "@/lib/colorEngine";
 import { QUIZ_STEPS } from "@/lib/quizState";
@@ -12,13 +12,7 @@ import { QUIZ_STEPS } from "@/lib/quizState";
 // Nombre de colonnes de la grille de teintes selon la question (les classes restent écrites ici : Tailwind ne lit pas lib/)
 const COLS = { hair: "grid-cols-4", eye: "grid-cols-3", skin: "grid-cols-4" };
 
-const METAL_CHOICES = [
-  { value: 1, label: "L'or me va mieux" },
-  { value: -1, label: "L'argent me va mieux" },
-  { value: 0, label: "Je ne sais pas" },
-];
-
-export default function QuizSteps({ profile, step, onPick, onMetal, onBack, onNext, showWhy, onToggleWhy }) {
+export default function QuizSteps({ profile, step, onPick, onBack, onNext }) {
   const st = QUIZ_STEPS[step];
   const selected = profile[st.key];
   const last = step === QUIZ_STEPS.length - 1;
@@ -112,39 +106,6 @@ export default function QuizSteps({ profile, step, onPick, onMetal, onBack, onNe
           })}
         </div>
 
-        {st.key === "skin" && (
-          <div className="mt-6 rounded-2xl bg-[#faf6f8] border border-[#eee2e5] p-4" data-testid="quiz-metal">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-sm font-medium">Pour affiner (facultatif)</div>
-              <button type="button" onClick={onToggleWhy} aria-expanded={showWhy} data-testid="quiz-why-toggle" className="inline-flex items-center gap-1.5 text-xs text-[#8f6075] underline underline-offset-2">
-                <Info size={14} /> Pourquoi cette question ?
-              </button>
-            </div>
-            <div className="text-xs text-[#756a70] mt-1">Entre un bijou doré et un bijou argenté, lequel vous va le mieux ?</div>
-            <div className="flex flex-wrap gap-2 mt-3" role="group" aria-label="Métal qui vous va le mieux">
-              {METAL_CHOICES.map((m) => (
-                <button
-                  key={m.value}
-                  type="button"
-                  onClick={() => onMetal(m.value)}
-                  aria-pressed={profile.metal === m.value}
-                  data-testid="quiz-metal-choice"
-                  data-value={m.value}
-                  className={`rounded-full border px-4 h-9 text-sm ${profile.metal === m.value ? "bg-[#8f6075] text-white border-[#8f6075]" : "bg-white border-[#d9c5cc] text-[#54434c] hover:bg-[#f5edf1]"}`}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-            {showWhy && (
-              <div className="mt-4 rounded-xl bg-white border border-[#eee2e5] px-4 py-3 text-[13px] leading-6 text-[#54434c] space-y-2" data-testid="quiz-why-text">
-                <p>Les stylistes observent quel métal flatte le plus le visage : l&apos;or éclaire souvent les teintes chaudes, l&apos;argent les teintes froides. C&apos;est un repère utile, car la couleur de la peau ou des cheveux peut être faussée par une coloration ou un bronzage.</p>
-                <p>Nos bagues sont montées sur laiton de couleur cuivre, un métal chaud. Votre réponse nous permet de vous dire honnêtement si c&apos;est la pierre ou la monture qui fait l&apos;accord.</p>
-                <p className="text-[#756a70]">Elle nuance votre résultat sans le décider à elle seule.</p>
-              </div>
-            )}
-          </div>
-        )}
 
         <div className="flex items-center justify-between mt-8">
           <button

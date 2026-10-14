@@ -102,7 +102,7 @@ export function QuizHeader({ cartCount = 0, onCartClick }) {
 export function ShippingStrip() {
   return (
     <div className="bg-[#342434] text-white/85 text-[11px] py-2 px-4 text-center tracking-wide">
-      Livraison offerte dès {FREE_SHIPPING_THRESHOLD} € · Créations faites à la main en cristaux Swarovski · Paiement sécurisé
+      Livraison offerte dès {FREE_SHIPPING_THRESHOLD} € · Créations façonnées à la main en cristaux Swarovski · Paiement sécurisé
     </div>
   );
 }

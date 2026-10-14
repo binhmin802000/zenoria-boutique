@@ -281,7 +281,7 @@ export default function QuizPage() {
       <MediaGuard />
       <Head>
         <title>Quiz couleurs — Zenoria</title>
-        <meta name="description" content="Choisissez la couleur de vos cheveux, de vos yeux et de votre peau : Zenoria vous conseille les bagues faites à la main et les couleurs de vêtements qui vous mettent en valeur." />
+        <meta name="description" content="Choisissez la couleur de vos cheveux, de vos yeux et de votre peau : Zenoria vous conseille les bagues façonnées à la main et les couleurs de vêtements qui vous mettent en valeur." />
       </Head>
 
       {currentBanner && <BannerBar banner={currentBanner} nowMs={nowMs} onClose={closeBanner} onButton={handleBannerButton} />}
@@ -298,7 +298,7 @@ export default function QuizPage() {
                 Trois choix, un mannequin : à chaque réponse, ses couleurs changent. Nous en déduisons les bagues et les vêtements qui vous mettent en valeur.
               </p>
             </div>
-            <QuizSteps profile={profile} step={step} onPick={pick} onMetal={chooseMetal} onBack={back} onNext={next} showWhy={showWhy} onToggleWhy={() => setShowWhy(!showWhy)} />
+            <QuizSteps profile={profile} step={step} onPick={pick} onBack={back} onNext={next} />
           </>
         )}
         {showResult && rec && (

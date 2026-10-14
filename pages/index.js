@@ -606,7 +606,7 @@ export default function ZenoriaShop() {
     <MediaGuard />
       <Head>
         <title>Zenoria — L&apos;énergie du cristal, l&apos;harmonie de l&apos;âme</title>
-        <meta name="description" content="Bagues faites à la main en cristaux Swarovski, rassemblées en quatre saisons : Printemps, Été, Automne et Hiver." />
+        <meta name="description" content="Bagues façonnées à la main en cristaux Swarovski, rassemblées en quatre saisons : Printemps, Été, Automne et Hiver." />
       </Head>
 
       {previewingMaintenance && (
@@ -628,7 +628,7 @@ export default function ZenoriaShop() {
       )}
 
       <div className="bg-[#342434] text-white/85 text-[11px] py-2 px-4 text-center tracking-wide">
-        Livraison offerte dès {FREE_SHIPPING_THRESHOLD} € · Créations faites à la main en cristaux Swarovski · Paiement sécurisé
+        Livraison offerte dès {FREE_SHIPPING_THRESHOLD} € · Créations façonnées à la main en cristaux Swarovski · Paiement sécurisé
       </div>
 
       <header className="sticky top-0 z-40 bg-[#fbf8f4]/95 backdrop-blur border-b border-[#eadfe4]">
@@ -728,14 +728,14 @@ export default function ZenoriaShop() {
           <div className="max-w-7xl mx-auto px-6 py-20 grid lg:grid-cols-2 items-center gap-14 relative z-10">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
               <div className="text-xs uppercase tracking-[.3em] text-[#8b6578] mb-5">
-                {products.length > 0 ? `${products.length} collections · ` : ""}Faites à la main · 4 saisons
+                {products.length > 0 ? `${products.length} collections · ` : ""}Façonnées à la main · 4 saisons
               </div>
               <h1 className="font-serif text-6xl md:text-8xl leading-none mb-5 text-[#513642]">ZENORIA</h1>
               <p className="font-serif italic text-2xl md:text-3xl text-[#594856] mb-5">
                 L&apos;énergie du cristal,<br />l&apos;harmonie de l&apos;âme.
               </p>
               <p className="max-w-lg text-[#6e6268] leading-7 mb-8">
-                Des bagues faites à la main, façonnées avec soin en cristaux Swarovski et rassemblées en quatre saisons de couleurs. Trouvez celle qui s&apos;accorde à votre teint, à vos yeux et à vos cheveux.
+                Façonnées à la main avec exigence et précision, nos bagues en cristaux Swarovski suivent les quatre saisons pour sublimer celles qui les portent. Trouvez celle qui s&apos;accorde à votre teint, à vos yeux et à vos cheveux.
               </p>
               <div className="flex flex-wrap gap-3">
                 <Button
@@ -763,7 +763,7 @@ export default function ZenoriaShop() {
               </div>
               <div className="absolute right-0 bottom-8 rounded-2xl bg-white/65 backdrop-blur p-4 shadow-lg">
                 <Gem className="text-[#9b6480] mb-2" />
-                <div className="font-serif">Faite à la main</div>
+                <div className="font-serif">Façonnée à la main</div>
                 <div className="text-xs text-[#756a70]">Cristaux Swarovski</div>
               </div>
             </motion.div>
@@ -778,7 +778,7 @@ export default function ZenoriaShop() {
                 <div className="text-xs tracking-[.3em] text-[#9c7285] uppercase mb-3">Une palette pour chaque saison</div>
                 <h2 className="font-serif text-4xl">Quelle saison vous ressemble ?</h2>
                 <p className="text-[#6e6268] mt-3 max-w-2xl mx-auto leading-7">
-                  Chaque saison réunit des bagues dont les couleurs s&apos;accordent entre elles, et avec votre carnation.
+                  Chaque saison réunit des bagues dont les teintes se répondent, pour révéler votre carnation.
                 </p>
               </div>
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4" data-testid="season-cards">
@@ -964,7 +964,7 @@ export default function ZenoriaShop() {
           <div className="rounded-[2.5rem] p-8 md:p-12 grid lg:grid-cols-[1.2fr_.8fr] gap-10 items-center" style={{ background: "linear-gradient(120deg,#eee3f5,#f6e3df)" }}>
             <div>
               <div className="text-xs tracking-[.3em] text-[#956d83] uppercase mb-3">Quiz couleurs</div>
-              <h2 className="font-serif text-4xl mb-4">Quelle bague vous va le mieux ?</h2>
+              <h2 className="font-serif text-4xl mb-4">Quelle bague vous convient le mieux ?</h2>
               <p className="text-[#6d6068] leading-7 mb-6">
                 Choisissez la couleur de vos cheveux, de vos yeux et de votre peau. Nous vous proposons les bagues — et les couleurs de vêtements — qui vous mettent en valeur.
               </p>

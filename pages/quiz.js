@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Head from "next/head";
 import { supabase } from "@/lib/supabase";
+import { DEFAULT_SHIPPING, fetchShippingSetting } from "@/lib/shippingSettings";
 import { useSiteStatus } from "@/lib/siteStatus";
 import MediaGuard from "@/components/MediaGuard";
 import BannerBar from "@/components/BannerBar";
@@ -43,7 +44,6 @@ export default function QuizPage() {
   const [profile, setProfile] = useState(EMPTY_PROFILE);
   const [step, setStep] = useState(0);
   const [showResult, setShowResult] = useState(false);
-  const [showWhy, setShowWhy] = useState(false);
   const [occasion, setOccasion] = useState("anniv");
   const [outfitIndex, setOutfitIndex] = useState(0);
   const [hydrated, setHydrated] = useState(false);
@@ -65,6 +65,18 @@ export default function QuizPage() {
   const previewingMaintenance = siteStatus.mode === "full";
 
   // Au chargement : résultat éventuel lu dans l'adresse, panier, heure, bandeaux déjà fermés
+  // Livraison offerte : montant et interrupteur réglés dans l'admin (Contenu du site) ; valeur par défaut tant qu'ils ne sont pas lus
+  const [shippingCfg, setShippingCfg] = useState(DEFAULT_SHIPPING);
+  useEffect(() => {
+    let alive = true;
+    fetchShippingSetting(supabase).then((s) => {
+      if (alive) setShippingCfg(s);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   useEffect(() => {
     const fromHash = typeof window !== "undefined" ? parseResultHash(window.location.hash) : null;
     if (fromHash) {
@@ -211,9 +223,6 @@ export default function QuizPage() {
     const list = QUIZ_STEPS.find((s) => s.key === key);
     if (list && list.list[i]) setAnnounce(`${list.title} : ${list.list[i].name}`);
   }, []);
-  const chooseMetal = useCallback((value) => {
-    setProfile((p) => ({ ...p, metal: p.metal === value ? null : value }));
-  }, []);
   const goTop = () => {
     if (typeof window !== "undefined") window.scrollTo(0, 0);
   };
@@ -237,7 +246,6 @@ export default function QuizPage() {
   const restart = () => {
     setProfile(EMPTY_PROFILE);
     setStep(0);
-    setShowWhy(false);
     setOccasion("anniv");
     setOutfitIndex(0);
     setShowResult(false);
@@ -285,7 +293,7 @@ export default function QuizPage() {
       </Head>
 
       {currentBanner && <BannerBar banner={currentBanner} nowMs={nowMs} onClose={closeBanner} onButton={handleBannerButton} />}
-      <ShippingStrip />
+      <ShippingStrip setting={shippingCfg} />
       <QuizHeader cartCount={cartCount} onCartClick={openCart} />
 
       <main className="max-w-6xl mx-auto px-5 sm:px-6 py-10 md:py-14">

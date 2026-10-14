@@ -17,6 +17,7 @@ import PhotoCropper from "@/components/PhotoCropper";
 import VideoCropper from "@/components/VideoCropper";
 import AdminSeasonFx from "@/components/AdminSeasonFx";
 import AdminRingAnimation from "@/components/AdminRingAnimation";
+import AdminShipping from "@/components/AdminShipping";
 
 // ============================================================
 // ONGLET « CONTENU DU SITE » de l'administration (/admin)
@@ -296,6 +297,9 @@ export default function AdminSiteMedia() {
 
       {/* ANIMATION « LE GESTE » : bague, couleur du cœur, vitesse et mode de lecture */}
       <AdminRingAnimation />
+
+      {/* LIVRAISON OFFERTE : montant et interrupteur */}
+      <AdminShipping />
 
       {/* CADRAGE ET TRAITEMENT DE LA VIDÉO D'ACCUEIL */}
       {videoRequest && (

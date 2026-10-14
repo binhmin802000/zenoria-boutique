@@ -27,12 +27,13 @@ import {
 } from "@/lib/seasons";
 import { pickPublicBanner, bannerKey, readClosedKeys, writeClosedKeys, getSessionStorage } from "@/lib/publicBanner";
 import { SITE_SETTINGS_TABLE, SEASON_FX_KEY, parseSeasonFxSetting, pickFxSeason } from "@/lib/siteSettings";
+import { SHIPPING_KEY, DEFAULT_SHIPPING, parseShippingSetting, qualifiesForFreeShipping, shippingStripText } from "@/lib/shippingSettings";
 
 // ============================================================
 // RÉGLAGES DE LA BOUTIQUE (à adapter facilement)
 // ============================================================
 const SHIPPING_FEE = 4.9;               // frais de livraison sous le seuil (France)
-const FREE_SHIPPING_THRESHOLD = 50;     // livraison offerte à partir de ce montant (après remise)
+// Le seuil de livraison offerte et son interrupteur se règlent dans l'admin (Contenu du site) : voir lib/shippingSettings.js
 const MAX_QTY_PER_PRODUCT = 10;         // quantité max par bague (stock + fabrication sur commande)
 // Le délai de fabrication une fois le stock épuisé (BACKORDER_LEAD_TIME) se règle dans lib/shopUtils.js
 const CART_STORAGE_KEY = "zenoria_cart_v2";
@@ -82,17 +83,17 @@ function mapDbProduct(row) {
 }
 
 // Calcul des montants du panier (sous-total, remise, livraison, total)
-function computeTotals(lines, promo) {
+function computeTotals(lines, promo, shippingCfg = DEFAULT_SHIPPING) {
   const subtotal = round2(lines.reduce((s, l) => s + effectivePrice(l.product) * l.qty, 0));
   let discount = 0;
   if (promo && promo.type === "percent") discount = round2((subtotal * promo.value) / 100);
   if (promo && promo.type === "fixed") discount = Math.min(promo.value, subtotal);
   const discounted = round2(subtotal - discount);
   const freeByPromo = Boolean(promo && promo.type === "shipping");
-  const qualifies = discounted >= FREE_SHIPPING_THRESHOLD;
+  const qualifies = qualifiesForFreeShipping(shippingCfg, discounted);
   const shipping = lines.length === 0 ? 0 : freeByPromo || qualifies ? 0 : SHIPPING_FEE;
   const total = round2(discounted + shipping);
-  const remaining = round2(Math.max(0, FREE_SHIPPING_THRESHOLD - discounted));
+  const remaining = shippingCfg.enabled ? round2(Math.max(0, shippingCfg.threshold - discounted)) : 0;
   return { subtotal, discount, shipping, total, remaining, freeShipping: lines.length > 0 && shipping === 0 };
 }
 
@@ -233,6 +234,7 @@ export default function ZenoriaShop() {
   const [bannerRows, setBannerRows] = useState([]);
   const [closedBanners, setClosedBanners] = useState([]);
   const [fxSetting, setFxSetting] = useState(() => parseSeasonFxSetting(null)); // réglage de l'animation (onglet « Contenu du site » de /admin) : automatique tant qu'il n'est pas lu
+  const [shippingCfg, setShippingCfg] = useState(DEFAULT_SHIPPING); // livraison offerte : montant et interrupteur (onglet « Contenu du site » de /admin), par défaut tant qu'ils ne sont pas lus
   const [fxClicked, setFxClicked] = useState(null); // saison choisie par un clic : elle donne son ambiance à la page
   const [nowMs, setNowMs] = useState(null); // renseigné après l'affichage : le rendu du serveur ne dépend jamais de l'heure
 
@@ -253,7 +255,7 @@ export default function ZenoriaShop() {
         supabase.from("site_media").select("*"),
         optionalQuery(supabase.from("families").select("*").order("sort_order", { ascending: true })),
         optionalQuery(supabase.from("banners").select("*")),
-        optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").eq("key", SEASON_FX_KEY)),
+        optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").in("key", [SEASON_FX_KEY, SHIPPING_KEY])),
       ]);
       if (!active) return;
 
@@ -277,8 +279,12 @@ export default function ZenoriaShop() {
       setFamilies(visibleFamilies(famRes && famRes.data));
       setBannerRows((banRes && Array.isArray(banRes.data) && banRes.data) || []);
       // Animation : si la table n'existe pas encore (script SQL non exécuté), le site reste en mode automatique
-      const fxRow = fxRes && Array.isArray(fxRes.data) ? fxRes.data[0] : null;
+      const settingRows = fxRes && Array.isArray(fxRes.data) ? fxRes.data : [];
+      const fxRow = settingRows.find((r) => r.key === SEASON_FX_KEY) || null;
+      const shipRow = settingRows.find((r) => r.key === SHIPPING_KEY) || null;
       setFxSetting(parseSeasonFxSetting(fxRow ? fxRow.value : null));
+      // Livraison offerte : si la ligne n'existe pas encore (script SQL non exécuté), le site garde la valeur par défaut
+      setShippingCfg(parseShippingSetting(shipRow ? shipRow.value : null));
 
       try {
         const raw = window.localStorage.getItem(CART_STORAGE_KEY);
@@ -400,8 +406,8 @@ export default function ZenoriaShop() {
   );
   const cartCount = cartLines.reduce((s, l) => s + l.qty, 0);
   const promo = promoCode ? promoCodes[promoCode] : null;
-  const totals = useMemo(() => computeTotals(cartLines, promo), [cartLines, promo]);
-  const progress = Math.min(100, Math.round(((totals.subtotal - totals.discount) / FREE_SHIPPING_THRESHOLD) * 100));
+  const totals = useMemo(() => computeTotals(cartLines, promo, shippingCfg), [cartLines, promo, shippingCfg]);
+  const progress = Math.min(100, Math.round(((totals.subtotal - totals.discount) / shippingCfg.threshold) * 100));
   const cartDensity = pickCartDensity(
     cartLines.length,
     viewportH,
@@ -628,7 +634,7 @@ export default function ZenoriaShop() {
       )}
 
       <div className="bg-[#342434] text-white/85 text-[11px] py-2 px-4 text-center tracking-wide">
-        Livraison offerte dès {FREE_SHIPPING_THRESHOLD} € · Créations façonnées à la main en cristaux Swarovski · Paiement sécurisé
+        {shippingStripText(shippingCfg)}
       </div>
 
       <header className="sticky top-0 z-40 bg-[#fbf8f4]/95 backdrop-blur border-b border-[#eadfe4]">
@@ -1102,6 +1108,8 @@ export default function ZenoriaShop() {
               ) : (
                 <>
                   <div className="flex-none px-5 pt-3 pb-2">
+                    {shippingCfg.enabled && (
+                      <>
                     <div className="flex items-center gap-2 text-xs text-[#54434c]">
                       <Truck size={14} className="text-[#8f6075] shrink-0" />
                       {totals.freeShipping ? (
@@ -1114,8 +1122,10 @@ export default function ZenoriaShop() {
                       <div className="h-full rounded-full bg-[#8f6075] transition-all" style={{ width: `${totals.freeShipping ? 100 : progress}%` }} />
                     </div>
                     <div className="text-[11px] text-[#8b737e] mt-1.5">
-                      Livraison offerte dès {FREE_SHIPPING_THRESHOLD} € en France
+                      Livraison offerte dès {shippingCfg.threshold} € en France
                     </div>
+                      </>
+                    )}
                     {cartNotice && (
                       <div className="text-xs rounded-lg bg-amber-50 text-amber-700 px-3 py-2 mt-2">{cartNotice}</div>
                     )}

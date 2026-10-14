@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { ShoppingBag, Menu, X, Instagram, Heart, Sparkles } from "lucide-react";
+import { DEFAULT_SHIPPING, shippingStripText } from "@/lib/shippingSettings";
 
 // ============================================================
 // EN-TÊTE ET PIED DE PAGE de la page /quiz
@@ -8,9 +9,6 @@ import { ShoppingBag, Menu, X, Instagram, Heart, Sparkles } from "lucide-react";
 // la page se recharge, ce qui garantit que l'ancre ou l'action demandée (ouvrir le panier, une bague, une saison) est lue.
 // Pour l'instant, l'en-tête du quiz n'a ni le bouton de compte ni la recherche : le panier, lui, est partagé.
 // ============================================================
-
-// À garder identique à FREE_SHIPPING_THRESHOLD de pages/index.js
-const FREE_SHIPPING_THRESHOLD = 50;
 
 const NAV = [
   { label: "Collections", href: "/#collections" },
@@ -99,10 +97,10 @@ export function QuizHeader({ cartCount = 0, onCartClick }) {
 }
 
 // Bande de livraison, au-dessus de l'en-tête (comme sur l'accueil)
-export function ShippingStrip() {
+export function ShippingStrip({ setting = DEFAULT_SHIPPING }) {
   return (
     <div className="bg-[#342434] text-white/85 text-[11px] py-2 px-4 text-center tracking-wide">
-      Livraison offerte dès {FREE_SHIPPING_THRESHOLD} € · Créations façonnées à la main en cristaux Swarovski · Paiement sécurisé
+      {shippingStripText(setting)}
     </div>
   );
 }

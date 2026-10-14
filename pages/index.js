@@ -28,6 +28,8 @@ import {
 import { pickPublicBanner, bannerKey, readClosedKeys, writeClosedKeys, getSessionStorage } from "@/lib/publicBanner";
 import { SITE_SETTINGS_TABLE, SEASON_FX_KEY, parseSeasonFxSetting, pickFxSeason } from "@/lib/siteSettings";
 import { SHIPPING_KEY, DEFAULT_SHIPPING, parseShippingSetting, qualifiesForFreeShipping, shippingStripText } from "@/lib/shippingSettings";
+import { SITE_TEXTS_KEY, DEFAULT_TEXTS, resolveSiteTexts } from "@/lib/siteTexts";
+import TextLines from "@/components/TextLines";
 
 // ============================================================
 // RÉGLAGES DE LA BOUTIQUE (à adapter facilement)
@@ -235,6 +237,7 @@ export default function ZenoriaShop() {
   const [closedBanners, setClosedBanners] = useState([]);
   const [fxSetting, setFxSetting] = useState(() => parseSeasonFxSetting(null)); // réglage de l'animation (onglet « Contenu du site » de /admin) : automatique tant qu'il n'est pas lu
   const [shippingCfg, setShippingCfg] = useState(DEFAULT_SHIPPING); // livraison offerte : montant et interrupteur (onglet « Contenu du site » de /admin), par défaut tant qu'ils ne sont pas lus
+  const [siteTexts, setSiteTexts] = useState(DEFAULT_TEXTS); // textes du Savoir-faire et de l'accueil (onglet « Contenu du site » de /admin) : textes d'origine tant qu'ils ne sont pas lus
   const [fxClicked, setFxClicked] = useState(null); // saison choisie par un clic : elle donne son ambiance à la page
   const [nowMs, setNowMs] = useState(null); // renseigné après l'affichage : le rendu du serveur ne dépend jamais de l'heure
 
@@ -255,7 +258,7 @@ export default function ZenoriaShop() {
         supabase.from("site_media").select("*"),
         optionalQuery(supabase.from("families").select("*").order("sort_order", { ascending: true })),
         optionalQuery(supabase.from("banners").select("*")),
-        optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").in("key", [SEASON_FX_KEY, SHIPPING_KEY])),
+        optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").in("key", [SEASON_FX_KEY, SHIPPING_KEY, SITE_TEXTS_KEY])),
       ]);
       if (!active) return;
 
@@ -282,9 +285,12 @@ export default function ZenoriaShop() {
       const settingRows = fxRes && Array.isArray(fxRes.data) ? fxRes.data : [];
       const fxRow = settingRows.find((r) => r.key === SEASON_FX_KEY) || null;
       const shipRow = settingRows.find((r) => r.key === SHIPPING_KEY) || null;
+      const textRow = settingRows.find((r) => r.key === SITE_TEXTS_KEY) || null;
       setFxSetting(parseSeasonFxSetting(fxRow ? fxRow.value : null));
       // Livraison offerte : si la ligne n'existe pas encore (script SQL non exécuté), le site garde la valeur par défaut
       setShippingCfg(parseShippingSetting(shipRow ? shipRow.value : null));
+      // Textes : si la ligne n'existe pas encore, le site garde ses textes d'origine
+      setSiteTexts(resolveSiteTexts(textRow ? textRow.value : null));
 
       try {
         const raw = window.localStorage.getItem(CART_STORAGE_KEY);
@@ -734,14 +740,14 @@ export default function ZenoriaShop() {
           <div className="max-w-7xl mx-auto px-6 py-20 grid lg:grid-cols-2 items-center gap-14 relative z-10">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
               <div className="text-xs uppercase tracking-[.3em] text-[#8b6578] mb-5">
-                {products.length > 0 ? `${products.length} collections · ` : ""}Façonnées à la main · 4 saisons
+                {products.length > 0 ? `${products.length} collections · ` : ""}{siteTexts.hero_label}
               </div>
               <h1 className="font-serif text-6xl md:text-8xl leading-none mb-5 text-[#513642]">ZENORIA</h1>
               <p className="font-serif italic text-2xl md:text-3xl text-[#594856] mb-5">
-                L&apos;énergie du cristal,<br />l&apos;harmonie de l&apos;âme.
+                <TextLines text={siteTexts.hero_tagline} />
               </p>
               <p className="max-w-lg text-[#6e6268] leading-7 mb-8">
-                Façonnées à la main avec exigence et précision, nos bagues en cristaux Swarovski suivent les quatre saisons pour sublimer celles qui les portent. Trouvez celle qui s&apos;accorde à votre teint, à vos yeux et à vos cheveux.
+                <TextLines text={siteTexts.hero_intro} />
               </p>
               <div className="flex flex-wrap gap-3">
                 <Button
@@ -769,8 +775,8 @@ export default function ZenoriaShop() {
               </div>
               <div className="absolute right-0 bottom-8 rounded-2xl bg-white/65 backdrop-blur p-4 shadow-lg">
                 <Gem className="text-[#9b6480] mb-2" />
-                <div className="font-serif">Façonnée à la main</div>
-                <div className="text-xs text-[#756a70]">Cristaux Swarovski</div>
+                <div className="font-serif">{siteTexts.hero_badge_title}</div>
+                <div className="text-xs text-[#756a70]">{siteTexts.hero_badge_sub}</div>
               </div>
             </motion.div>
           </div>
@@ -781,10 +787,10 @@ export default function ZenoriaShop() {
           <section id="seasons" className="relative overflow-hidden">
             <div className="relative max-w-7xl mx-auto px-6 py-20">
               <div className="text-center mb-10">
-                <div className="text-xs tracking-[.3em] text-[#9c7285] uppercase mb-3">Une palette pour chaque saison</div>
-                <h2 className="font-serif text-4xl">Quelle saison vous ressemble ?</h2>
+                <div className="text-xs tracking-[.3em] text-[#9c7285] uppercase mb-3">{siteTexts.seasons_eyebrow}</div>
+                <h2 className="font-serif text-4xl">{siteTexts.seasons_title}</h2>
                 <p className="text-[#6e6268] mt-3 max-w-2xl mx-auto leading-7">
-                  Chaque saison réunit des bagues dont les teintes se répondent, pour révéler votre carnation.
+                  <TextLines text={siteTexts.seasons_intro} />
                 </p>
               </div>
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4" data-testid="season-cards">
@@ -942,7 +948,7 @@ export default function ZenoriaShop() {
         </section>
 
         {/* SAVOIR-FAIRE */}
-        <SavoirFaire product={products[0]} media={siteMedia.savoir_faire_photo} accent={(families.find((f) => f.key === fxSeason) || {}).accent} />
+        <SavoirFaire product={products[0]} media={siteMedia.savoir_faire_photo} accent={(families.find((f) => f.key === fxSeason) || {}).accent} texts={siteTexts} />
 
         {/* PHILOSOPHIE */}
         <section id="philosophie" className="grid grid-cols-1 lg:grid-cols-2 min-h-[540px]">
@@ -954,13 +960,13 @@ export default function ZenoriaShop() {
           <div className="bg-[#3b2b39] text-white p-12 lg:p-20 flex flex-col justify-center">
             <div className="text-xs tracking-[.3em] uppercase text-[#d7b4c3] mb-4">Notre philosophie</div>
             <h2 className="font-serif text-4xl md:text-5xl leading-tight mb-6">
-              Quatre saisons,<br />un geste à la main.
+              <TextLines text={siteTexts.philo_title} />
             </h2>
             <p className="text-white/70 leading-7 max-w-xl">
-              Chaque bague Zenoria est façonnée à la main, avec soin, en cristaux Swarovski. Nous l&apos;avons rangée par saison : une façon de choisir un bijou comme on choisit une couleur, avec le cœur et avec l&apos;œil.
+              <TextLines text={siteTexts.philo_text} />
             </p>
             <Button variant="outline" className="mt-8 w-fit rounded-full border-white/40 bg-transparent text-white">
-              Découvrir notre histoire
+              {siteTexts.philo_button}
             </Button>
           </div>
         </section>
@@ -970,9 +976,9 @@ export default function ZenoriaShop() {
           <div className="rounded-[2.5rem] p-8 md:p-12 grid lg:grid-cols-[1.2fr_.8fr] gap-10 items-center" style={{ background: "linear-gradient(120deg,#eee3f5,#f6e3df)" }}>
             <div>
               <div className="text-xs tracking-[.3em] text-[#956d83] uppercase mb-3">Quiz couleurs</div>
-              <h2 className="font-serif text-4xl mb-4">Quelle bague vous convient le mieux ?</h2>
+              <h2 className="font-serif text-4xl mb-4">{siteTexts.quiz_title}</h2>
               <p className="text-[#6d6068] leading-7 mb-6">
-                Choisissez la couleur de vos cheveux, de vos yeux et de votre peau. Nous vous proposons les bagues — et les couleurs de vêtements — qui vous mettent en valeur.
+                <TextLines text={siteTexts.quiz_text} />
               </p>
               <a
                 href="/quiz"

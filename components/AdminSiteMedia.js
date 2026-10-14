@@ -18,6 +18,7 @@ import VideoCropper from "@/components/VideoCropper";
 import AdminSeasonFx from "@/components/AdminSeasonFx";
 import AdminRingAnimation from "@/components/AdminRingAnimation";
 import AdminShipping from "@/components/AdminShipping";
+import AdminSiteTexts from "@/components/AdminSiteTexts";
 
 // ============================================================
 // ONGLET « CONTENU DU SITE » de l'administration (/admin)
@@ -300,6 +301,9 @@ export default function AdminSiteMedia() {
 
       {/* LIVRAISON OFFERTE : montant et interrupteur */}
       <AdminShipping />
+
+      {/* TEXTES DU SITE : Savoir-faire et page d'accueil */}
+      <AdminSiteTexts />
 
       {/* CADRAGE ET TRAITEMENT DE LA VIDÉO D'ACCUEIL */}
       {videoRequest && (

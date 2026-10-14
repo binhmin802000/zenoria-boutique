@@ -3,6 +3,8 @@ import { motion } from "framer-motion";
 import { Gem, Palette, Link2, Circle } from "lucide-react";
 import { getMediaUrl } from "@/lib/supabase";
 import RingAnimationSection from "@/components/RingAnimationSection";
+import TextLines from "@/components/TextLines";
+import { DEFAULT_TEXTS } from "@/lib/siteTexts";
 
 // ============================================================
 // SECTION « SAVOIR-FAIRE » — présentation de la fabrication
@@ -14,42 +16,18 @@ import RingAnimationSection from "@/components/RingAnimationSection";
 // - cristaux superposés et liés par un fil de nylon
 // - montés sur une bague en laiton de couleur cuivre
 //
-// Pour modifier un texte, changez simplement les phrases ci-dessous.
+// Les textes se modifient depuis /admin (Contenu du site > Textes du site). Les textes d'origine sont dans lib/siteTexts.js.
 // ============================================================
 
-const KEY_FIGURES = [
-  { value: "50", label: "mini cristaux Swarovski par bague" },
-  { value: "1", label: "cabochon central" },
-  { value: "100 %", label: "fait main" },
-];
-
-const STEPS = [
-  {
-    icon: Palette,
-    title: "Le choix des couleurs",
-    text: "Chaque modèle suit sa propre palette : les mini cristaux Swarovski sont choisis dans des couleurs différentes pour composer l'harmonie de la bague.",
-  },
-  {
-    icon: Gem,
-    title: "Le cabochon central",
-    text: "Au cœur de la bague, un cabochon aux couleurs propres à chaque modèle devient le point de départ de la création.",
-  },
-  {
-    icon: Link2,
-    title: "L'assemblage à la main",
-    text: "Superposés puis liés par un fil de nylon, les 50 mini cristaux Swarovski prennent forme entre nos mains, avec la précision et l'exigence que demande chaque bague.",
-  },
-  {
-    icon: Circle,
-    title: "La monture en laiton cuivré",
-    text: "Les cristaux reposent sur une monture en laiton aux reflets cuivrés, traitée d'un vernis spécial pour métaux, qui protège la peau et encadre la création.",
-  },
-];
+const STEP_ICONS = [Palette, Gem, Link2, Circle];
 
 // media : photo dédiée gérée depuis /admin (onglet « Contenu du site »), { path }.
 // Sans photo dédiée, on garde la première photo de la première collection.
-export default function SavoirFaire({ product, media, accent }) {
+export default function SavoirFaire({ product, media, accent, texts = DEFAULT_TEXTS }) {
   const [imgError, setImgError] = useState(false);
+  // Textes : ceux de l'admin (Contenu du site > Textes du site), ou à défaut les textes d'origine (lib/siteTexts.js)
+  const figures = [1, 2, 3].map((n) => ({ value: texts[`sf_fig${n}_value`], label: texts[`sf_fig${n}_label`] }));
+  const steps = STEP_ICONS.map((icon, i) => ({ icon, title: texts[`sf_step${i + 1}_title`], text: texts[`sf_step${i + 1}_text`] }));
   const customPath = media && media.path ? media.path : null;
   const photoSrc = customPath
     ? getMediaUrl(customPath, "site")
@@ -102,21 +80,15 @@ export default function SavoirFaire({ product, media, accent }) {
         >
           <div className="text-xs tracking-[.3em] text-[#9c7285] uppercase mb-3">Notre savoir-faire</div>
           <h2 className="font-serif text-4xl leading-tight text-[#412f3b] mb-5">
-            Une bague,
-            <br />
-            cinquante cristaux Swarovski,
-            <br />
-            un geste à la main.
+            <TextLines text={texts.sf_title} />
           </h2>
           <p className="text-[#6e6268] leading-7 max-w-xl mb-8">
-            Chez Zenoria, chaque bague est entièrement réalisée à la main. Cinquante mini cristaux
-            Swarovski sont assemblés autour d&apos;un cabochon central, dans une
-            palette de couleurs pensée pour chaque modèle.
+            <TextLines text={texts.sf_intro} />
           </p>
 
           <div className="grid grid-cols-3 gap-3 mb-9 max-w-md">
-            {KEY_FIGURES.map((f) => (
-              <div key={f.label} className="rounded-2xl bg-white border border-[#eee2e5] px-3 py-4 text-center">
+            {figures.map((f, i) => (
+              <div key={i} className="rounded-2xl bg-white border border-[#eee2e5] px-3 py-4 text-center">
                 <div className="font-serif text-3xl text-[#8f6075]">{f.value}</div>
                 <div className="text-[11px] leading-4 text-[#756a70] mt-1">{f.label}</div>
               </div>
@@ -124,8 +96,8 @@ export default function SavoirFaire({ product, media, accent }) {
           </div>
 
           <ol className="space-y-5">
-            {STEPS.map((s, i) => (
-              <li key={s.title} className="flex gap-4">
+            {steps.map((s, i) => (
+              <li key={i} className="flex gap-4">
                 <div className="shrink-0 h-11 w-11 rounded-full bg-gradient-to-br from-[#f5e8e6] to-[#e6d6ea] border border-white grid place-items-center text-[#8f6075]">
                   <s.icon size={19} />
                 </div>

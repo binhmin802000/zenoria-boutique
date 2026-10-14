@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Gem, Palette, Link2, Circle } from "lucide-react";
 import { getMediaUrl } from "@/lib/supabase";
-import RingHandsVideo from "@/components/RingHandsVideo";
+import RingAnimationSection from "@/components/RingAnimationSection";
 
 // ============================================================
 // SECTION « SAVOIR-FAIRE » — présentation de la fabrication
@@ -147,10 +147,8 @@ export default function SavoirFaire({ product, media, accent }) {
         </motion.div>
       </div>
 
-      {/* Animation « Le geste » : jouée une seule fois quand elle entre dans l'écran */}
-      <div className="max-w-4xl mx-auto px-6 mt-20">
-        <RingHandsVideo crystalColor={heartColor} />
-      </div>
+      {/* Animation « Le geste » : bague, couleur du cœur, vitesse et lecture réglées depuis /admin (Contenu du site) */}
+      <RingAnimationSection accent={heartColor} />
     </section>
   );
 }

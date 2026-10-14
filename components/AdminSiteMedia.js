@@ -16,6 +16,7 @@ import { CIRCLE_ASPECT, CIRCLE_FRAME_SIZE, CIRCLE_PHOTO_MAX_SIDE, HERO_VIDEO_MAX
 import PhotoCropper from "@/components/PhotoCropper";
 import VideoCropper from "@/components/VideoCropper";
 import AdminSeasonFx from "@/components/AdminSeasonFx";
+import AdminRingAnimation from "@/components/AdminRingAnimation";
 
 // ============================================================
 // ONGLET « CONTENU DU SITE » de l'administration (/admin)
@@ -292,6 +293,9 @@ export default function AdminSiteMedia() {
 
       {/* ANIMATION SAISONNIÈRE DE LA PAGE D'ACCUEIL (automatique, forcée ou désactivée) */}
       <AdminSeasonFx />
+
+      {/* ANIMATION « LE GESTE » : bague, couleur du cœur, vitesse et mode de lecture */}
+      <AdminRingAnimation />
 
       {/* CADRAGE ET TRAITEMENT DE LA VIDÉO D'ACCUEIL */}
       {videoRequest && (

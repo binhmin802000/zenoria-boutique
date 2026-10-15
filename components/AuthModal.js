@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -16,8 +16,8 @@ function translateError(message) {
   return "Une erreur est survenue. Merci de réessayer.";
 }
 
-export default function AuthModal({ open, onClose }) {
-  const [mode, setMode] = useState("login"); // "login" | "signup" | "reset"
+export default function AuthModal({ open, onClose, initialMode = "login" }) {
+  const [mode, setMode] = useState(initialMode); // "login" | "signup" | "reset" | "update"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -34,6 +34,12 @@ export default function AuthModal({ open, onClose }) {
     setInfo("");
     setShowPassword(false);
   };
+
+  useEffect(() => {
+    if (open) {
+      setMode(initialMode);
+    }
+  }, [open, initialMode]);
 
   const switchMode = (next) => {
     setMode(next);
@@ -93,6 +99,24 @@ export default function AuthModal({ open, onClose }) {
     }
   };
 
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault();
+    setError("");
+    setInfo("");
+    if (password !== confirmPassword) {
+      setError("Les mots de passe ne correspondent pas.");
+      return;
+    }
+    setLoading(true);
+    const { error: err } = await supabase.auth.updateUser({ password });
+    setLoading(false);
+    if (err) {
+      setError(translateError(err.message));
+    } else {
+      setInfo("Mot de passe mis à jour avec succès.");
+    }
+  };
+
   return (
     <AnimatePresence>
       {open && (
@@ -117,6 +141,7 @@ export default function AuthModal({ open, onClose }) {
             <div className="text-xs uppercase tracking-[.3em] text-[#9c7285] mb-2">Zenoria</div>
             <h3 className="font-serif text-3xl mb-6">
               {mode === "login" && "Connexion"}
+              {mode === "update" && "Nouveau mot de passe"}
               {mode === "signup" && "Créer un compte"}
               {mode === "reset" && "Mot de passe oublié"}
             </h3>
@@ -256,6 +281,45 @@ export default function AuthModal({ open, onClose }) {
                     Retour à la connexion
                   </button>
                 </p>
+              </form>
+            )}
+            {mode === "update" && (
+              <form onSubmit={handleUpdatePassword} className="space-y-4">
+                <p className="text-sm text-[#70656a]">
+                  Choisissez un nouveau mot de passe pour votre compte Zenoria.
+                </p>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-[#9a7384]" size={18} />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    placeholder="Nouveau mot de passe (6 caractères min.)"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full rounded-full border border-[#eadfe4] pl-11 pr-11 py-3 outline-none focus:border-[#8f6075]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-[#9a7384]"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-[#9a7384]" size={18} />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    placeholder="Confirmer le mot de passe"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full rounded-full border border-[#eadfe4] pl-11 pr-4 py-3 outline-none focus:border-[#8f6075]"
+                  />
+                </div>
+                <Button type="submit" disabled={loading} className="w-full rounded-full h-12 bg-[#8f6075] hover:bg-[#71485b]">
+                  {loading ? "Enregistrement..." : "Enregistrer"}
+                </Button>
               </form>
             )}
           </motion.div>

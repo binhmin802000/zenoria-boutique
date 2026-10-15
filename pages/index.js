@@ -243,6 +243,7 @@ export default function ZenoriaShop() {
 
   // --- Authentification (Supabase) ---
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState("login");
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -349,6 +350,10 @@ export default function ZenoriaShop() {
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       const currentUser = session ? session.user : null;
       setUser(currentUser);
+      if (_event === "PASSWORD_RECOVERY") {
+        setAuthModalMode("update");
+        setAuthModalOpen(true);
+      }
       checkAdmin(currentUser);
     });
 
@@ -1301,7 +1306,7 @@ export default function ZenoriaShop() {
       />
 
       {/* AUTHENTIFICATION */}
-      <AuthModal open={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+      <AuthModal open={authModalOpen} onClose={() => { setAuthModalOpen(false); setAuthModalMode("login"); }} initialMode={authModalMode} />
     </div>
   );
 }

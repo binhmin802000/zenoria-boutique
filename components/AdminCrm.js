@@ -37,12 +37,17 @@ export function CrmAccounts() {
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
-    const { data, error: err } = await supabase.rpc("admin_list_accounts");
+    const [{ data, error: err }, profilesRes] = await Promise.all([
+      supabase.rpc("admin_list_accounts"),
+      supabase.from("customer_profiles").select("user_id, first_name, last_name, phone"),
+    ]);
     if (err) {
       setError(friendlyError(err));
       setAccounts([]);
     } else {
-      setAccounts(data || []);
+      const profilesByUserId = new Map((profilesRes.data || []).map((p) => [p.user_id, p]));
+      const merged = (data || []).map((a) => ({ ...a, profile: profilesByUserId.get(a.account_id) || null }));
+      setAccounts(merged);
     }
     setLoading(false);
   }, []);
@@ -91,8 +96,8 @@ export function CrmAccounts() {
       </div>
 
       <div data-testid="crm-notice" className="mb-5 rounded-xl bg-[#faf6f8] border border-[#eee2e5] px-4 py-3 text-[12px] leading-5 text-[#54434c]">
-        Pour l&apos;instant, le CRM ne contient que les comptes créés sur le site : une adresse e-mail et des dates. Les fiches clientes, les adresses et les commandes
-        viendront avec la base de données et le paiement : voir l&apos;onglet « À venir ».
+        Les comptes affichent désormais le prénom, le nom et le téléphone quand la cliente les a renseignés.
+        Les adresses de livraison et l'historique des commandes viendront avec le paiement en ligne : voir l'onglet « À venir ».
       </div>
 
       {error && (
@@ -133,6 +138,8 @@ export function CrmAccounts() {
           <thead>
             <tr className="bg-[#f5edf1] text-left text-[#8b737e]">
               <th className="px-4 py-3 font-medium">E-mail</th>
+              <th className="px-4 py-3 font-medium">Nom</th>
+              <th className="px-4 py-3 font-medium">Téléphone</th>
               <th className="px-4 py-3 font-medium">Inscrit(e) le</th>
               <th className="px-4 py-3 font-medium">Adresse</th>
               <th className="px-4 py-3 font-medium">Dernière connexion</th>
@@ -141,7 +148,7 @@ export function CrmAccounts() {
           <tbody>
             {!loading && !error && visible.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-[#8b737e]">
+                <td colSpan={6} className="px-4 py-6 text-center text-[#8b737e]">
                   {q ? "Aucun compte ne correspond à cette recherche." : "Aucun compte client pour le moment."}
                 </td>
               </tr>
@@ -152,6 +159,12 @@ export function CrmAccounts() {
                   <span className="font-medium whitespace-nowrap">{a.email || "—"}</span>
                   {a.is_admin_account && <span className="ml-2 rounded-full bg-[#f5edf1] text-[#8f6075] px-2 py-0.5 text-[11px]">Admin</span>}
                 </td>
+                <td className="px-4 py-3 whitespace-nowrap text-[#54434c]">
+                  {a.profile && (a.profile.first_name || a.profile.last_name)
+                    ? [a.profile.first_name, a.profile.last_name].filter(Boolean).join(" ")
+                    : "—"}
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap text-[#54434c]">{a.profile?.phone || "—"}</td>
                 <td className="px-4 py-3 whitespace-nowrap text-[#54434c]">{formatDateTime(a.created_at)}</td>
                 <td className="px-4 py-3">
                   <span className={`rounded-full px-3 py-1 text-xs whitespace-nowrap ${a.confirmed_at ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
@@ -175,11 +188,6 @@ export function CrmAccounts() {
 
 // Ce qui viendra, avec ce dont chaque élément dépend. Aucune date : elles dépendent de la base de données et du paiement.
 const ROADMAP = [
-  {
-    title: "Fiches clientes",
-    text: "Nom, téléphone facultatif, préférences, historique des échanges.",
-    needs: "Base de données, phase 1 (tables de clientes).",
-  },
   {
     title: "Adresses de livraison et de facturation",
     text: "Une ou plusieurs adresses par cliente, reprises à la commande.",

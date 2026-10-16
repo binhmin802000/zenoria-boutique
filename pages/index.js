@@ -11,6 +11,7 @@ import { supabase, getMediaUrl } from "@/lib/supabase";
 import { useSiteStatus } from "@/lib/siteStatus";
 import { formatReturnAt } from "@/lib/maintenance";
 import AuthModal from "@/components/AuthModal";
+import PaymentConfirmationModal from "@/components/PaymentConfirmationModal";
 import MediaGuard from "@/components/MediaGuard";
 import SavoirFaire from "@/components/SavoirFaire";
 import BannerBar from "@/components/BannerBar";
@@ -221,6 +222,9 @@ export default function ZenoriaShop() {
   const [promoOpen, setPromoOpen] = useState(false);
   const [cartNotice, setCartNotice] = useState("");
   const [checkoutNotice, setCheckoutNotice] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState("");
+  const [paymentConfirmationOpen, setPaymentConfirmationOpen] = useState(false);
   const [viewportH, setViewportH] = useState(800);
 
   const [fav, setFav] = useState([]);
@@ -372,6 +376,18 @@ export default function ZenoriaShop() {
     }
   }, []);
 
+  // Détecte le retour réussi d'un paiement Stripe (paramètre ?paiement=succes),
+  // vide le panier, affiche la confirmation, puis nettoie l'adresse.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("paiement") === "succes") {
+      clearCart();
+      setPaymentConfirmationOpen(true);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
+
   // Enregistre le panier à chaque modification
   useEffect(() => {
     if (!cartLoaded) return;
@@ -488,6 +504,32 @@ export default function ZenoriaShop() {
     setCartItems([]);
     setPromoCode("");
     setPromoOpen(false);
+  };
+
+  const handleCheckout = async () => {
+    setCheckoutNotice(false);
+    setCheckoutError("");
+    setCheckoutLoading(true);
+    try {
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: cartItems.map((it) => ({ id: it.id, qty: it.qty })),
+          promoCode: promoCode || null,
+        }),
+      });
+      const data = await res.json();
+      if (data && data.ok && data.url) {
+        window.location.href = data.url;
+      } else {
+        setCheckoutError((data && data.error) || "Impossible de lancer le paiement. Merci de réessayer.");
+        setCheckoutLoading(false);
+      }
+    } catch (e) {
+      setCheckoutError("Impossible de contacter le service de paiement. Vérifiez votre connexion et réessayez.");
+      setCheckoutLoading(false);
+    }
   };
 
   const applyPromo = (e) => {
@@ -1265,12 +1307,12 @@ export default function ZenoriaShop() {
                     </div>
 
                     <button
-                      onClick={() => setCheckoutNotice(true)}
-                      disabled={shopPaused}
+                      onClick={handleCheckout}
+                      disabled={shopPaused || checkoutLoading}
                       data-testid="checkout-button"
                       className={`w-full rounded-full bg-[#82576c] hover:bg-[#6d4659] text-white text-sm font-medium transition disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#82576c] ${tightFooter ? "h-11" : "h-12"}`}
                     >
-                      {shopPaused ? "Commandes temporairement fermées" : "Commander"}
+                      {shopPaused ? "Commandes temporairement fermées" : checkoutLoading ? "Redirection vers le paiement..." : "Commander"}
                     </button>
                     {quizReturn && (
                       <a href={quizReturn} data-testid="cart-back-quiz" className="flex w-full items-center justify-center rounded-full border border-[#8f6075] text-[#8f6075] hover:bg-[#8f6075] hover:text-white text-sm font-medium transition h-11">
@@ -1281,12 +1323,12 @@ export default function ZenoriaShop() {
                       <p data-testid="pause-note" className="text-[11px] text-center rounded-lg bg-amber-50 text-amber-800 px-3 py-1.5">
                         La boutique est en pause{pauseReturn ? ` jusqu'au ${pauseReturn}` : ""}. Votre panier est conservé sur cet appareil.
                       </p>
-                    ) : checkoutNotice ? (
-                      <p className="text-[11px] text-center rounded-lg bg-[#f5edf1] text-[#6b4a5b] px-3 py-1.5">
-                        Le paiement en ligne sera ajouté à la prochaine étape. Aucune transaction n&apos;est possible pour le moment.
+                    ) : checkoutError ? (
+                      <p className="text-[11px] text-center rounded-lg bg-red-50 text-red-600 px-3 py-1.5">
+                        {checkoutError}
                       </p>
                     ) : (
-                      <p className="text-[11px] text-center text-[#7e7378]">Paiement de démonstration, aucune transaction réelle.</p>
+                      <p className="text-[11px] text-center text-[#7e7378]">Paiement sécurisé via Stripe.</p>
                     )}
                   </div>
                 </>
@@ -1307,6 +1349,9 @@ export default function ZenoriaShop() {
 
       {/* AUTHENTIFICATION */}
       <AuthModal open={authModalOpen} onClose={() => { setAuthModalOpen(false); setAuthModalMode("login"); }} initialMode={authModalMode} />
+
+      {/* CONFIRMATION DE PAIEMENT (retour de Stripe Checkout) */}
+      <PaymentConfirmationModal open={paymentConfirmationOpen} onClose={() => setPaymentConfirmationOpen(false)} />
     </div>
   );
 }

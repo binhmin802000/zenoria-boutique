@@ -159,7 +159,8 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ ok: true, url: session.url });
   } catch (err) {
-    console.error("[checkout]", err && err.message ? err.message : err);
-    return res.status(500).json({ ok: false, error: "erreur lors de la création du paiement" });
+    const msg = err && err.message ? err.message : String(err);
+    console.error("[checkout]", msg);
+    return res.status(500).json({ ok: false, error: "erreur lors de la création du paiement", _debug: msg });
   }
 }

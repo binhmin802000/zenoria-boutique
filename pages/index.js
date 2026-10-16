@@ -224,6 +224,7 @@ export default function ZenoriaShop() {
   const [checkoutNotice, setCheckoutNotice] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
+  const [cgvAccepted, setCgvAccepted] = useState(false);
   const [paymentConfirmationOpen, setPaymentConfirmationOpen] = useState(false);
   const [viewportH, setViewportH] = useState(800);
 
@@ -509,6 +510,10 @@ export default function ZenoriaShop() {
   const handleCheckout = async () => {
     setCheckoutNotice(false);
     setCheckoutError("");
+    if (!cgvAccepted) {
+      setCheckoutError("Merci d'accepter les conditions générales de vente avant de valider votre commande.");
+      return;
+    }
     setCheckoutLoading(true);
     try {
       const res = await fetch("/api/checkout", {
@@ -1306,9 +1311,25 @@ export default function ZenoriaShop() {
                       </div>
                     </div>
 
+                    <label className="flex items-start gap-2 text-[12px] text-[#54434c] leading-5">
+                      <input
+                        type="checkbox"
+                        checked={cgvAccepted}
+                        onChange={(e) => { setCgvAccepted(e.target.checked); setCheckoutError(""); }}
+                        data-testid="cgv-checkbox"
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-[#8f6075]"
+                      />
+                      <span>
+                        J&apos;ai lu et j&apos;accepte les{" "}
+                        <a href="/mentions-legales" target="_blank" rel="noopener noreferrer" className="underline text-[#8f6075]">
+                          conditions générales de vente et les mentions légales
+                        </a>
+                      </span>
+                    </label>
+
                     <button
                       onClick={handleCheckout}
-                      disabled={shopPaused || checkoutLoading}
+                      disabled={shopPaused || checkoutLoading || !cgvAccepted}
                       data-testid="checkout-button"
                       className={`w-full rounded-full bg-[#82576c] hover:bg-[#6d4659] text-white text-sm font-medium transition disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#82576c] ${tightFooter ? "h-11" : "h-12"}`}
                     >

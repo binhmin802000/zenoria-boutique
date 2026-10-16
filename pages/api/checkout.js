@@ -137,6 +137,13 @@ export default async function handler(req, res) {
       cancel_url: `${origin}/?paiement=annule`,
       metadata: {
         promo_code: normalizedPromoCode || "",
+        cart_items: JSON.stringify(
+          lines.map((l) => ({ id: l.product.id, name: l.product.name, price: effectivePrice(l.product), qty: l.qty }))
+        ),
+        subtotal: String(totals.subtotal),
+        discount: String(totals.discount),
+        shipping: String(totals.shipping),
+        total: String(totals.total),
       },
     };
 

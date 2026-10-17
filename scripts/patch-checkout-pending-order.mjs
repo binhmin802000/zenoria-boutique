@@ -6,6 +6,14 @@
 // "paid" au lieu d'en creer une nouvelle. Objectif : voir enfin les
 // paniers abandonnes avant paiement dans /admin > Commandes.
 //
+// CORRECTION (apres echec constate en test) : la table orders impose la
+// contrainte "orders_user_or_guest" (user_id IS NOT NULL OR guest_email
+// IS NOT NULL). A ce stade du parcours, Stripe n'a pas encore demande
+// l'e-mail a la cliente (ca se passe sur la page Stripe, apres la
+// redirection) : on insere donc un e-mail temporaire explicite
+// ("en_attente@zenoria.local"), qui sera ECRASE par le vrai e-mail des que
+// le webhook confirme le paiement (voir patch-webhook-pending-order.mjs).
+//
 // Ce script modifie pages/api/checkout.js :
 //   1. Importe supabaseAdmin (seule cle autorisee a ecrire dans orders).
 //   2. Juste apres le calcul des totaux (etape 5), cree la commande en
@@ -39,16 +47,48 @@ if (!fs.existsSync(filePath)) {
 const raw = fs.readFileSync(filePath, "utf8");
 const eol = raw.includes("\r\n") ? "\r\n" : "\n";
 
-if (raw.includes("pendingOrderId")) {
-  console.log("✓ Rien à modifier : la création de commande « pending » est déjà en place.");
-  process.exit(0);
-}
-
 function countOccurrences(haystack, needle) {
   if (!needle) return 0;
   return haystack.split(needle).length - 1;
 }
 
+const PENDING_GUEST_EMAIL = "en_attente@zenoria.local";
+
+// ---------------------------------------------------------------------
+// Idempotence : si le marqueur de la version CORRIGEE est déjà présent,
+// rien à faire. Si l'ANCIENNE version (sans guest_email temporaire) est
+// présente, on la détecte séparément pour la corriger proprement.
+// ---------------------------------------------------------------------
+const alreadyFixed = raw.includes(PENDING_GUEST_EMAIL);
+const hasOldPendingBlock = raw.includes("pendingOrderId") && !alreadyFixed;
+
+if (alreadyFixed) {
+  console.log("✓ Rien à modifier : la création de commande « pending » (version corrigée) est déjà en place.");
+  process.exit(0);
+}
+
+if (hasOldPendingBlock) {
+  // Corrige uniquement la ligne fautive de l'ancienne version, sans tout reconstruire.
+  const oldLine = '          guest_email: null,';
+  const oldCount = countOccurrences(raw, oldLine);
+  if (oldCount !== 1) {
+    console.error(`✗ 1 repère à adapter — aucun fichier n'a été modifié.\n`);
+    console.error(`  • ligne « guest_email: null, » (version non corrigée) attendue, ${oldCount} correspondance(s) trouvée(s), 1 attendue`);
+    console.error("\nVérifiez le contenu actuel de pages/api/checkout.js et collez-moi les lignes concernées.");
+    process.exit(1);
+  }
+  const newLine = `          guest_email: "${PENDING_GUEST_EMAIL}", // temporaire : remplace par le vrai e-mail une fois le webhook confirme`;
+  const out = raw.replace(oldLine, newLine);
+  fs.writeFileSync(filePath, out, "utf8");
+  console.log(`✓ ${filePath} : correction appliquée (guest_email temporaire au lieu de null, respecte la contrainte orders_user_or_guest).`);
+  console.log("\nTerminé.");
+  process.exit(0);
+}
+
+// ---------------------------------------------------------------------
+// Repères, pour une installation complète depuis zéro (fichier n'ayant
+// jamais reçu aucune des deux versions du patch)
+// ---------------------------------------------------------------------
 const anchors = {};
 
 anchors.supabaseImport = 'import { supabase } from "@/lib/supabase";';
@@ -110,13 +150,17 @@ const pendingCreationBlock =
   "    // paiement confirme, au lieu d'en creer une nouvelle. Non bloquant : si" + eol +
   "    // cette ecriture echoue, le paiement continue normalement (le webhook" + eol +
   "    // creera alors la commande complete en filet de securite, comme avant)." + eol +
+  "    // guest_email temporaire : la contrainte orders_user_or_guest exige un" + eol +
+  "    // user_id ou un guest_email non nul ; Stripe ne connait pas encore le" + eol +
+  "    // vrai e-mail a ce stade (il sera demande sur sa propre page). Le webhook" + eol +
+  "    // remplace cette valeur par le vrai e-mail des que le paiement est confirme." + eol +
   "    let pendingOrderId = null;" + eol +
   "    try {" + eol +
   "      const { data: pendingOrder, error: pendingErr } = await supabaseAdmin" + eol +
   '        .from("orders")' + eol +
   "        .insert({" + eol +
   "          user_id: null," + eol +
-  "          guest_email: null," + eol +
+  `          guest_email: "${PENDING_GUEST_EMAIL}", // temporaire : remplace par le vrai e-mail une fois le webhook confirme` + eol +
   '          status: "pending",' + eol +
   '          is_test: !String(process.env.STRIPE_SECRET_KEY || "").startsWith("sk_live_"),' + eol +
   "          subtotal: totals.subtotal," + eol +
@@ -190,6 +234,7 @@ fs.writeFileSync(filePath, out, "utf8");
 console.log(`✓ ${filePath} : création de commande « pending » ajoutée`);
 console.log("  • import supabaseAdmin");
 console.log("  • commande + order_items créés en « pending » dès le calcul des totaux");
+console.log("  • guest_email temporaire (respecte la contrainte orders_user_or_guest)");
 console.log("  • order_id transmis dans les métadonnées Stripe");
 console.log("  • stripe_session_id lié à la commande pending après création de la session");
 console.log("\nTerminé.");

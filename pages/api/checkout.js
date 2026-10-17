@@ -120,7 +120,7 @@ export default async function handler(req, res) {
         .from("orders")
         .insert({
           user_id: null,
-          guest_email: null,
+          guest_email: "en_attente@zenoria.local", // temporaire : remplace par le vrai e-mail une fois le webhook confirme
           status: "pending",
           is_test: !String(process.env.STRIPE_SECRET_KEY || "").startsWith("sk_live_"),
           subtotal: totals.subtotal,

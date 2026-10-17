@@ -439,7 +439,7 @@ export default function ZenoriaShop() {
   const cartDensity = pickCartDensity(
     cartLines.length,
     viewportH,
-    (promoOpen && !promo ? 44 : 0) + (cartNotice ? 44 : 0) + (quizReturn ? 56 : 0)
+    (promoOpen && !promo ? 44 : 0) + (cartNotice ? 44 : 0) + (quizReturn ? 56 : 0) + (!user ? 24 : 0) + 44
   );
   const tightFooter = cartDensity === "dense";
   const dens = CART_DENSITY[cartDensity];
@@ -1310,6 +1310,30 @@ export default function ZenoriaShop() {
                         <span>{formatPrice(totals.total)}</span>
                       </div>
                     </div>
+
+                    {!user && (
+                      <p data-testid="account-choice-line" className="text-[12px] text-[#70656a] leading-5">
+                        Déjà cliente ?{" "}
+                        <button
+                          type="button"
+                          onClick={() => { setAuthModalMode("login"); setAuthModalOpen(true); }}
+                          data-testid="account-choice-login"
+                          className="underline text-[#8f6075]"
+                        >
+                          Se connecter
+                        </button>
+                        {" "}·{" "}Nouvelle ?{" "}
+                        <button
+                          type="button"
+                          onClick={() => { setAuthModalMode("signup"); setAuthModalOpen(true); }}
+                          data-testid="account-choice-signup"
+                          className="underline text-[#8f6075]"
+                        >
+                          Créer un compte
+                        </button>
+                        {" "}(facultatif, vous pouvez continuer sans)
+                      </p>
+                    )}
 
                     <label className="flex items-start gap-2 text-[12px] text-[#54434c] leading-5">
                       <input

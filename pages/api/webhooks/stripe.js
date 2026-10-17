@@ -101,6 +101,7 @@ export default async function handler(req, res) {
         user_id: null, // aucun compte relié au paiement pour l'instant (viendra avec le branchement du panier)
         guest_email: customer.email || null,
         status: "paid",
+        is_test: event.livemode === false,
         subtotal: Number(meta.subtotal || 0),
         discount: Number(meta.discount || 0),
         shipping: Number(meta.shipping || 0),

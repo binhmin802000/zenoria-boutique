@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { supabase, getMediaUrl } from "@/lib/supabase";
 
 // ============================================================
 // GROUPE « CRM » de l'administration (/admin)
@@ -212,6 +212,44 @@ function formatOrderPrice(n) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(Number(n) || 0);
 }
 
+// Référence lisible : ZEN-AAAA-MMJJ-NNNN (année, mois+jour de la commande, puis
+// l'identifiant de la commande complété à 4 chiffres). Purement un formatage
+// d'affichage : la vraie clé reste orders.id, aucune nouvelle colonne nécessaire.
+function formatOrderReference(order) {
+  const d = order.created_at ? new Date(order.created_at) : null;
+  const counter = String(order.id).padStart(4, "0");
+  if (!d) return `ZEN-${counter}`;
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `ZEN-${year}-${month}${day}-${counter}`;
+}
+
+// Petite vignette d'un article de commande : reprend la meme logique que
+// CartThumb (pages/index.js) -- photo si disponible, degrade couleur/pierre
+// sinon, cadre neutre si le produit a ete supprime depuis (product_id est
+// alors NULL, product_name reste le seul renseignement disponible).
+function OrderItemThumb({ product }) {
+  const [imgError, setImgError] = useState(false);
+  if (!product) {
+    return <div className="h-8 w-8 shrink-0 rounded-lg bg-[#f5edf1]" />;
+  }
+  const src = product.photos && product.photos[0] ? getMediaUrl(product.photos[0], product.slug) : null;
+  if (src && !imgError) {
+    return (
+      <div className="h-8 w-8 shrink-0 rounded-lg overflow-hidden bg-[#f5edf1]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt="" onError={() => setImgError(true)} className="w-full h-full object-cover object-center" />
+      </div>
+    );
+  }
+  return (
+    <div className={`h-8 w-8 shrink-0 rounded-lg bg-gradient-to-br ${product.color || "from-[#eadfe4] to-[#f5edf1]"} grid place-items-center text-xs`}>
+      {product.stone || ""}
+    </div>
+  );
+}
+
 export function AdminOrders() {
   const [orders, setOrders] = useState([]);
   const [itemsByOrder, setItemsByOrder] = useState({});
@@ -219,13 +257,26 @@ export function AdminOrders() {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [openOrderId, setOpenOrderId] = useState(null);
+  const [statusHistoryByOrder, setStatusHistoryByOrder] = useState({});
+  const [productsById, setProductsById] = useState({});
+  const [datePreset, setDatePreset] = useState("all"); // "today" | "7d" | "30d" | "custom" | "all"
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [includeTestData, setIncludeTestData] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
-    const [{ data: ordersData, error: ordersErr }, { data: itemsData, error: itemsErr }] = await Promise.all([
+    const [
+      { data: ordersData, error: ordersErr },
+      { data: itemsData, error: itemsErr },
+      { data: historyData, error: historyErr },
+      { data: productsData },
+    ] = await Promise.all([
       supabase.from("orders").select("*").order("created_at", { ascending: false }),
       supabase.from("order_items").select("*"),
+      supabase.from("order_status_history").select("*").order("changed_at", { ascending: true }),
+      supabase.from("products").select("id, photos, slug, color, stone"),
     ]);
     if (ordersErr) {
       setError("Impossible de charger les commandes : " + ordersErr.message);
@@ -241,6 +292,15 @@ export function AdminOrders() {
       });
       setItemsByOrder(grouped);
     }
+    if (!historyErr) {
+      const groupedHistory = {};
+      (historyData || []).forEach((h) => {
+        if (!groupedHistory[h.order_id]) groupedHistory[h.order_id] = [];
+        groupedHistory[h.order_id].push(h);
+      });
+      setStatusHistoryByOrder(groupedHistory);
+    }
+    setProductsById(Object.fromEntries((productsData || []).map((p) => [p.id, p])));
     setLoading(false);
   }, []);
 
@@ -248,21 +308,59 @@ export function AdminOrders() {
     load();
   }, [load]);
 
+  const filteredOrders = useMemo(() => {
+    return orders.filter((o) => {
+      if (!includeTestData && o.is_test) return false;
+      if (dateFrom) {
+        const from = new Date(dateFrom + "T00:00:00");
+        if (!o.created_at || new Date(o.created_at) < from) return false;
+      }
+      if (dateTo) {
+        const to = new Date(dateTo + "T23:59:59");
+        if (!o.created_at || new Date(o.created_at) > to) return false;
+      }
+      return true;
+    });
+  }, [orders, includeTestData, dateFrom, dateTo]);
+
   const stats = useMemo(() => {
-    const paid = orders.filter((o) => o.status === "paid" || o.status === "shipped");
+    const paid = filteredOrders.filter((o) => o.status === "paid" || o.status === "shipped");
     const revenue = paid.reduce((s, o) => s + Number(o.total || 0), 0);
     const monthAgo = Date.now() - 30 * 24 * 3600 * 1000;
-    const recent = orders.filter((o) => o.created_at && new Date(o.created_at).getTime() >= monthAgo).length;
-    return { total: orders.length, paid: paid.length, revenue, recent };
-  }, [orders]);
+    const recent = filteredOrders.filter((o) => o.created_at && new Date(o.created_at).getTime() >= monthAgo).length;
+    return { total: filteredOrders.length, paid: paid.length, revenue, recent };
+  }, [filteredOrders]);
 
   const q = query.trim().toLowerCase();
-  const visible = orders.filter((o) => {
+  const visible = filteredOrders.filter((o) => {
     if (!q) return true;
     const email = (o.guest_email || "").toLowerCase();
     const ref = String(o.id);
-    return email.includes(q) || ref.includes(q);
+    const reference = formatOrderReference(o).toLowerCase();
+    return email.includes(q) || ref.includes(q) || reference.includes(q.replace(/\s+/g, ""));
   });
+
+  const setPreset = (preset) => {
+    setDatePreset(preset);
+    const toIso = (d) => d.toISOString().slice(0, 10);
+    const now = new Date();
+    if (preset === "today") {
+      const today = toIso(now);
+      setDateFrom(today);
+      setDateTo(today);
+    } else if (preset === "7d") {
+      const from = new Date(now.getTime() - 6 * 24 * 3600 * 1000);
+      setDateFrom(toIso(from));
+      setDateTo(toIso(now));
+    } else if (preset === "30d") {
+      const from = new Date(now.getTime() - 29 * 24 * 3600 * 1000);
+      setDateFrom(toIso(from));
+      setDateTo(toIso(now));
+    } else {
+      setDateFrom("");
+      setDateTo("");
+    }
+  };
 
   const cards = [
     { label: "Commandes totales", value: stats.total },
@@ -304,16 +402,53 @@ export function AdminOrders() {
         ))}
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <button type="button" onClick={() => setPreset("today")} data-testid="date-preset-today" className={`rounded-full px-3 h-8 text-xs border transition ${datePreset === "today" ? "bg-[#8f6075] text-white border-[#8f6075]" : "border-[#d9c5cc] text-[#54434c] hover:bg-[#f5edf1]"}`}>
+          Aujourd'hui
+        </button>
+        <button type="button" onClick={() => setPreset("7d")} data-testid="date-preset-7d" className={`rounded-full px-3 h-8 text-xs border transition ${datePreset === "7d" ? "bg-[#8f6075] text-white border-[#8f6075]" : "border-[#d9c5cc] text-[#54434c] hover:bg-[#f5edf1]"}`}>
+          7 jours
+        </button>
+        <button type="button" onClick={() => setPreset("30d")} data-testid="date-preset-30d" className={`rounded-full px-3 h-8 text-xs border transition ${datePreset === "30d" ? "bg-[#8f6075] text-white border-[#8f6075]" : "border-[#d9c5cc] text-[#54434c] hover:bg-[#f5edf1]"}`}>
+          30 jours
+        </button>
+        <button type="button" onClick={() => setPreset("all")} data-testid="date-preset-all" className={`rounded-full px-3 h-8 text-xs border transition ${datePreset === "all" ? "bg-[#8f6075] text-white border-[#8f6075]" : "border-[#d9c5cc] text-[#54434c] hover:bg-[#f5edf1]"}`}>
+          Tout
+        </button>
+        <span className="text-[#d9c5cc]">|</span>
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => { setDatePreset("custom"); setDateFrom(e.target.value); }}
+          data-testid="date-from"
+          aria-label="Date de début"
+          className="rounded-full border border-[#eadfe4] bg-white px-3 h-8 text-xs outline-none focus:border-[#8f6075]"
+        />
+        <span className="text-[#8b737e] text-xs">au</span>
+        <input
+          type="date"
+          value={dateTo}
+          onChange={(e) => { setDatePreset("custom"); setDateTo(e.target.value); }}
+          data-testid="date-to"
+          aria-label="Date de fin"
+          className="rounded-full border border-[#eadfe4] bg-white px-3 h-8 text-xs outline-none focus:border-[#8f6075]"
+        />
+      </div>
+
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mb-3">
         <input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Rechercher par e-mail ou numéro de commande"
+          placeholder="Rechercher par référence, e-mail ou numéro de commande"
           aria-label="Rechercher une commande"
           data-testid="orders-search"
           className="w-full sm:w-80 rounded-full border border-[#eadfe4] bg-white px-4 h-10 text-sm outline-none focus:border-[#8f6075]"
         />
+        <label className="flex items-center gap-2 text-sm text-[#54434c]">
+          <input type="checkbox" checked={includeTestData} onChange={(e) => setIncludeTestData(e.target.checked)} data-testid="orders-include-test" className="h-4 w-4" />
+          Afficher aussi les données de test
+        </label>
       </div>
 
       <div className="bg-white rounded-2xl border border-[#eee2e5] overflow-x-auto mb-4">
@@ -338,8 +473,15 @@ export function AdminOrders() {
             )}
             {visible.map((o) => (
               <React.Fragment key={o.id}>
-                <tr className="border-t border-[#eee2e5]" data-testid="orders-row">
-                  <td className="px-4 py-3 whitespace-nowrap text-[#54434c]">#{o.id}</td>
+                <tr
+                  className="border-t border-[#eee2e5] hover:bg-[#faf6f8] cursor-pointer transition"
+                  data-testid="orders-row"
+                  onClick={() => setOpenOrderId(openOrderId === o.id ? null : o.id)}
+                >
+                  <td className="px-4 py-3 whitespace-nowrap text-[#54434c]">
+                    {formatOrderReference(o)}
+                    {o.is_test && <span className="ml-1.5 rounded-full bg-amber-50 text-amber-700 px-1.5 py-0.5 text-[10px] align-middle">TEST</span>}
+                  </td>
                   <td className="px-4 py-3">
                     <span className="font-medium whitespace-nowrap">{o.guest_email || "Compte client"}</span>
                   </td>
@@ -349,8 +491,9 @@ export function AdminOrders() {
                   <td className="px-4 py-3 whitespace-nowrap">
                     <button
                       type="button"
-                      onClick={() => setOpenOrderId(openOrderId === o.id ? null : o.id)}
+                      onClick={(e) => { e.stopPropagation(); setOpenOrderId(openOrderId === o.id ? null : o.id); }}
                       className="text-xs text-[#8f6075] underline"
+                      data-testid="orders-row-clickable"
                     >
                       {openOrderId === o.id ? "Masquer" : "Voir le détail"}
                     </button>
@@ -359,14 +502,49 @@ export function AdminOrders() {
                 {openOrderId === o.id && (
                   <tr className="border-t border-[#eee2e5] bg-[#faf6f8]">
                     <td colSpan={6} className="px-4 py-4">
+                      {o.is_test && (
+                        <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-[12px] px-3 py-2">
+                          Donnée de test : cette commande a été passée en mode test Stripe. Elle n&apos;est pas prise en compte dans les statistiques de production.
+                        </div>
+                      )}
+                      <div className="mb-4">
+                        <div className="text-xs font-medium text-[#8b737e] mb-3">Parcours de la commande</div>
+                        {(() => {
+                          const steps = [
+                            { label: "Panier validé", done: true, date: o.created_at },
+                            { label: "Paiement confirmé", done: Boolean(o.paid_at), date: o.paid_at },
+                            { label: "Expédiée", done: Boolean((statusHistoryByOrder[o.id] || []).find((h) => h.status === "shipped")), date: (statusHistoryByOrder[o.id] || []).find((h) => h.status === "shipped")?.changed_at },
+                            { label: "Livrée", done: Boolean((statusHistoryByOrder[o.id] || []).find((h) => h.status === "delivered")), date: (statusHistoryByOrder[o.id] || []).find((h) => h.status === "delivered")?.changed_at },
+                          ];
+                          return (
+                            <div className="flex items-start">
+                              {steps.map((step, i) => (
+                                <React.Fragment key={step.label}>
+                                  <div className="flex flex-col items-center text-center" style={{ minWidth: 92 }}>
+                                    <span className={`h-3 w-3 rounded-full shrink-0 ${step.done ? "bg-[#8f6075]" : "bg-[#eadfe4]"}`} />
+                                    <span className={`mt-1.5 text-[12px] leading-4 ${step.done ? "text-[#412f3b] font-medium" : "text-[#a79aa1]"}`}>{step.label}</span>
+                                    <span className="text-[10px] text-[#8b737e] leading-4">{step.done && step.date ? formatDateTime(step.date) : step.done ? "" : "En attente"}</span>
+                                  </div>
+                                  {i < steps.length - 1 && (
+                                    <div className={`h-[2px] flex-1 mt-1.5 ${steps[i + 1].done ? "bg-[#8f6075]" : "bg-[#eadfe4]"}`} />
+                                  )}
+                                </React.Fragment>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                      </div>
                       <div className="grid md:grid-cols-2 gap-4">
                         <div>
                           <div className="text-xs font-medium text-[#8b737e] mb-1.5">Articles</div>
-                          <ul className="space-y-1 text-[13px] text-[#54434c]">
+                          <ul className="space-y-2 text-[13px] text-[#54434c]">
                             {(itemsByOrder[o.id] || []).map((it) => (
-                              <li key={it.id} className="flex justify-between">
-                                <span>{it.qty} × {it.product_name}</span>
-                                <span>{formatOrderPrice(it.product_price * it.qty)}</span>
+                              <li key={it.id} className="flex items-center justify-between gap-2">
+                                <span className="flex items-center gap-2 min-w-0">
+                                  <OrderItemThumb product={productsById[it.product_id]} />
+                                  <span className="truncate">{it.qty} × {it.product_name}</span>
+                                </span>
+                                <span className="shrink-0">{formatOrderPrice(it.product_price * it.qty)}</span>
                               </li>
                             ))}
                             {(itemsByOrder[o.id] || []).length === 0 && (
@@ -375,7 +553,7 @@ export function AdminOrders() {
                           </ul>
                         </div>
                         <div>
-                          <div className="text-xs font-medium text-[#8b737e] mb-1.5">Livraison</div>
+                          <div className="text-xs font-medium text-[#8b737e] mb-1.5">Adresse de livraison</div>
                           <p className="text-[13px] text-[#54434c] leading-5">
                             {o.shipping_full_name || "—"}<br />
                             {o.shipping_address_line1 || ""}{o.shipping_address_line2 ? `, ${o.shipping_address_line2}` : ""}<br />

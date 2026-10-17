@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import Head from "next/head";
-import { Plus, Pencil, Trash2, X, LogOut, Tag, Package, ArrowLeft, Upload, Film, Users, Sparkles, Gauge, Wrench, Activity, Settings, LogIn, Clock, Palette } from "lucide-react";
+import { Plus, Pencil, Trash2, X, LogOut, Tag, Package, ArrowLeft, Upload, Film, Users, Sparkles, Gauge, Wrench, Activity, Settings, LogIn, Clock, Palette, ShoppingBag } from "lucide-react";
 import { supabase, getMediaUrl, uploadProductMedia, deleteProductMedia } from "@/lib/supabase";
 import AuthModal from "@/components/AuthModal";
 import AdminConnections from "@/components/AdminConnections";
@@ -15,7 +15,7 @@ import AdminBanners from "@/components/AdminBanners";
 import { isoToParisLocal } from "@/lib/parisTime";
 import { legacyFamilyText, validateDominantColors, cleanDominantColors, DOMINANT_MAX, DOMINANT_NAME_MAX } from "@/lib/families";
 import { promoCodeStatus, validatePromoDates, formatParis } from "@/lib/banners";
-import { CrmAccounts, CrmRoadmap } from "@/components/AdminCrm";
+import { CrmAccounts, CrmRoadmap, AdminOrders } from "@/components/AdminCrm";
 import { ADMIN_NAV, DEFAULT_NAV, parseAdminHash, buildAdminHash, isAuthCallbackHash, technicalAlertLevel } from "@/lib/adminNav";
 import { worstLevel } from "@/lib/quota";
 
@@ -146,6 +146,7 @@ const TAB_ICONS = {
   promos: Tag,
   site: Sparkles,
   comptes: Users,
+  commandes: ShoppingBag,
   avenir: Clock,
   connexions: LogIn,
   quotas: Gauge,
@@ -960,6 +961,8 @@ export default function AdminPage() {
         {tab === "site" && <AdminSiteMedia />}
 
         {tab === "comptes" && <CrmAccounts />}
+
+        {tab === "commandes" && <AdminOrders />}
 
         {tab === "avenir" && <CrmRoadmap />}
 

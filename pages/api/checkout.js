@@ -135,6 +135,8 @@ export default async function handler(req, res) {
       line_items: stripeLineItems,
       success_url: `${origin}/?paiement=succes&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/?paiement=annule`,
+      shipping_address_collection: { allowed_countries: ["FR"] },
+      phone_number_collection: { enabled: true },
       metadata: {
         promo_code: normalizedPromoCode || "",
         cart_items: JSON.stringify(

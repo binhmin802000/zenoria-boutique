@@ -18,6 +18,7 @@
 
 import Stripe from "stripe";
 import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { SITE_SETTINGS_TABLE } from "@/lib/siteSettings";
 import { SHIPPING_KEY, DEFAULT_SHIPPING, parseShippingSetting } from "@/lib/shippingSettings";
 import { computeTotals, effectivePrice } from "@/lib/cartTotals";
@@ -107,6 +108,49 @@ export default async function handler(req, res) {
     // 5) Recalcule le total avec EXACTEMENT la meme logique que le site
     const totals = computeTotals(lines, promo, shippingCfg);
 
+    // 5bis) Cree la commande en "pending" des maintenant, avant meme la
+    // redirection vers Stripe : les paniers abandonnes restent ainsi visibles
+    // dans /admin > Commandes. Le webhook la fera passer a "paid" une fois le
+    // paiement confirme, au lieu d'en creer une nouvelle. Non bloquant : si
+    // cette ecriture echoue, le paiement continue normalement (le webhook
+    // creera alors la commande complete en filet de securite, comme avant).
+    let pendingOrderId = null;
+    try {
+      const { data: pendingOrder, error: pendingErr } = await supabaseAdmin
+        .from("orders")
+        .insert({
+          user_id: null,
+          guest_email: null,
+          status: "pending",
+          is_test: !String(process.env.STRIPE_SECRET_KEY || "").startsWith("sk_live_"),
+          subtotal: totals.subtotal,
+          discount: totals.discount,
+          shipping: totals.shipping,
+          total: totals.total,
+          promo_code: normalizedPromoCode || null,
+        })
+        .select("id")
+        .single();
+      if (pendingErr) {
+        console.error("[checkout] échec création commande pending :", pendingErr.message);
+      } else {
+        pendingOrderId = pendingOrder.id;
+        const pendingItems = lines.map((l) => ({
+          order_id: pendingOrderId,
+          product_id: l.product.id,
+          product_name: l.product.name,
+          product_price: effectivePrice(l.product),
+          qty: l.qty,
+        }));
+        const { error: pendingItemsErr } = await supabaseAdmin.from("order_items").insert(pendingItems);
+        if (pendingItemsErr) {
+          console.error("[checkout] échec création order_items (pending) :", pendingItemsErr.message);
+        }
+      }
+    } catch (e) {
+      console.error("[checkout] erreur inattendue (commande pending) :", e && e.message ? e.message : e);
+    }
+
     // 6) Construit les lignes Stripe (prix en centimes, obligatoire pour Stripe)
     const stripeLineItems = lines.map((l) => ({
       price_data: {
@@ -139,6 +183,7 @@ export default async function handler(req, res) {
       phone_number_collection: { enabled: true },
       metadata: {
         promo_code: normalizedPromoCode || "",
+        order_id: pendingOrderId ? String(pendingOrderId) : "",
         cart_items: JSON.stringify(
           lines.map((l) => ({ id: l.product.id, name: l.product.name, price: effectivePrice(l.product), qty: l.qty }))
         ),
@@ -164,6 +209,16 @@ export default async function handler(req, res) {
     }
 
     const session = await stripe.checkout.sessions.create(sessionParams);
+
+    if (pendingOrderId) {
+      const { error: linkErr } = await supabaseAdmin
+        .from("orders")
+        .update({ stripe_session_id: session.id })
+        .eq("id", pendingOrderId);
+      if (linkErr) {
+        console.error("[checkout] échec liaison stripe_session_id :", linkErr.message);
+      }
+    }
 
     return res.status(200).json({ ok: true, url: session.url });
   } catch (err) {

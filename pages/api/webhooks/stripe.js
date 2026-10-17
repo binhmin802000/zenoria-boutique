@@ -76,11 +76,13 @@ export default async function handler(req, res) {
     // non-réponse ou d'erreur de notre part).
     const { data: existingOrder } = await supabaseAdmin
       .from("orders")
-      .select("id")
+      .select("id, status")
       .eq("stripe_session_id", session.id)
       .maybeSingle();
 
-    if (existingOrder) {
+    if (existingOrder && existingOrder.status !== "pending") {
+      // Déjà traitée (paid/shipped/...) : Stripe renvoie parfois le même
+      // événement plusieurs fois, on ne la retraite pas une seconde fois.
       return res.status(200).json({ ok: true, already: true, orderId: existingOrder.id });
     }
 
@@ -95,59 +97,95 @@ export default async function handler(req, res) {
     const customer = session.customer_details || {};
     const address = customer.address || {};
 
-    const { data: orderRow, error: orderErr } = await supabaseAdmin
-      .from("orders")
-      .insert({
-        user_id: null, // aucun compte relié au paiement pour l'instant (viendra avec le branchement du panier)
-        guest_email: customer.email || null,
-        status: "paid",
-        is_test: event.livemode === false,
-        subtotal: Number(meta.subtotal || 0),
-        discount: Number(meta.discount || 0),
-        shipping: Number(meta.shipping || 0),
-        total: Number(meta.total || (session.amount_total || 0) / 100),
-        promo_code: meta.promo_code || null,
-        stripe_session_id: session.id,
-        stripe_payment_intent: session.payment_intent || null,
-        shipping_full_name: customer.name || null,
-        shipping_address_line1: address.line1 || null,
-        shipping_address_line2: address.line2 || null,
-        shipping_postal_code: address.postal_code || null,
-        shipping_city: address.city || null,
-        shipping_country: address.country || "France",
-        shipping_phone: customer.phone || null,
-        paid_at: new Date().toISOString(),
-      })
-      .select("id")
-      .single();
+    let orderId;
 
-    if (orderErr) {
-      console.error("[webhook-stripe] échec insertion orders :", orderErr.message);
-      return res.status(500).json({ ok: false, error: "échec enregistrement commande" });
-    }
+    if (existingOrder) {
+      // La commande existe déjà en "pending" (créée par pages/api/checkout.js
+      // dès le clic "Commander") : on la met à jour, sans recréer order_items
+      // (déjà insérés à ce moment-là).
+      const { data: updatedOrder, error: updateErr } = await supabaseAdmin
+        .from("orders")
+        .update({
+          status: "paid",
+          guest_email: customer.email || null,
+          stripe_payment_intent: session.payment_intent || null,
+          shipping_full_name: customer.name || null,
+          shipping_address_line1: address.line1 || null,
+          shipping_address_line2: address.line2 || null,
+          shipping_postal_code: address.postal_code || null,
+          shipping_city: address.city || null,
+          shipping_country: address.country || "France",
+          shipping_phone: customer.phone || null,
+          paid_at: new Date().toISOString(),
+        })
+        .eq("id", existingOrder.id)
+        .select("id")
+        .single();
 
-    if (cartItems.length > 0) {
-      const itemsToInsert = cartItems.map((it) => ({
-        order_id: orderRow.id,
-        product_id: it.id ?? null,
-        product_name: it.name || "Article",
-        product_price: Number(it.price || 0),
-        qty: Number(it.qty || 1),
-      }));
-      const { error: itemsErr } = await supabaseAdmin.from("order_items").insert(itemsToInsert);
-      if (itemsErr) {
-        console.error("[webhook-stripe] échec insertion order_items :", itemsErr.message);
+      if (updateErr) {
+        console.error("[webhook-stripe] échec mise à jour orders (pending → paid) :", updateErr.message);
+        return res.status(500).json({ ok: false, error: "échec mise à jour commande" });
+      }
+      orderId = updatedOrder.id;
+    } else {
+      // Filet de sécurité : aucune commande "pending" trouvée (ancien flux,
+      // ou échec d'écriture côté checkout.js) : on crée la commande complète
+      // comme avant, pour ne jamais perdre une vente confirmée par Stripe.
+      const { data: orderRow, error: orderErr } = await supabaseAdmin
+        .from("orders")
+        .insert({
+          user_id: null,
+          guest_email: customer.email || null,
+          status: "paid",
+          is_test: event.livemode === false,
+          subtotal: Number(meta.subtotal || 0),
+          discount: Number(meta.discount || 0),
+          shipping: Number(meta.shipping || 0),
+          total: Number(meta.total || (session.amount_total || 0) / 100),
+          promo_code: meta.promo_code || null,
+          stripe_session_id: session.id,
+          stripe_payment_intent: session.payment_intent || null,
+          shipping_full_name: customer.name || null,
+          shipping_address_line1: address.line1 || null,
+          shipping_address_line2: address.line2 || null,
+          shipping_postal_code: address.postal_code || null,
+          shipping_city: address.city || null,
+          shipping_country: address.country || "France",
+          shipping_phone: customer.phone || null,
+          paid_at: new Date().toISOString(),
+        })
+        .select("id")
+        .single();
+
+      if (orderErr) {
+        console.error("[webhook-stripe] échec insertion orders :", orderErr.message);
+        return res.status(500).json({ ok: false, error: "échec enregistrement commande" });
+      }
+      orderId = orderRow.id;
+
+      if (cartItems.length > 0) {
+        const itemsToInsert = cartItems.map((it) => ({
+          order_id: orderId,
+          product_id: it.id ?? null,
+          product_name: it.name || "Article",
+          product_price: Number(it.price || 0),
+          qty: Number(it.qty || 1),
+        }));
+        const { error: itemsErr } = await supabaseAdmin.from("order_items").insert(itemsToInsert);
+        if (itemsErr) {
+          console.error("[webhook-stripe] échec insertion order_items :", itemsErr.message);
+        }
       }
     }
 
     const { error: historyErr } = await supabaseAdmin
       .from("order_status_history")
-      .insert({ order_id: orderRow.id, status: "paid", note: "Paiement confirmé par Stripe (webhook)" });
+      .insert({ order_id: orderId, status: "paid", note: "Paiement confirmé par Stripe (webhook)" });
     if (historyErr) {
       console.error("[webhook-stripe] échec insertion order_status_history :", historyErr.message);
     }
 
-    return res.status(200).json({ ok: true, orderId: orderRow.id });
+    return res.status(200).json({ ok: true, orderId });
   } catch (err) {
     console.error("[webhook-stripe] erreur inattendue :", err && err.message ? err.message : err);
     return res.status(500).json({ ok: false, error: "erreur serveur" });

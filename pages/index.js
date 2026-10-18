@@ -3,7 +3,7 @@ import Head from "next/head";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShoppingBag, Search, User, Heart, Menu, X, Sparkles, ArrowRight,
-  Gem, Instagram, LogOut, Minus, Plus, Trash2, Tag, Truck, Settings
+  Gem, Instagram, LogOut, Minus, Plus, Trash2, Tag, Truck, Settings, Mail
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -1095,6 +1095,15 @@ export default function ZenoriaShop() {
               <p>FAQ</p>
               <p>Mentions légales</p>
               <p><a href="/confidentialite" className="hover:text-white underline-offset-2 hover:underline">Politique de confidentialité</a></p>
+            </div>
+            <div className="mt-4 pt-4 border-t border-white/10 text-sm">
+              <a
+                href="mailto:bagues.mandala@proton.me?subject=Question%20depuis%20le%20site%20Zenoria&body=Bonjour%2C%0D%0A%0D%0A"
+                data-testid="footer-contact-email"
+                className="flex items-center gap-2 hover:text-white underline-offset-2 hover:underline"
+              >
+                <Mail size={15} className="shrink-0" /> bagues.mandala@proton.me
+              </a>
             </div>
           </div>
           <div>

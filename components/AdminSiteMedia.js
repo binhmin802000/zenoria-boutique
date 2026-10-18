@@ -18,6 +18,7 @@ import VideoCropper from "@/components/VideoCropper";
 import AdminSeasonFx from "@/components/AdminSeasonFx";
 import AdminRingAnimation from "@/components/AdminRingAnimation";
 import AdminShipping from "@/components/AdminShipping";
+import AdminContact from "@/components/AdminContact";
 import AdminSiteTexts from "@/components/AdminSiteTexts";
 
 // ============================================================
@@ -301,6 +302,9 @@ export default function AdminSiteMedia() {
 
       {/* LIVRAISON OFFERTE : montant et interrupteur */}
       <AdminShipping />
+
+      {/* CANAUX DE CONTACT : e-mail, WhatsApp, Signal */}
+      <AdminContact />
 
       {/* TEXTES DU SITE : Savoir-faire et page d'accueil */}
       <AdminSiteTexts />

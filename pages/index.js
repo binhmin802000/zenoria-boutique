@@ -3,11 +3,12 @@ import Head from "next/head";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShoppingBag, Search, User, Heart, Menu, X, Sparkles, ArrowRight,
-  Gem, Instagram, LogOut, Minus, Plus, Trash2, Tag, Truck, Settings
+  Gem, Instagram, LogOut, Minus, Plus, Trash2, Tag, Truck, Settings, Mail, MessageCircle, Send
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase, getMediaUrl } from "@/lib/supabase";
+import { CONTACT_KEY, DEFAULT_CONTACT, parseContactSetting, buildMailtoLink, buildWhatsAppLink, buildSignalLink } from "@/lib/contactSettings";
 import { useSiteStatus } from "@/lib/siteStatus";
 import { formatReturnAt } from "@/lib/maintenance";
 import AuthModal from "@/components/AuthModal";
@@ -242,6 +243,7 @@ export default function ZenoriaShop() {
   const [closedBanners, setClosedBanners] = useState([]);
   const [fxSetting, setFxSetting] = useState(() => parseSeasonFxSetting(null)); // réglage de l'animation (onglet « Contenu du site » de /admin) : automatique tant qu'il n'est pas lu
   const [shippingCfg, setShippingCfg] = useState(DEFAULT_SHIPPING); // livraison offerte : montant et interrupteur (onglet « Contenu du site » de /admin), par défaut tant qu'ils ne sont pas lus
+  const [contactSettings, setContactSettings] = useState(DEFAULT_CONTACT); // canaux de contact (e-mail, WhatsApp, Signal), onglet « Contenu du site » de /admin
   const [siteTexts, setSiteTexts] = useState(DEFAULT_TEXTS); // textes du Savoir-faire et de l'accueil (onglet « Contenu du site » de /admin) : textes d'origine tant qu'ils ne sont pas lus
   const [fxClicked, setFxClicked] = useState(null); // saison choisie par un clic : elle donne son ambiance à la page
   const [nowMs, setNowMs] = useState(null); // renseigné après l'affichage : le rendu du serveur ne dépend jamais de l'heure
@@ -264,7 +266,7 @@ export default function ZenoriaShop() {
         supabase.from("site_media").select("*"),
         optionalQuery(supabase.from("families").select("*").order("sort_order", { ascending: true })),
         optionalQuery(supabase.from("banners").select("*")),
-        optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").in("key", [SEASON_FX_KEY, SHIPPING_KEY, SITE_TEXTS_KEY])),
+        optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").in("key", [SEASON_FX_KEY, SHIPPING_KEY, SITE_TEXTS_KEY, CONTACT_KEY])),
       ]);
       if (!active) return;
 
@@ -295,6 +297,9 @@ export default function ZenoriaShop() {
       setFxSetting(parseSeasonFxSetting(fxRow ? fxRow.value : null));
       // Livraison offerte : si la ligne n'existe pas encore (script SQL non exécuté), le site garde la valeur par défaut
       setShippingCfg(parseShippingSetting(shipRow ? shipRow.value : null));
+      // Canaux de contact : si la ligne n'existe pas encore, le site garde la valeur par défaut (e-mail seul)
+      const contactRow = settingRows.find((r) => r.key === CONTACT_KEY) || null;
+      setContactSettings(parseContactSetting(contactRow ? contactRow.value : null));
       // Textes : si la ligne n'existe pas encore, le site garde ses textes d'origine
       setSiteTexts(resolveSiteTexts(textRow ? textRow.value : null));
 
@@ -1104,6 +1109,49 @@ export default function ZenoriaShop() {
               <Heart />
               <Sparkles />
             </div>
+            {(contactSettings.email.enabled && contactSettings.email.value.trim()) ||
+            (contactSettings.whatsapp.enabled && contactSettings.whatsapp.value.trim()) ||
+            (contactSettings.signal.enabled && contactSettings.signal.value.trim()) ? (
+              <div className="mt-5">
+                <div className="text-white mb-3">Nous contacter</div>
+                <div className="flex gap-3">
+                  {contactSettings.email.enabled && contactSettings.email.value.trim() && (
+                    <a
+                      href={buildMailtoLink(contactSettings.email.value.trim())}
+                      aria-label="Nous écrire par e-mail"
+                      title="Nous écrire par e-mail"
+                      className="hover:text-[#8f6075]"
+                    >
+                      <Mail />
+                    </a>
+                  )}
+                  {contactSettings.whatsapp.enabled && contactSettings.whatsapp.value.trim() && (
+                    <a
+                      href={buildWhatsAppLink(contactSettings.whatsapp.value.trim())}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="Nous écrire sur WhatsApp"
+                      title="Nous écrire sur WhatsApp"
+                      className="hover:text-[#8f6075]"
+                    >
+                      <MessageCircle />
+                    </a>
+                  )}
+                  {contactSettings.signal.enabled && contactSettings.signal.value.trim() && (
+                    <a
+                      href={buildSignalLink(contactSettings.signal.value.trim())}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="Nous écrire sur Signal"
+                      title="Nous écrire sur Signal"
+                      className="hover:text-[#8f6075]"
+                    >
+                      <Send />
+                    </a>
+                  )}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
         <div className="max-w-7xl mx-auto px-6 mt-10 pt-6 border-t border-white/10 text-xs">

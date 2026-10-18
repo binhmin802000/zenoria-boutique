@@ -350,7 +350,7 @@ export function AdminOrders() {
   }, [orders, includeTestData, dateFrom, dateTo]);
 
   const stats = useMemo(() => {
-    const paid = filteredOrders.filter((o) => o.status === "paid" || o.status === "shipped");
+    const paid = filteredOrders.filter((o) => o.status === "paid" || o.status === "shipped" || o.status === "delivered");
     const revenue = paid.reduce((s, o) => s + Number(o.total || 0), 0);
     const monthAgo = Date.now() - 30 * 24 * 3600 * 1000;
     const recent = filteredOrders.filter((o) => o.created_at && new Date(o.created_at).getTime() >= monthAgo).length;

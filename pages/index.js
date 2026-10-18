@@ -699,7 +699,7 @@ export default function ZenoriaShop() {
         <div className="max-w-7xl mx-auto px-5 h-20 flex items-center justify-between">
           <CrystalLogo compact mode={logo} />
           <nav className="hidden lg:flex gap-7 text-sm">
-            <button onClick={() => scrollToSection("collections")} className="hover:text-[#8f6075]">Collections</button>
+            <button onClick={() => scrollToSection("collections")} className="hover:text-[#8f6075]">Bijoux</button>
             {familiesReady && <button onClick={() => scrollToSection("seasons")} className="hover:text-[#8f6075]">Les saisons</button>}
             <button onClick={() => scrollToSection("savoir-faire")} className="hover:text-[#8f6075]">Savoir-faire</button>
             <button onClick={() => scrollToSection("philosophie")} className="hover:text-[#8f6075]">Notre histoire</button>
@@ -761,7 +761,7 @@ export default function ZenoriaShop() {
         </div>
         {menu && (
           <div className="lg:hidden px-6 pb-5 flex flex-col gap-3 text-sm">
-            <button onClick={() => { scrollToSection("collections"); setMenu(false); }} className="text-left">Collections</button>
+            <button onClick={() => { scrollToSection("collections"); setMenu(false); }} className="text-left">Bijoux</button>
             {familiesReady && <button onClick={() => { scrollToSection("seasons"); setMenu(false); }} className="text-left">Les saisons</button>}
             <button onClick={() => { scrollToSection("savoir-faire"); setMenu(false); }} className="text-left">Savoir-faire</button>
             <button onClick={() => { scrollToSection("philosophie"); setMenu(false); }} className="text-left">Notre histoire</button>

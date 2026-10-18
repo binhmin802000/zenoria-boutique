@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import Head from "next/head";
-import { Plus, Pencil, Trash2, X, LogOut, Tag, Package, ArrowLeft, Upload, Film, Users, Sparkles, Gauge, Wrench, Activity, Settings, LogIn, Clock, Palette, ShoppingBag } from "lucide-react";
+import { Plus, Pencil, Trash2, X, LogOut, Tag, Package, ArrowLeft, Upload, Film, Users, Sparkles, Gauge, Wrench, Activity, Settings, LogIn, Clock, Palette, ShoppingBag, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { supabase, getMediaUrl, uploadProductMedia, deleteProductMedia } from "@/lib/supabase";
 import AuthModal from "@/components/AuthModal";
 import AdminConnections from "@/components/AdminConnections";
@@ -166,6 +166,7 @@ export default function AdminPage() {
   const [navReady, setNavReady] = useState(false);
   const lastSubByGroup = useRef({}); // chaque groupe se souvient de son dernier onglet
   const subBarRef = useRef(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const tab = nav.sub;
 
   const goTo = (group, sub) => {
@@ -708,81 +709,106 @@ export default function AdminPage() {
             </button>
           </div>
         </div>
-        <div role="tablist" aria-label="Sections de l'administration" data-testid="group-bar" className="max-w-6xl mx-auto px-5 flex gap-1.5 sm:gap-2 pb-2 overflow-x-auto">
-          {ADMIN_NAV.map((g) => {
-            const GroupIcon = GROUP_ICONS[g.id];
-            const active = nav.group === g.id;
-            const level = g.id === "technique" ? techLevel : "ok";
-            return (
-              <button
-                key={g.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                data-testid={`group-${g.id}`}
-                onClick={() => goTo(g.id)}
-                className={`flex items-center gap-1.5 sm:gap-2 rounded-full px-3.5 sm:px-5 h-10 text-sm font-medium transition whitespace-nowrap shrink-0 ${
-                  active ? "bg-[#8f6075] text-white shadow-sm" : "bg-[#f5edf1] text-[#54434c] hover:bg-[#ead9e1]"
-                }`}
-              >
-                <GroupIcon size={16} /> {g.label}
-                {level !== "ok" && (
-                  <span
-                    data-testid={`group-dot-${g.id}`}
-                    data-level={level}
-                    className={`h-2.5 w-2.5 rounded-full ring-2 ${active ? "ring-[#8f6075]" : "ring-[#f5edf1]"} ${level === "critical" ? "bg-red-500" : "bg-amber-400"}`}
-                    aria-label={level === "critical" ? "Alerte critique dans ce groupe" : "Point d'attention dans ce groupe"}
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
-        <div
-          ref={subBarRef}
-          role="tablist"
-          aria-label={`Onglets ${currentGroup.label}`}
-          data-testid="sub-bar"
-          className="relative max-w-6xl mx-auto px-5 flex gap-1 pb-3 overflow-x-auto"
-        >
-          {currentGroup.tabs.map((t) => {
-            const TabIcon = TAB_ICONS[t.id];
-            const active = nav.sub === t.id;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                data-testid={`sub-${t.id}`}
-                onClick={() => goTo(currentGroup.id, t.id)}
-                className={`flex items-center gap-1.5 rounded-full px-3.5 h-8 text-[13px] transition whitespace-nowrap ${
-                  active ? "bg-[#f0e6ea] text-[#412f3b] font-medium ring-1 ring-[#d9c5cc]" : "text-[#54434c] hover:bg-[#f5edf1]"
-                }`}
-              >
-                <TabIcon size={14} /> {t.label}
-                {t.id === "quotas" && quotaLevel !== "ok" && (
-                  <span
-                    data-testid="quota-dot"
-                    data-level={quotaLevel}
-                    className={`h-2 w-2 rounded-full ${quotaLevel === "critical" ? "bg-red-500" : "bg-amber-400"}`}
-                    aria-label={quotaLevel === "critical" ? "Quota critique" : "Quota à surveiller"}
-                  />
-                )}
-                {t.id === "maintenance" && maintenanceActive && (
-                  <span
-                    data-testid="maintenance-dot"
-                    className={`h-2 w-2 rounded-full ${maintenance.row && maintenance.row.mode === "full" ? "bg-red-500" : "bg-amber-400"}`}
-                    aria-label={maintenance.row && maintenance.row.mode === "full" ? "Maintenance totale active" : "Boutique en pause"}
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-5 py-8">
+      <div className="max-w-6xl mx-auto flex gap-6 items-start px-5">
+        <aside
+          data-testid="admin-sidebar-accordion"
+          aria-label="Navigation de l'administration"
+          className={`shrink-0 sticky top-20 self-start transition-all ${sidebarCollapsed ? "w-14" : "w-60"}`}
+        >
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed((v) => !v)}
+            data-testid="sidebar-toggle"
+            aria-label={sidebarCollapsed ? "Agrandir la navigation" : "Réduire la navigation"}
+            className="mb-3 flex items-center justify-center h-8 w-8 rounded-full bg-[#f5edf1] hover:bg-[#ead9e1] text-[#54434c] transition"
+          >
+            {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          </button>
+
+          <div role="tablist" aria-label="Sections de l'administration" data-testid="group-bar" className="flex flex-col gap-1.5">
+            {ADMIN_NAV.map((g) => {
+              const GroupIcon = GROUP_ICONS[g.id];
+              const activeGroup = nav.group === g.id;
+              const level = g.id === "technique" ? techLevel : "ok";
+              return (
+                <div key={g.id} className="flex flex-col gap-0.5">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeGroup}
+                    aria-expanded={activeGroup}
+                    data-testid={`group-${g.id}`}
+                    onClick={() => goTo(g.id)}
+                    className={`flex items-center gap-2 rounded-full px-3.5 h-10 text-sm font-medium transition whitespace-nowrap w-full ${
+                      activeGroup ? "bg-[#8f6075] text-white shadow-sm" : "bg-[#f5edf1] text-[#54434c] hover:bg-[#ead9e1]"
+                    }`}
+                  >
+                    <GroupIcon size={16} />
+                    {!sidebarCollapsed && <span className="flex-1 text-left truncate">{g.label}</span>}
+                    {level !== "ok" && (
+                      <span
+                        data-testid={`group-dot-${g.id}`}
+                        data-level={level}
+                        className={`h-2.5 w-2.5 rounded-full ring-2 shrink-0 ${activeGroup ? "ring-[#8f6075]" : "ring-[#f5edf1]"} ${level === "critical" ? "bg-red-500" : "bg-amber-400"}`}
+                        aria-label={level === "critical" ? "Alerte critique dans ce groupe" : "Point d'attention dans ce groupe"}
+                      />
+                    )}
+                    {!sidebarCollapsed && (activeGroup ? <ChevronDown size={14} className="shrink-0" /> : <ChevronRight size={14} className="shrink-0" />)}
+                  </button>
+
+                  {activeGroup && !sidebarCollapsed && (
+                    <div
+                      ref={subBarRef}
+                      role="tablist"
+                      aria-label={`Onglets ${g.label}`}
+                      data-testid="sub-bar"
+                      className="flex flex-col gap-0.5 pl-4 mt-1"
+                    >
+                      {g.tabs.map((t) => {
+                        const TabIcon = TAB_ICONS[t.id];
+                        const activeTab = nav.sub === t.id;
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            role="tab"
+                            aria-selected={activeTab}
+                            data-testid={`sub-${t.id}`}
+                            onClick={() => goTo(g.id, t.id)}
+                            className={`flex items-center gap-1.5 rounded-full px-3.5 h-8 text-[13px] transition whitespace-nowrap w-full ${
+                              activeTab ? "bg-[#f0e6ea] text-[#412f3b] font-medium ring-1 ring-[#d9c5cc]" : "text-[#54434c] hover:bg-[#f5edf1]"
+                            }`}
+                          >
+                            <TabIcon size={14} className="shrink-0" /> <span className="truncate">{t.label}</span>
+                            {t.id === "quotas" && quotaLevel !== "ok" && (
+                              <span
+                                data-testid="quota-dot"
+                                data-level={quotaLevel}
+                                className={`h-2 w-2 rounded-full shrink-0 ${quotaLevel === "critical" ? "bg-red-500" : "bg-amber-400"}`}
+                                aria-label={quotaLevel === "critical" ? "Quota critique" : "Quota à surveiller"}
+                              />
+                            )}
+                            {t.id === "maintenance" && maintenanceActive && (
+                              <span
+                                data-testid="maintenance-dot"
+                                className={`h-2 w-2 rounded-full shrink-0 ${maintenance.row && maintenance.row.mode === "full" ? "bg-red-500" : "bg-amber-400"}`}
+                                aria-label={maintenance.row && maintenance.row.mode === "full" ? "Maintenance totale active" : "Boutique en pause"}
+                              />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </aside>
+
+        <main className="flex-1 min-w-0 py-8">
         {tab !== "maintenance" && <MaintenanceBanner status={maintenance} onOpen={() => goTo("technique", "maintenance")} />}
 
         {tab !== "quotas" && <QuotaBanner status={quota} onOpen={() => goTo("technique", "quotas")} />}
@@ -972,6 +998,7 @@ export default function AdminPage() {
 
         {tab === "sante" && <AdminHealth quotaAlerts={computeQuotaAlerts(quota)} quotaReady={!quota.loading && !quota.error} />}
       </main>
+      </div>
 
       {/* FORMULAIRE PRODUIT */}
       {productForm && (

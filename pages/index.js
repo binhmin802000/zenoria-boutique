@@ -439,7 +439,7 @@ export default function ZenoriaShop() {
   const cartDensity = pickCartDensity(
     cartLines.length,
     viewportH,
-    (promoOpen && !promo ? 44 : 0) + (cartNotice ? 44 : 0) + (quizReturn ? 56 : 0) + (!user ? 24 : 0) + 44 + (!totals.freeShipping ? 44 : 0)
+    (promoOpen && !promo ? 44 : 0) + (cartNotice ? 44 : 0) + (quizReturn ? 56 : 0) + (!user ? 24 : 0) + 44 + (shippingCfg.enabled ? 92 : 0)
   );
   const tightFooter = cartDensity === "dense";
   const dens = CART_DENSITY[cartDensity];

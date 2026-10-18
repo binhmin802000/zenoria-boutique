@@ -119,7 +119,7 @@ function pickCartDensity(lineCount, viewportHeight, extraHeight = 0) {
 // Les familles (les 4 saisons et les familles supplémentaires) sont lues dans la base de données (table « families »,
 // onglet Familles de /admin). Leur mise en forme est dans lib/seasons.js.
 
-function CrystalLogo({ mode = 1, compact = false }) {
+function CrystalLogo({ mode = 1, compact = false, dark = false }) {
   const styles = [
     "from-[#bd8792] via-[#d8b36d] to-[#705185]",
     "from-[#6f4a8e] via-[#ead4b0] to-[#bf8797]",
@@ -136,8 +136,8 @@ function CrystalLogo({ mode = 1, compact = false }) {
         </div>
       </div>
       <div>
-        <div className={`${compact ? "text-xl" : "text-3xl"} tracking-[.22em] font-serif text-[#412f3b]`}>ZENORIA</div>
-        {!compact && <div className="text-[10px] tracking-wide text-[#755f6e] italic">L&apos;énergie du cristal, l&apos;harmonie de l&apos;âme.</div>}
+        <div className={`${compact ? "text-xl" : "text-3xl"} tracking-[.22em] font-serif ${dark ? "text-white" : "text-[#412f3b]"}`}>ZENORIA</div>
+        {!compact && <div className={`text-[10px] tracking-wide italic ${dark ? "text-white/60" : "text-[#755f6e]"}`}>L&apos;énergie du cristal, l&apos;harmonie de l&apos;âme.</div>}
       </div>
     </div>
   );
@@ -707,7 +707,7 @@ export default function ZenoriaShop() {
             <button onClick={() => scrollToSection("collections")} className="hover:text-[#8f6075]">Bijoux</button>
             {familiesReady && <button onClick={() => scrollToSection("seasons")} className="hover:text-[#8f6075]">Les saisons</button>}
             <button onClick={() => scrollToSection("savoir-faire")} className="hover:text-[#8f6075]">Savoir-faire</button>
-            <button onClick={() => scrollToSection("philosophie")} className="hover:text-[#8f6075]">Notre histoire</button>
+            <button onClick={() => scrollToSection("philosophie")} className="hover:text-[#8f6075]">Notre philosophie</button>
             <a href="/quiz" data-testid="nav-quiz" className="hover:text-[#8f6075]">Quiz</a>
             <button onClick={() => scrollToSection("contact")} className="hover:text-[#8f6075]">Contact</button>
           </nav>
@@ -769,7 +769,7 @@ export default function ZenoriaShop() {
             <button onClick={() => { scrollToSection("collections"); setMenu(false); }} className="text-left">Bijoux</button>
             {familiesReady && <button onClick={() => { scrollToSection("seasons"); setMenu(false); }} className="text-left">Les saisons</button>}
             <button onClick={() => { scrollToSection("savoir-faire"); setMenu(false); }} className="text-left">Savoir-faire</button>
-            <button onClick={() => { scrollToSection("philosophie"); setMenu(false); }} className="text-left">Notre histoire</button>
+            <button onClick={() => { scrollToSection("philosophie"); setMenu(false); }} className="text-left">Notre philosophie</button>
             <a href="/quiz" data-testid="nav-quiz-mobile" onClick={() => setMenu(false)} className="text-left">Quiz</a>
             <button onClick={() => { scrollToSection("contact"); setMenu(false); }} className="text-left">Contact</button>
             {!authLoading && (
@@ -1069,7 +1069,7 @@ export default function ZenoriaShop() {
       <footer className="bg-[#2f252d] text-white/70 py-12">
         <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-4 gap-9">
           <div>
-            <CrystalLogo compact mode={logo} />
+            <CrystalLogo compact mode={logo} dark />
             <p className="text-xs mt-5 leading-6">L&apos;énergie du cristal, l&apos;harmonie de l&apos;âme.</p>
           </div>
           <div>
@@ -1096,15 +1096,24 @@ export default function ZenoriaShop() {
           <div>
             <div className="text-white mb-3">Informations</div>
             <div className="text-sm space-y-2">
-              <p>Livraison et retours</p>
-              <p>FAQ</p>
-              <p>Mentions légales</p>
+              <p className="flex items-center gap-2 text-white/40">
+                Livraison et retours
+                <span className="text-[10px] uppercase tracking-wide rounded-full border border-white/20 px-2 py-0.5">Bientôt</span>
+              </p>
+              <p className="flex items-center gap-2 text-white/40">
+                FAQ
+                <span className="text-[10px] uppercase tracking-wide rounded-full border border-white/20 px-2 py-0.5">Bientôt</span>
+              </p>
+              <p><a href="/mentions-legales" className="hover:text-white underline-offset-2 hover:underline">Mentions légales</a></p>
               <p><a href="/confidentialite" className="hover:text-white underline-offset-2 hover:underline">Politique de confidentialité</a></p>
             </div>
           </div>
           <div>
-            <div className="text-white mb-3">Suivez-nous</div>
-            <div className="flex gap-3">
+            <div className="text-white mb-3 flex items-center gap-2">
+              Suivez-nous
+              <span className="text-[10px] uppercase tracking-wide rounded-full border border-white/20 px-2 py-0.5 text-white/40">Bientôt</span>
+            </div>
+            <div className="flex gap-3 text-white/40">
               <Instagram />
               <Heart />
               <Sparkles />

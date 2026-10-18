@@ -244,7 +244,7 @@ export default function AdminFamilies({ status, products, onProductsChanged }) {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-[1.25fr_1fr] gap-6 items-start">
+      <div className={form ? "grid lg:grid-cols-[1.25fr_1fr] gap-6 items-start" : ""}>
         <div className="bg-white rounded-2xl border border-[#eee2e5] overflow-x-auto">
           <table className="w-full text-sm min-w-[560px]" data-testid="family-table">
             <thead>
@@ -324,7 +324,7 @@ export default function AdminFamilies({ status, products, onProductsChanged }) {
           </table>
         </div>
 
-        {form ? (
+        {form && (
           <form onSubmit={save} className="bg-white rounded-[1.5rem] border border-[#eee2e5] shadow-xl p-6" data-testid="family-editor">
             <div className="flex justify-between items-start mb-4">
               <h2 className="font-serif text-2xl">{form.id ? "Modifier la famille « " + (selected ? selected.name : form.name) + " »" : "Nouvelle famille"}</h2>
@@ -499,12 +499,14 @@ export default function AdminFamilies({ status, products, onProductsChanged }) {
               )}
             </div>
           </form>
-        ) : (
-          <div className="bg-white rounded-[1.5rem] border border-dashed border-[#e3d3da] p-6 text-sm text-[#8b737e] leading-6" data-testid="family-hint">
-            Choisissez une famille dans la liste pour la modifier, voir ses collections ou en déplacer une. Les saisons alimentent le quiz couleurs : elles se renomment et se décrivent librement, mais ne se suppriment pas.
-          </div>
         )}
       </div>
+
+      {!form && (
+        <div className="mt-6 bg-white rounded-[1.5rem] border border-dashed border-[#e3d3da] p-6 text-sm text-[#8b737e] leading-6" data-testid="family-hint">
+          Choisissez une famille dans la liste pour la modifier, voir ses collections ou en déplacer une. Les saisons alimentent le quiz couleurs : elles se renomment et se décrivent librement, mais ne se suppriment pas.
+        </div>
+      )}
     </div>
   );
 }

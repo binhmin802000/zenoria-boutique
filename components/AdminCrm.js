@@ -197,8 +197,10 @@ const ORDER_STATUS_LABELS = {
   pending: { label: "En attente", className: "bg-amber-50 text-amber-700" },
   paid: { label: "Payée", className: "bg-emerald-50 text-emerald-700" },
   shipped: { label: "Expédiée", className: "bg-sky-50 text-sky-700" },
+  delivered: { label: "Livrée", className: "bg-violet-50 text-violet-700" },
   cancelled: { label: "Annulée", className: "bg-red-50 text-red-700" },
   refunded: { label: "Remboursée", className: "bg-[#f5edf1] text-[#8f6075]" },
+  expired: { label: "Expirée", className: "bg-gray-100 text-gray-500" },
 };
 
 function orderStatusBadge(status) {
@@ -257,6 +259,30 @@ export function AdminOrders() {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [openOrderId, setOpenOrderId] = useState(null);
+  const [shippingDraft, setShippingDraft] = useState({});
+  const [shippingBusyId, setShippingBusyId] = useState(null);
+  const CARRIERS = ["Colissimo", "Mondial Relay", "Chronopost", "DPD", "Colis Privé"];
+
+  const updateOrderStatus = async (orderId, action, extra) => {
+    setShippingBusyId(orderId);
+    try {
+      const res = await fetch("/api/admin/orders/update-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId, action, ...extra }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setError((data && data.error) || "Échec de la mise à jour.");
+      } else {
+        await load();
+      }
+    } catch (e) {
+      setError("Impossible de contacter le serveur.");
+    } finally {
+      setShippingBusyId(null);
+    }
+  };
   const [statusHistoryByOrder, setStatusHistoryByOrder] = useState({});
   const [productsById, setProductsById] = useState({});
   const [datePreset, setDatePreset] = useState("all"); // "today" | "7d" | "30d" | "custom" | "all"
@@ -534,6 +560,65 @@ export function AdminOrders() {
                           );
                         })()}
                       </div>
+
+                      {/* ShippingPanel : transporteur, numéro de suivi, actions d'expédition */}
+                      <div className="mb-4 rounded-xl bg-white border border-[#eee2e5] px-4 py-3.5">
+                        <div className="text-xs font-medium text-[#8b737e] mb-2.5">Expédition</div>
+                        {o.tracking_number ? (
+                          <p className="text-[13px] text-[#54434c] leading-5 mb-2">
+                            {o.carrier} · Suivi : <strong>{o.tracking_number}</strong>
+                            {o.shipped_at && <span className="text-[#8b737e]"> · expédiée le {formatDateTime(o.shipped_at)}</span>}
+                          </p>
+                        ) : (
+                          <div className="flex flex-wrap items-center gap-2 mb-2.5">
+                            <select
+                              value={(shippingDraft[o.id] || {}).carrier || CARRIERS[0]}
+                              onChange={(e) => setShippingDraft((prev) => ({ ...prev, [o.id]: { ...prev[o.id], carrier: e.target.value } }))}
+                              data-testid="shipping-carrier"
+                              className="rounded-full border border-[#eadfe4] bg-white px-3 h-9 text-[13px] outline-none focus:border-[#8f6075]"
+                            >
+                              {CARRIERS.map((c) => (
+                                <option key={c} value={c}>{c}</option>
+                              ))}
+                            </select>
+                            <input
+                              type="text"
+                              placeholder="Numéro de suivi"
+                              value={(shippingDraft[o.id] || {}).trackingNumber || ""}
+                              onChange={(e) => setShippingDraft((prev) => ({ ...prev, [o.id]: { ...prev[o.id], trackingNumber: e.target.value } }))}
+                              data-testid="shipping-tracking-number"
+                              className="flex-1 min-w-[160px] rounded-full border border-[#eadfe4] bg-white px-3 h-9 text-[13px] outline-none focus:border-[#8f6075]"
+                            />
+                          </div>
+                        )}
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={shippingBusyId === o.id || Boolean(o.tracking_number)}
+                            onClick={() => {
+                              const draft = shippingDraft[o.id] || {};
+                              updateOrderStatus(o.id, "ship", {
+                                carrier: draft.carrier || CARRIERS[0],
+                                trackingNumber: draft.trackingNumber || "",
+                              });
+                            }}
+                            data-testid="mark-shipped"
+                            className="rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white text-xs font-medium px-4 h-9 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Marquer comme expédiée
+                          </button>
+                          <button
+                            type="button"
+                            disabled={shippingBusyId === o.id || o.status === "delivered"}
+                            onClick={() => updateOrderStatus(o.id, "deliver")}
+                            data-testid="mark-delivered"
+                            className="rounded-full border border-[#8f6075] text-[#8f6075] hover:bg-[#8f6075] hover:text-white text-xs font-medium px-4 h-9 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Marquer comme livrée
+                          </button>
+                        </div>
+                      </div>
+
                       <div className="grid md:grid-cols-2 gap-4">
                         <div>
                           <div className="text-xs font-medium text-[#8b737e] mb-1.5">Articles</div>

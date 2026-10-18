@@ -25,7 +25,7 @@
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-const ALLOWED_CARRIERS = ["Colissimo", "Mondial Relay", "Chronopost"];
+const ALLOWED_CARRIERS = ["Colissimo", "Mondial Relay", "Chronopost", "DPD", "Colis Privé"];
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {

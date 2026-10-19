@@ -41,6 +41,9 @@ import { pickPublicBanner, bannerKey, readClosedKeys, writeClosedKeys, getSessio
 import { SITE_SETTINGS_TABLE, SEASON_FX_KEY, parseSeasonFxSetting, pickFxSeason } from "@/lib/siteSettings";
 import { SHIPPING_KEY, DEFAULT_SHIPPING, parseShippingSetting, qualifiesForFreeShipping, shippingStripText } from "@/lib/shippingSettings";
 import { SITE_TEXTS_KEY, DEFAULT_TEXTS, resolveSiteTexts } from "@/lib/siteTexts";
+// ZENORIA_STORY_REVIEWS_V1
+import { REVIEWS_KEY, DEFAULT_REVIEWS, parseReviewsSetting } from "@/lib/reviewsSettings";
+import StorySection, { OPEN_STORY_EVENT } from "@/components/StorySection";
 import TextLines from "@/components/TextLines";
 // ============================================================
 // RÉGLAGES DE LA BOUTIQUE (à adapter facilement)
@@ -238,6 +241,7 @@ export default function ZenoriaShop() {
   const [closedBanners, setClosedBanners] = useState([]);
   const [fxSetting, setFxSetting] = useState(() => parseSeasonFxSetting(null)); // réglage de l'animation (onglet « Contenu du site » de /admin) : automatique tant qu'il n'est pas lu
   const [shippingCfg, setShippingCfg] = useState(DEFAULT_SHIPPING); // livraison offerte : montant et interrupteur (onglet « Contenu du site » de /admin), par défaut tant qu'ils ne sont pas lus
+  const [reviewsCfg, setReviewsCfg] = useState(DEFAULT_REVIEWS); // avis clientes + charte (admin : Contenu du site)
   const [contactSettings, setContactSettings] = useState(DEFAULT_CONTACT); // canaux de contact (e-mail, WhatsApp, Signal), onglet « Contenu du site » de /admin
   const [siteTexts, setSiteTexts] = useState(DEFAULT_TEXTS); // textes du Savoir-faire et de l'accueil (onglet « Contenu du site » de /admin) : textes d'origine tant qu'ils ne sont pas lus
   const [fxClicked, setFxClicked] = useState(null); // saison choisie par un clic : elle donne son ambiance à la page
@@ -259,7 +263,7 @@ export default function ZenoriaShop() {
         supabase.from("site_media").select("*"),
         optionalQuery(supabase.from("families").select("*").order("sort_order", { ascending: true })),
         optionalQuery(supabase.from("banners").select("*")),
-        optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").in("key", [SEASON_FX_KEY, SHIPPING_KEY, SITE_TEXTS_KEY, CONTACT_KEY])),
+        optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").in("key", [SEASON_FX_KEY, SHIPPING_KEY, SITE_TEXTS_KEY, CONTACT_KEY, REVIEWS_KEY])),
       ]);
       if (!active) return;
       const loadedProducts = !prodErr && prodData ? prodData.map(mapDbProduct) : [];
@@ -288,6 +292,9 @@ export default function ZenoriaShop() {
       setShippingCfg(parseShippingSetting(shipRow ? shipRow.value : null));
       // Canaux de contact : si la ligne n'existe pas encore, le site garde la valeur par défaut (e-mail seul)
       const contactRow = settingRows.find((r) => r.key === CONTACT_KEY) || null;
+      // Avis clientes : ligne absente ou illisible -> désactivé (lien de la charte masqué)
+      const reviewsRow = settingRows.find((r) => r.key === REVIEWS_KEY) || null;
+      setReviewsCfg(parseReviewsSetting(reviewsRow ? reviewsRow.value : null));
       setContactSettings(parseContactSetting(contactRow ? contactRow.value : null));
       // Textes : si la ligne n'existe pas encore, le site garde ses textes d'origine
       setSiteTexts(resolveSiteTexts(textRow ? textRow.value : null));
@@ -1005,11 +1012,13 @@ export default function ZenoriaShop() {
             <p className="text-white/70 leading-7 max-w-xl">
               <TextLines text={siteTexts.philo_text} />
             </p>
-            <Button variant="outline" className="mt-8 w-fit rounded-full border-white/40 bg-transparent text-white">
+            <Button variant="outline" className="mt-8 w-fit rounded-full border-white/40 bg-transparent text-white" onClick={() => window.dispatchEvent(new Event(OPEN_STORY_EVENT))}>
               {siteTexts.philo_button}
             </Button>
           </div>
         </section>
+        {/* NOTRE HISTOIRE : textes modifiables dans /admin > Contenu du site > Textes du site */}
+        <StorySection texts={siteTexts} />
         {/* QUIZ COULEURS (invitation) : la page du quiz est /quiz */}
         <section id="quiz" className="max-w-6xl mx-auto px-6 py-20">
           <div className="rounded-[2.5rem] p-8 md:p-12 grid lg:grid-cols-[1.2fr_.8fr] gap-10 items-center" style={{ background: "linear-gradient(120deg,#eee3f5,#f6e3df)" }}>
@@ -1086,6 +1095,7 @@ export default function ZenoriaShop() {
               </p>
               <p><a href="/mentions-legales" className="hover:text-white underline-offset-2 hover:underline">Mentions légales</a></p>
               <p><a href="/confidentialite" className="hover:text-white underline-offset-2 hover:underline">Politique de confidentialité</a></p>
+              {reviewsCfg.enabled && <p><a href="/charte-des-avis" className="hover:text-white underline-offset-2 hover:underline">Charte des avis</a></p>}
             </div>
           </div>
           <div>

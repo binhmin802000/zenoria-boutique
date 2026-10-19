@@ -19,6 +19,7 @@ import AdminSeasonFx from "@/components/AdminSeasonFx";
 import AdminRingAnimation from "@/components/AdminRingAnimation";
 import AdminShipping from "@/components/AdminShipping";
 import AdminContact from "@/components/AdminContact";
+import AdminLegalPages from "@/components/AdminLegalPages"; // ZENORIA_STORY_REVIEWS_V1
 import AdminSiteTexts from "@/components/AdminSiteTexts";
 
 // ============================================================
@@ -305,6 +306,9 @@ export default function AdminSiteMedia() {
 
       {/* CANAUX DE CONTACT : e-mail, WhatsApp, Signal */}
       <AdminContact />
+
+      {/* AVIS CLIENTES (on/off, avec la charte) ET CONFIDENTIALITÉ (toujours en ligne) */}
+      <AdminLegalPages />
 
       {/* TEXTES DU SITE : Savoir-faire et page d'accueil */}
       <AdminSiteTexts />

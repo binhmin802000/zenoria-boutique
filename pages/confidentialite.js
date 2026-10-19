@@ -88,6 +88,17 @@ export default function Confidentialite() {
           </p>
         </Section>
 
+        {/* ZENORIA_STORY_REVIEWS_V1 : avis clientes et journal des connexions */}
+        <Section id="avis" title="Avis clientes">
+          <p>Si vous publiez un avis, nous traitons votre prénom suivi de l&apos;initiale de votre nom, votre note, votre commentaire, la date de l&apos;avis et le bijou concerné. L&apos;avis est rattaché à votre commande, pour garantir la mention « Achat vérifié ».</p>
+          <p>Un avis reste en ligne pendant 3 ans, ou jusqu&apos;à ce que vous demandiez sa suppression à l&apos;adresse <a href="mailto:bagues.mandala@proton.me" className="underline text-[#8f6075]">bagues.mandala@proton.me</a>.</p>
+        </Section>
+
+        <Section id="connexions" title="Journal des connexions">
+          <p>Pour la sécurité de votre compte, nous enregistrons les connexions, déconnexions, inscriptions et changements de mot de passe : adresse e-mail, date, heure et adresse IP. Ce journal sert uniquement à détecter et analyser les accès anormaux.</p>
+          <p>Ces données sont conservées 12 mois, puis supprimées.</p>
+        </Section>
+
         <Section id="cookies" title="Cookies et stockage dans votre navigateur">
           <p>
             Le site n&apos;utilise ni cookie publicitaire ni outil de mesure d&apos;audience. Il utilise le stockage local de votre navigateur pour conserver votre panier et, si vous êtes connecté(e), votre
@@ -101,7 +112,7 @@ export default function Confidentialite() {
               <strong>Vercel</strong> héberge le site. <Todo>lieu d&apos;hébergement et garanties pour les transferts hors Union européenne</Todo>
             </li>
             <li>
-              <strong>Supabase</strong> héberge la base de données, l&apos;authentification et les fichiers (photos et vidéos). <Todo>région du projet Supabase et garanties de transfert</Todo>
+              <strong>Supabase</strong> héberge la base de données, l&apos;authentification et les fichiers (photos et vidéos). Les données sont hébergées dans l&apos;Union européenne (Irlande, région eu-west-1). <Todo>garanties pour les éventuels transferts hors Union européenne</Todo>
             </li>
             <li>
               <strong>Resend</strong> envoie les e-mails liés aux comptes. <Todo>lieu de traitement et garanties de transfert</Todo>

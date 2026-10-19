@@ -2,20 +2,23 @@ import React, { useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
 import { ProductMedia, PriceTag, AvailabilityBadge } from "@/components/ProductParts";
+import FavoriteButton from "@/components/FavoriteButton";
 import useModalFocus from "@/lib/useModalFocus";
 
 // ============================================================================
 // FICHE BAGUE — la fenêtre qui s'ouvre sur une bague (galerie, vidéo, prix, disponibilité, texte, « Ajouter au panier »).
 // Elle est partagée entre l'accueil (pages/index.js) et la page du quiz (pages/quiz.js) : une modification ici s'applique aux deux.
 //
-//  product     : la bague à afficher, ou null (fenêtre fermée)
-//  initialMode : "video" ou "photo" (ce que la galerie montre en premier)
-//  label       : petite ligne au-dessus du nom (par exemple « Automne · Ancrage »)
-//  onClose     : appelée par la croix et par un clic à côté de la fenêtre (la touche Échap est gérée par la page)
-//  onAdd       : appelée par « Ajouter au panier » avec la bague ; c'est la page qui décide de fermer la fiche ou non
-//  extra       : contenu facultatif affiché sous la description (le quiz y met « Pourquoi elle vous va »)
+//  product          : la bague à afficher, ou null (fenêtre fermée)
+//  initialMode      : "video" ou "photo" (ce que la galerie montre en premier)
+//  label            : petite ligne au-dessus du nom (par exemple « Automne · Ancrage »)
+//  onClose          : appelée par la croix et par un clic à côté de la fenêtre (la touche Échap est gérée par la page)
+//  onAdd            : appelée par « Ajouter au panier » avec la bague ; c'est la page qui décide de fermer la fiche ou non
+//  extra            : contenu facultatif affiché sous la description (le quiz y met « Pourquoi elle vous va »)
+//  favoriteActive   : facultatif, état du cœur favori pour cette bague (fourni par la page)
+//  onToggleFavorite : facultatif, appelée au clic sur le cœur ; si absent, aucun bouton favori n'est affiché
 // ============================================================================
-export default function ProductSheet({ product, initialMode = "video", label = "", onClose, onAdd, extra = null, addLabel = "Ajouter au panier" }) {
+export default function ProductSheet({ product, initialMode = "video", label = "", onClose, onAdd, extra = null, addLabel = "Ajouter au panier", favoriteActive = false, onToggleFavorite }) {
   const dialogRef = useRef(null);
   useModalFocus(Boolean(product), dialogRef);
 
@@ -48,7 +51,12 @@ export default function ProductSheet({ product, initialMode = "video", label = "
                 <X />
               </button>
               <div className="text-xs uppercase tracking-widest text-[#9a7384]">{label}</div>
-              <h3 className="font-serif text-4xl mt-3">{product.name}</h3>
+              <div className="flex items-start justify-between gap-3 mt-3">
+                <h3 className="font-serif text-4xl">{product.name}</h3>
+                {onToggleFavorite && (
+                  <FavoriteButton active={favoriteActive} onToggle={onToggleFavorite} size={22} className="shrink-0 mt-2" />
+                )}
+              </div>
               <PriceTag product={product} className="text-2xl mt-4 block" />
               <div className="mt-3">
                 <AvailabilityBadge product={product} showDetail />

@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import Head from "next/head";
 import { motion, AnimatePresence } from "framer-motion";
@@ -21,6 +22,15 @@ import SeasonIcon from "@/components/SeasonIcon";
 import Mannequin from "@/components/Mannequin";
 import { RingVisual, AvailabilityBadge, PriceTag } from "@/components/ProductParts";
 import ProductSheet from "@/components/ProductSheet";
+import FavoriteButton from "@/components/FavoriteButton";
+import {
+  readLocalFavorites,
+  toggleLocalFavorite,
+  fetchFavoriteIds,
+  addFavorite,
+  removeFavorite,
+  mergeLocalFavoritesIntoAccount,
+} from "@/lib/favorites";
 import { formatPrice, getAvailability } from "@/lib/shopUtils";
 import { parseCartReturnHash, encodeResultHash } from "@/lib/quizState";
 import {
@@ -32,7 +42,6 @@ import { SITE_SETTINGS_TABLE, SEASON_FX_KEY, parseSeasonFxSetting, pickFxSeason 
 import { SHIPPING_KEY, DEFAULT_SHIPPING, parseShippingSetting, qualifiesForFreeShipping, shippingStripText } from "@/lib/shippingSettings";
 import { SITE_TEXTS_KEY, DEFAULT_TEXTS, resolveSiteTexts } from "@/lib/siteTexts";
 import TextLines from "@/components/TextLines";
-
 // ============================================================
 // RÉGLAGES DE LA BOUTIQUE (à adapter facilement)
 // ============================================================
@@ -41,7 +50,6 @@ const SHIPPING_FEE = 4.9;               // frais de livraison sous le seuil (Fra
 const MAX_QTY_PER_PRODUCT = 10;         // quantité max par bague (stock + fabrication sur commande)
 // Le délai de fabrication une fois le stock épuisé (BACKORDER_LEAD_TIME) se règle dans lib/shopUtils.js
 const CART_STORAGE_KEY = "zenoria_cart_v2";
-
 // ============================================================
 // Le catalogue (collections) et les codes promo ne sont plus codés
 // en dur ici : ils sont lus depuis la base de données Supabase, et
@@ -51,15 +59,11 @@ const CART_STORAGE_KEY = "zenoria_cart_v2";
 // la fois avec les fichiers uploadés depuis /admin (Supabase Storage)
 // et les anciennes collections dont les médias sont dans /public/images.
 // ============================================================
-
 // Requête dont l'échec ne doit jamais empêcher le site de s'afficher (table pas encore créée, réseau coupé...).
 const optionalQuery = (query) => Promise.resolve(query).then((res) => res, () => ({ data: null, error: true }));
-
 const round2 = (n) => Math.round(n * 100) / 100;
-
 // Prix réellement appliqué : le prix promotionnel s'il est défini et inférieur au prix normal.
 const effectivePrice = (p) => (p.promoPrice != null && p.promoPrice < p.price ? p.promoPrice : p.price);
-
 // Convertit une ligne de la table "products" (Supabase) vers le format utilisé par l'interface.
 function mapDbProduct(row) {
   const photos = Array.isArray(row.photos) ? row.photos : [];
@@ -85,7 +89,6 @@ function mapDbProduct(row) {
     videoCount: row.video ? 1 : 0,
   };
 }
-
 // Calcul des montants du panier (sous-total, remise, livraison, total)
 function computeTotals(lines, promo, shippingCfg = DEFAULT_SHIPPING) {
   const subtotal = round2(lines.reduce((s, l) => s + effectivePrice(l.product) * l.qty, 0));
@@ -100,7 +103,6 @@ function computeTotals(lines, promo, shippingCfg = DEFAULT_SHIPPING) {
   const remaining = shippingCfg.enabled ? round2(Math.max(0, shippingCfg.threshold - discounted)) : 0;
   return { subtotal, discount, shipping, total, remaining, freeShipping: lines.length > 0 && shipping === 0 };
 }
-
 // ============================================================
 // AFFICHAGE ADAPTATIF DU PANIER
 // ============================================================
@@ -110,15 +112,12 @@ const CART_DENSITY = {
   dense: { thumb: "h-12 w-12", name: "text-sm", btn: "h-6 w-6", rowH: 90 },
 };
 const CART_RESERVED_HEIGHT = 380;
-
 function pickCartDensity(lineCount, viewportHeight, extraHeight = 0) {
   const available = Math.max(0, viewportHeight - CART_RESERVED_HEIGHT - extraHeight);
   return ["comfort", "compact"].find((d) => lineCount * CART_DENSITY[d].rowH <= available) || "dense";
 }
-
 // Les familles (les 4 saisons et les familles supplémentaires) sont lues dans la base de données (table « families »,
 // onglet Familles de /admin). Leur mise en forme est dans lib/seasons.js.
-
 function CrystalLogo({ mode = 1, compact = false, dark = false }) {
   const styles = [
     "from-[#bd8792] via-[#d8b36d] to-[#705185]",
@@ -142,7 +141,6 @@ function CrystalLogo({ mode = 1, compact = false, dark = false }) {
     </div>
   );
 }
-
 // Vidéo d'accueil dédiée (onglet « Contenu du site » de /admin) : en boucle, sans le son, dans le cercle de la bannière.
 // Si le fichier ne se charge pas, on revient à la vidéo de la première collection.
 function HeroVideo({ path, fallback }) {
@@ -166,7 +164,6 @@ function HeroVideo({ path, fallback }) {
     </div>
   );
 }
-
 // Petite vignette à taille variable, utilisée dans le panier
 function CartThumb({ product, size = "h-20 w-20" }) {
   const [imgError, setImgError] = useState(false);
@@ -185,7 +182,6 @@ function CartThumb({ product, size = "h-20 w-20" }) {
     </div>
   );
 }
-
 // Pastille de la famille (saison) d'une bague, posée sur sa photo dans le catalogue
 function FamilyPill({ product, families }) {
   const family = familyOfProduct(product, families);
@@ -197,7 +193,6 @@ function FamilyPill({ product, families }) {
     </span>
   );
 }
-
 export default function ZenoriaShop() {
   // --- Catalogue et codes promo, chargés depuis Supabase ---
   const [products, setProducts] = useState([]);
@@ -205,7 +200,6 @@ export default function ZenoriaShop() {
   const [promoCodes, setPromoCodes] = useState({});
   // Médias dédiés gérés depuis /admin (onglet « Contenu du site ») : { hero_video, savoir_faire_photo }
   const [siteMedia, setSiteMedia] = useState({});
-
   // --- État de la maintenance (onglet « Maintenance » de /admin) ---
   // « shop_pause » : le catalogue reste visible, la commande est fermée.
   // « full » : visible ici seulement pour un administrateur qui prévisualise le site pendant la coupure.
@@ -213,7 +207,6 @@ export default function ZenoriaShop() {
   const shopPaused = siteStatus.mode === "shop_pause";
   const previewingMaintenance = siteStatus.mode === "full";
   const pauseReturn = siteStatus.returnAt ? formatReturnAt(siteStatus.returnAt) : "";
-
   // --- Panier ---
   const [cartItems, setCartItems] = useState([]);
   const [cartLoaded, setCartLoaded] = useState(false);
@@ -228,8 +221,10 @@ export default function ZenoriaShop() {
   const [cgvAccepted, setCgvAccepted] = useState(false);
   const [paymentConfirmationOpen, setPaymentConfirmationOpen] = useState(false);
   const [viewportH, setViewportH] = useState(800);
-
-  const [fav, setFav] = useState([]);
+  // Favoris : identifiants des bagues aimées. En mode invité, stockés dans le navigateur (lib/favorites.js) ;
+  // une fois connectée, stockés dans Supabase (table customer_favorites), avec fusion additive à la connexion.
+  const [favIds, setFavIds] = useState([]);
+  const [favPanelOpen, setFavPanelOpen] = useState(false);
   const [menu, setMenu] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [quizReturn, setQuizReturn] = useState(""); // adresse « /quiz#r=… » quand la visiteuse vient du quiz et veut y revenir
@@ -247,7 +242,6 @@ export default function ZenoriaShop() {
   const [siteTexts, setSiteTexts] = useState(DEFAULT_TEXTS); // textes du Savoir-faire et de l'accueil (onglet « Contenu du site » de /admin) : textes d'origine tant qu'ils ne sont pas lus
   const [fxClicked, setFxClicked] = useState(null); // saison choisie par un clic : elle donne son ambiance à la page
   const [nowMs, setNowMs] = useState(null); // renseigné après l'affichage : le rendu du serveur ne dépend jamais de l'heure
-
   // --- Authentification (Supabase) ---
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState("login");
@@ -255,7 +249,6 @@ export default function ZenoriaShop() {
   const [authLoading, setAuthLoading] = useState(true);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-
   // Charge le catalogue + les codes promo, puis restaure le panier sauvegardé
   useEffect(() => {
     let active = true;
@@ -269,23 +262,19 @@ export default function ZenoriaShop() {
         optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").in("key", [SEASON_FX_KEY, SHIPPING_KEY, SITE_TEXTS_KEY, CONTACT_KEY])),
       ]);
       if (!active) return;
-
       const loadedProducts = !prodErr && prodData ? prodData.map(mapDbProduct) : [];
       setProducts(loadedProducts);
-
       const promoMap = {};
       (promoData || []).forEach((p) => {
         promoMap[p.code] = { type: p.type, value: Number(p.value), label: p.label };
       });
       setPromoCodes(promoMap);
-
       // Si la table n'existe pas encore (script SQL non exécuté), siteData est vide : le site garde son comportement d'origine
       const siteMap = {};
       (siteData || []).forEach((r) => {
         siteMap[r.slot] = r;
       });
       setSiteMedia(siteMap);
-
       // Familles et bandeaux : si une table n'existe pas encore, le site garde son comportement d'origine
       setFamilies(visibleFamilies(famRes && famRes.data));
       setBannerRows((banRes && Array.isArray(banRes.data) && banRes.data) || []);
@@ -302,7 +291,6 @@ export default function ZenoriaShop() {
       setContactSettings(parseContactSetting(contactRow ? contactRow.value : null));
       // Textes : si la ligne n'existe pas encore, le site garde ses textes d'origine
       setSiteTexts(resolveSiteTexts(textRow ? textRow.value : null));
-
       try {
         const raw = window.localStorage.getItem(CART_STORAGE_KEY);
         if (raw) {
@@ -319,7 +307,6 @@ export default function ZenoriaShop() {
       } catch (e) {
         // panier illisible : on repart d'un panier vide
       }
-
       setCatalogLoading(false);
       setCartLoaded(true);
     })();
@@ -327,7 +314,10 @@ export default function ZenoriaShop() {
       active = false;
     };
   }, []);
-
+  // Favoris : tant que la connexion n'est pas encore connue, on affiche déjà ceux du navigateur (mode invité).
+  useEffect(() => {
+    setFavIds(readLocalFavorites());
+  }, []);
   // Heure du navigateur, rafraîchie chaque minute : un bandeau échu disparaît et le compte à rebours avance sans recharger la page.
   useEffect(() => {
     setNowMs(Date.now());
@@ -335,7 +325,6 @@ export default function ZenoriaShop() {
     const id = setInterval(() => setNowMs(Date.now()), 60000);
     return () => clearInterval(id);
   }, []);
-
   useEffect(() => {
     const checkAdmin = async (currentUser) => {
       if (!currentUser) {
@@ -349,14 +338,16 @@ export default function ZenoriaShop() {
         .maybeSingle();
       setIsAdmin(Boolean(data));
     };
-
     supabase.auth.getSession().then(({ data }) => {
       const currentUser = data.session ? data.session.user : null;
       setUser(currentUser);
       checkAdmin(currentUser);
+      // Cliente déjà connectée au chargement de la page : ses favoris enregistrés remplacent ceux du navigateur.
+      if (currentUser) {
+        fetchFavoriteIds(currentUser.id).then(setFavIds);
+      }
       setAuthLoading(false);
     });
-
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       const currentUser = session ? session.user : null;
       setUser(currentUser);
@@ -364,14 +355,20 @@ export default function ZenoriaShop() {
         setAuthModalMode("update");
         setAuthModalOpen(true);
       }
+      // Connexion réussie : fusionne les favoris du navigateur (mode invité) avec ceux déjà enregistrés pour cette cliente.
+      if (_event === "SIGNED_IN" && currentUser) {
+        mergeLocalFavoritesIntoAccount(currentUser.id).then(setFavIds);
+      }
+      // Déconnexion : on revient aux favoris du navigateur (mode invité).
+      if (_event === "SIGNED_OUT") {
+        setFavIds(readLocalFavorites());
+      }
       checkAdmin(currentUser);
     });
-
     return () => {
       listener.subscription.unsubscribe();
     };
   }, []);
-
   // Nettoie l'URL après une connexion automatique via lien d'e-mail
   useEffect(() => {
     if (typeof window !== "undefined" && window.location.hash.includes("access_token")) {
@@ -381,7 +378,6 @@ export default function ZenoriaShop() {
       return () => clearTimeout(timer);
     }
   }, []);
-
   // Détecte le retour réussi d'un paiement Stripe (paramètre ?paiement=succes),
   // vide le panier, affiche la confirmation, puis nettoie l'adresse.
   useEffect(() => {
@@ -393,7 +389,6 @@ export default function ZenoriaShop() {
       window.history.replaceState(null, "", window.location.pathname);
     }
   }, []);
-
   // Enregistre le panier à chaque modification
   useEffect(() => {
     if (!cartLoaded) return;
@@ -403,7 +398,6 @@ export default function ZenoriaShop() {
       // stockage indisponible : on ignore
     }
   }, [cartItems, promoCode, cartLoaded]);
-
   // Fermeture des fenêtres avec la touche Échap
   useEffect(() => {
     const onKey = (e) => {
@@ -415,7 +409,6 @@ export default function ZenoriaShop() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-
   // Suit la hauteur de la fenêtre pour adapter le panier
   useEffect(() => {
     const update = () => setViewportH(window.innerHeight);
@@ -423,12 +416,21 @@ export default function ZenoriaShop() {
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, []);
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setAccountMenuOpen(false);
   };
-
+  // Active/désactive un favori : écrit dans Supabase si connectée, sinon dans le navigateur (mode invité).
+  const toggleFavorite = (productId) => {
+    if (user) {
+      const isFav = favIds.includes(productId);
+      setFavIds(isFav ? favIds.filter((id) => id !== productId) : [...favIds, productId]);
+      if (isFav) removeFavorite(user.id, productId);
+      else addFavorite(user.id, productId);
+    } else {
+      setFavIds(toggleLocalFavorite(productId));
+    }
+  };
   // --- Calculs du panier ---
   const cartLines = useMemo(
     () =>
@@ -448,12 +450,12 @@ export default function ZenoriaShop() {
   );
   const tightFooter = cartDensity === "dense";
   const dens = CART_DENSITY[cartDensity];
-
   // --- Familles (saisons) : cartes, filtres et libellés, avec le nombre de créations du catalogue ---
   const seasonCards = useMemo(() => buildSeasonCards(families, products), [families, products]);
   const familyChips = useMemo(() => buildFamilyChips(families, products), [families, products]);
   const familiesReady = seasonCards.length > 0; // sinon (table illisible) : le catalogue s'affiche sans les saisons
-
+  // --- Favoris : bagues correspondant aux identifiants favoris, nettoyées si un produit n'existe plus ---
+  const favoriteLines = useMemo(() => products.filter((p) => favIds.includes(p.id)), [products, favIds]);
   // --- Bandeau : le plus prioritaire, jamais pendant une pause ou une maintenance, jamais avec un code devenu invalide ---
   const validCodes = useMemo(() => new Set(Object.keys(promoCodes)), [promoCodes]);
   const currentBanner =
@@ -465,7 +467,6 @@ export default function ZenoriaShop() {
           validCodes,
           checkStart: isAdmin, // un administrateur reçoit aussi les bandeaux programmés : on vérifie leur début
         });
-
   // --- Actions du panier ---
   const addToCart = (p) => {
     const current = cartItems.find((i) => i.id === p.id);
@@ -483,7 +484,6 @@ export default function ZenoriaShop() {
     );
     setCartOpen(true);
   };
-
   const changeQty = (p, delta) => {
     const current = cartItems.find((i) => i.id === p.id);
     if (!current) return;
@@ -497,13 +497,11 @@ export default function ZenoriaShop() {
       cartItems.map((i) => (i.id === p.id ? { ...i, qty: Math.min(MAX_QTY_PER_PRODUCT, Math.max(1, i.qty + delta)) } : i))
     );
   };
-
   const removeLine = (p) => {
     setCartNotice("");
     setCheckoutNotice(false);
     setCartItems(cartItems.filter((i) => i.id !== p.id));
   };
-
   const clearCart = () => {
     setCartNotice("");
     setCheckoutNotice(false);
@@ -511,7 +509,6 @@ export default function ZenoriaShop() {
     setPromoCode("");
     setPromoOpen(false);
   };
-
   const handleCheckout = async () => {
     setCheckoutNotice(false);
     setCheckoutError("");
@@ -541,7 +538,6 @@ export default function ZenoriaShop() {
       setCheckoutLoading(false);
     }
   };
-
   const applyPromo = (e) => {
     if (e) e.preventDefault();
     const code = promoInput.trim().toUpperCase();
@@ -555,24 +551,20 @@ export default function ZenoriaShop() {
       setPromoError("Ce code promo n'est pas valide.");
     }
   };
-
   const removePromo = () => {
     setPromoCode("");
     setPromoError("");
   };
-
   const openProduct = (p, mode = "video") => {
     setSelectedMode(mode);
     setSelected(p);
   };
-
   const scrollToSection = (id) => {
     const el = document.getElementById(id);
     if (el) {
       el.scrollIntoView({ behavior: "smooth" });
     }
   };
-
   // Choisit une famille (ou aucune) : le catalogue est filtré, et une saison donne son ambiance animée à la page.
   const chooseFamily = (key) => {
     const family = key ? families.find((f) => f.key === key) : null;
@@ -589,15 +581,12 @@ export default function ZenoriaShop() {
     chooseFamily(selectedFamily === key ? null : key);
     scrollToCatalogue();
   };
-
   const filteredProducts = selectedFamily ? filterByFamily(products, families, selectedFamily) : products;
   const selectedFamilyData = selectedFamily ? families.find((f) => f.key === selectedFamily) || null : null;
-
   // Saison animée : réglage de l'administration, ou clic de la visiteuse, ou saison du moment
   // Le réglage de l'administration est lu avant tout affichage de l'animation (catalogLoading), pour qu'une animation désactivée ou forcée ne clignote pas au chargement.
   const fxAutoSeason = nowMs === null ? null : resolveFxSeason(parseFxSetting(null), fxClicked, new Date(nowMs));
   const fxSeason = nowMs === null || catalogLoading ? null : pickFxSeason(fxSetting, fxAutoSeason);
-
   // Bandeau : fermeture (mémorisée le temps de la visite) et bouton
   const closeBanner = () => {
     if (!currentBanner) return;
@@ -622,7 +611,6 @@ export default function ZenoriaShop() {
     }
     scrollToSection("collections");
   };
-
   // Liens venus d'une autre page (le quiz) : « /#panier » ouvre le panier, « /#bague=nom » ouvre une fiche bague,
   // « /#saison=automne » filtre le catalogue. L'adresse est lue une seule fois, quand le catalogue est chargé, puis nettoyée.
   const linkHandled = useRef(false);
@@ -669,7 +657,6 @@ export default function ZenoriaShop() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catalogLoading]);
-
   return (
     <div className="min-h-screen bg-[#fbf8f4] text-[#342b32] selection:bg-[#dcc8dd]">
     <MediaGuard />
@@ -677,13 +664,11 @@ export default function ZenoriaShop() {
         <title>Zenoria — L&apos;énergie du cristal, l&apos;harmonie de l&apos;âme</title>
         <meta name="description" content="Bagues façonnées à la main en cristaux Swarovski, rassemblées en quatre saisons : Printemps, Été, Automne et Hiver." />
       </Head>
-
       {previewingMaintenance && (
         <div role="status" data-testid="maintenance-preview" className="bg-red-700 text-white text-[12px] py-2 px-4 text-center">
           Mode maintenance actif : vous voyez le site grâce au lien d&apos;aperçu administrateur. Les visiteurs voient la page de maintenance.
         </div>
       )}
-
       {shopPaused && (
         <div role="status" data-testid="pause-banner" className="bg-amber-100 text-amber-900 text-[13px] py-2.5 px-4 text-center leading-5">
           <strong>Boutique en pause</strong> · les commandes sont temporairement fermées.
@@ -691,15 +676,12 @@ export default function ZenoriaShop() {
           {pauseReturn ? ` Retour prévu : ${pauseReturn}.` : ""}
         </div>
       )}
-
       {currentBanner && (
         <BannerBar banner={currentBanner} nowMs={nowMs} onClose={closeBanner} onButton={handleBannerButton} />
       )}
-
       <div className="bg-[#342434] text-white/85 text-[11px] py-2 px-4 text-center tracking-wide">
         {shippingStripText(shippingCfg)}
       </div>
-
       <header className="sticky top-0 z-40 bg-[#fbf8f4]/95 backdrop-blur border-b border-[#eadfe4]">
         <div className="max-w-7xl mx-auto px-5 h-20 flex items-center justify-between">
           <CrystalLogo compact mode={logo} />
@@ -713,7 +695,6 @@ export default function ZenoriaShop() {
           </nav>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon"><Search size={19} /></Button>
-
             {/* Compte utilisateur */}
             <div className="relative hidden sm:block">
               <Button
@@ -750,7 +731,14 @@ export default function ZenoriaShop() {
                 </div>
               )}
             </div>
-
+            <Button variant="ghost" size="icon" onClick={() => setFavPanelOpen(true)} className="relative hidden sm:inline-flex" aria-label="Voir mes favoris">
+              <Heart size={19} />
+              {favIds.length > 0 && (
+                <span className="absolute right-0 top-0 h-5 min-w-5 px-1 rounded-full bg-[#9a667c] text-white text-[10px] grid place-items-center">
+                  {favIds.length}
+                </span>
+              )}
+            </Button>
             <Button variant="ghost" size="icon" onClick={() => setCartOpen(true)} className="relative" aria-label="Ouvrir le panier">
               <ShoppingBag size={19} />
               {cartCount > 0 && (
@@ -772,6 +760,9 @@ export default function ZenoriaShop() {
             <button onClick={() => { scrollToSection("philosophie"); setMenu(false); }} className="text-left">Notre philosophie</button>
             <a href="/quiz" data-testid="nav-quiz-mobile" onClick={() => setMenu(false)} className="text-left">Quiz</a>
             <button onClick={() => { scrollToSection("contact"); setMenu(false); }} className="text-left">Contact</button>
+            <button onClick={() => { setFavPanelOpen(true); setMenu(false); }} className="text-left">
+              Mes favoris{favIds.length > 0 ? ` (${favIds.length})` : ""}
+            </button>
             {!authLoading && (
               user ? (
                 <>
@@ -789,7 +780,6 @@ export default function ZenoriaShop() {
           </div>
         )}
       </header>
-
       <main>
         {/* HERO */}
         <section className="relative overflow-hidden min-h-[670px] flex items-center bg-[radial-gradient(circle_at_75%_40%,#ead5ee_0%,#fbf6f0_38%,#f0dbd4_70%,#dfc1c8_100%)]">
@@ -838,7 +828,6 @@ export default function ZenoriaShop() {
             </motion.div>
           </div>
         </section>
-
         {/* LES SAISONS (familles) : quatre cartes lues dans la base, avec l'animation saisonnière discrète */}
         {familiesReady && (
           <section id="seasons" className="relative overflow-hidden">
@@ -887,7 +876,6 @@ export default function ZenoriaShop() {
             <SeasonFx season={fxSeason} />
           </section>
         )}
-
         {/* COLLECTIONS / CATALOGUE */}
         <section id="collections" className="py-20 bg-white">
           <div className="max-w-7xl mx-auto px-6">
@@ -911,7 +899,6 @@ export default function ZenoriaShop() {
                 </button>
               )}
             </div>
-
             {familiesReady && (
               <div className="flex flex-wrap gap-2 mb-8" data-testid="family-chips">
                 <button
@@ -942,7 +929,6 @@ export default function ZenoriaShop() {
                 ))}
               </div>
             )}
-
             {catalogLoading ? (
               <p className="text-sm text-[#8b737e] text-center py-10">Chargement des créations...</p>
             ) : filteredProducts.length === 0 ? (
@@ -956,13 +942,12 @@ export default function ZenoriaShop() {
                     <div className="relative">
                       <RingVisual product={p} />
                       <FamilyPill product={p} families={families} />
-                      <button
-                        onClick={() => setFav(fav.includes(p.id) ? fav.filter((x) => x !== p.id) : [...fav, p.id])}
-                        className="absolute right-4 top-4 h-10 w-10 bg-white/80 rounded-full grid place-items-center z-10"
-                        aria-label="Ajouter aux favoris"
-                      >
-                        <Heart size={18} fill={fav.includes(p.id) ? "#9a667c" : "none"} className="text-[#9a667c]" />
-                      </button>
+                      <FavoriteButton
+                        active={favIds.includes(p.id)}
+                        onToggle={() => toggleFavorite(p.id)}
+                        size={18}
+                        className="absolute right-4 top-4 h-10 w-10 bg-white/80 z-10"
+                      />
                       <button className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition z-[5]" onClick={() => openProduct(p)} aria-label={`Voir ${p.name}`} />
                     </div>
                     <CardContent className="p-5">
@@ -1003,10 +988,8 @@ export default function ZenoriaShop() {
             )}
           </div>
         </section>
-
         {/* SAVOIR-FAIRE */}
         <SavoirFaire product={products[0]} media={siteMedia.savoir_faire_photo} accent={(families.find((f) => f.key === fxSeason) || {}).accent} texts={siteTexts} />
-
         {/* PHILOSOPHIE */}
         <section id="philosophie" className="grid grid-cols-1 lg:grid-cols-2 min-h-[540px]">
           <div className="bg-gradient-to-br from-[#d8c4d9] via-[#f5e8e6] to-[#dbc9a9] grid grid-cols-1 place-items-center p-6 sm:p-12">
@@ -1027,7 +1010,6 @@ export default function ZenoriaShop() {
             </Button>
           </div>
         </section>
-
         {/* QUIZ COULEURS (invitation) : la page du quiz est /quiz */}
         <section id="quiz" className="max-w-6xl mx-auto px-6 py-20">
           <div className="rounded-[2.5rem] p-8 md:p-12 grid lg:grid-cols-[1.2fr_.8fr] gap-10 items-center" style={{ background: "linear-gradient(120deg,#eee3f5,#f6e3df)" }}>
@@ -1051,7 +1033,6 @@ export default function ZenoriaShop() {
             </div>
           </div>
         </section>
-
         {/* NEWSLETTER */}
         <section id="contact" className="bg-[#d9c5cc] py-16">
           <div className="max-w-5xl mx-auto px-6 text-center">
@@ -1065,7 +1046,6 @@ export default function ZenoriaShop() {
           </div>
         </section>
       </main>
-
       <footer className="bg-[#2f252d] text-white/70 py-12">
         <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-4 gap-9">
           <div>
@@ -1170,7 +1150,6 @@ export default function ZenoriaShop() {
           </div>
         </div>
       </footer>
-
       {/* PANIER */}
       <AnimatePresence>
         {cartOpen && (
@@ -1198,7 +1177,6 @@ export default function ZenoriaShop() {
                   <X />
                 </button>
               </div>
-
               {cartLines.length === 0 ? (
                 <div className="flex-1 grid place-items-center p-8 text-center">
                   <div>
@@ -1245,7 +1223,6 @@ export default function ZenoriaShop() {
                       <div className="text-xs rounded-lg bg-amber-50 text-amber-700 px-3 py-2 mt-2">{cartNotice}</div>
                     )}
                   </div>
-
                   <div className={`flex-1 min-h-0 overflow-y-auto px-5 py-2 ${cartDensity === "dense" ? "space-y-2" : "space-y-3"}`}>
                     {cartLines.map(({ product: p, qty }) => {
                       const avail = getAvailability(p, qty);
@@ -1300,7 +1277,6 @@ export default function ZenoriaShop() {
                       );
                     })}
                   </div>
-
                   <div className={`flex-none border-t border-[#eadfe4] bg-white/80 px-5 ${tightFooter ? "py-3 space-y-2" : "py-4 space-y-3"}`}>
                     {promo ? (
                       <div className="flex items-center justify-between rounded-xl bg-emerald-50 text-emerald-700 px-3 py-2 text-sm">
@@ -1346,7 +1322,6 @@ export default function ZenoriaShop() {
                         <Tag size={14} /> Vous avez un code promo ?
                       </button>
                     )}
-
                     <div className={`text-[#54434c] ${tightFooter ? "text-xs space-y-0.5" : "text-sm space-y-1"}`}>
                       <div className="flex justify-between">
                         <span>Sous-total</span>
@@ -1367,7 +1342,6 @@ export default function ZenoriaShop() {
                         <span>{formatPrice(totals.total)}</span>
                       </div>
                     </div>
-
                     {!user && (
                       <p data-testid="account-choice-line" className="text-[12px] text-[#70656a] leading-5">
                         Déjà cliente ?{" "}
@@ -1391,7 +1365,6 @@ export default function ZenoriaShop() {
                         {" "}(facultatif, vous pouvez continuer sans)
                       </p>
                     )}
-
                     <label className="flex items-start gap-2 text-[12px] text-[#54434c] leading-5">
                       <input
                         type="checkbox"
@@ -1407,7 +1380,6 @@ export default function ZenoriaShop() {
                         </a>
                       </span>
                     </label>
-
                     <button
                       onClick={handleCheckout}
                       disabled={shopPaused || checkoutLoading || !cgvAccepted}
@@ -1439,7 +1411,96 @@ export default function ZenoriaShop() {
           </>
         )}
       </AnimatePresence>
-
+      {/* MES FAVORIS */}
+      <AnimatePresence>
+        {favPanelOpen && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/35 z-50" onClick={() => setFavPanelOpen(false)} />
+            <motion.aside
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              style={{ height: "100dvh" }}
+              className="fixed right-0 top-0 h-full w-full max-w-md bg-[#fbf8f4] z-50 shadow-2xl flex flex-col"
+            >
+              <div className="flex-none flex justify-between items-center px-5 py-4 border-b border-[#eadfe4]">
+                <div className="min-w-0">
+                  <h3 className="font-serif text-2xl leading-none">Mes favoris</h3>
+                  {favoriteLines.length > 0 && (
+                    <div className="text-xs text-[#8b737e] mt-1.5">
+                      {favoriteLines.length} création{favoriteLines.length > 1 ? "s" : ""}
+                    </div>
+                  )}
+                </div>
+                <button onClick={() => setFavPanelOpen(false)} className="h-10 w-10 rounded-full grid place-items-center hover:bg-[#f0e6ea]" aria-label="Fermer mes favoris">
+                  <X />
+                </button>
+              </div>
+              {!user && (
+                <p className="flex-none px-5 pt-3 text-[12px] text-[#70656a] leading-5">
+                  Vos favoris sont conservés sur cet appareil.{" "}
+                  <button
+                    type="button"
+                    onClick={() => { setFavPanelOpen(false); setAuthModalMode("signup"); setAuthModalOpen(true); }}
+                    className="underline text-[#8f6075]"
+                  >
+                    Créez un compte
+                  </button>{" "}
+                  pour les retrouver sur tous vos appareils.
+                </p>
+              )}
+              {favoriteLines.length === 0 ? (
+                <div className="flex-1 grid place-items-center p-8 text-center">
+                  <div>
+                    <Heart className="mx-auto text-[#b88d9f] mb-4" size={40} />
+                    <div className="font-serif text-2xl mb-2">Aucun favori pour l&apos;instant</div>
+                    <p className="text-sm text-[#756a70] mb-6">Touchez le cœur d&apos;une création pour la retrouver ici.</p>
+                    <button
+                      onClick={() => { setFavPanelOpen(false); scrollToSection("collections"); }}
+                      className="rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-6 h-11 text-sm"
+                    >
+                      Découvrir les créations
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 min-h-0 overflow-y-auto px-5 py-3 space-y-3">
+                  {favoriteLines.map((p) => (
+                    <div key={p.id} className="flex gap-3 bg-white rounded-2xl border border-[#eee2e5] p-3">
+                      <CartThumb product={p} size="h-16 w-16" />
+                      <div className="flex-1 min-w-0 flex flex-col justify-between">
+                        <div className="flex justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="font-serif text-base leading-tight truncate">{p.name}</div>
+                            <PriceTag product={p} className="text-sm mt-1 block" />
+                          </div>
+                          <FavoriteButton active onToggle={() => toggleFavorite(p.id)} size={18} />
+                        </div>
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            type="button"
+                            onClick={() => { setFavPanelOpen(false); openProduct(p); }}
+                            className="rounded-full border border-[#d9c5cc] px-3 py-1 text-xs hover:bg-[#f5edf1]"
+                          >
+                            Voir la fiche
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { addToCart(p); setFavPanelOpen(false); }}
+                            className="rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-3 py-1 text-xs"
+                          >
+                            Ajouter au panier
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
       {/* FICHE PRODUIT (composant partagé avec la page du quiz : components/ProductSheet.js) */}
       <ProductSheet
         product={selected}
@@ -1447,11 +1508,11 @@ export default function ZenoriaShop() {
         label={selected ? productLabel(selected, families, familiesReady) : ""}
         onClose={() => setSelected(null)}
         onAdd={(p) => { addToCart(p); setSelected(null); }}
+        favoriteActive={selected ? favIds.includes(selected.id) : false}
+        onToggleFavorite={() => selected && toggleFavorite(selected.id)}
       />
-
       {/* AUTHENTIFICATION */}
       <AuthModal open={authModalOpen} onClose={() => { setAuthModalOpen(false); setAuthModalMode("login"); }} initialMode={authModalMode} />
-
       {/* CONFIRMATION DE PAIEMENT (retour de Stripe Checkout) */}
       <PaymentConfirmationModal open={paymentConfirmationOpen} onClose={() => setPaymentConfirmationOpen(false)} />
     </div>

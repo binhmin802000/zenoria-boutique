@@ -16,6 +16,9 @@ import { isoToParisLocal } from "@/lib/parisTime";
 import { legacyFamilyText, validateDominantColors, cleanDominantColors, DOMINANT_MAX, DOMINANT_NAME_MAX } from "@/lib/families";
 import { promoCodeStatus, validatePromoDates, formatParis } from "@/lib/banners";
 import { CrmAccounts, CrmRoadmap, AdminOrders } from "@/components/AdminCrm";
+// ZENORIA_REVIEWS_STEP2_V1 : onglet « Avis »
+import AdminReviews from "@/components/AdminReviews";
+import { Star as ReviewsTabIcon } from "lucide-react";
 import { ADMIN_NAV, DEFAULT_NAV, parseAdminHash, buildAdminHash, isAuthCallbackHash, technicalAlertLevel } from "@/lib/adminNav";
 import { worstLevel } from "@/lib/quota";
 
@@ -141,6 +144,7 @@ function formatEUR(n) {
 
 const GROUP_ICONS = { produits: Package, crm: Users, technique: Settings };
 const TAB_ICONS = {
+  avis: ReviewsTabIcon,
   collections: Package,
   familles: Palette,
   promos: Tag,
@@ -989,6 +993,8 @@ export default function AdminPage() {
         {tab === "comptes" && <CrmAccounts />}
 
         {tab === "commandes" && <AdminOrders />}
+
+        {tab === "avis" && <AdminReviews />}
 
         {tab === "avenir" && <CrmRoadmap />}
 

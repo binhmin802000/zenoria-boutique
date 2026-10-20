@@ -17,8 +17,10 @@ import useModalFocus from "@/lib/useModalFocus";
 //  extra            : contenu facultatif affiché sous la description (le quiz y met « Pourquoi elle vous va »)
 //  favoriteActive   : facultatif, état du cœur favori pour cette bague (fourni par la page)
 //  onToggleFavorite : facultatif, appelée au clic sur le cœur ; si absent, aucun bouton favori n'est affiché
+//  ratingSlot       : facultatif, affiché sous le prix (note des avis) — ZENORIA_REVIEWS_STEP3_V1
+//  reviewsSlot      : facultatif, affiché sous « Ajouter au panier » (derniers avis) — ZENORIA_REVIEWS_STEP3_V1
 // ============================================================================
-export default function ProductSheet({ product, initialMode = "video", label = "", onClose, onAdd, extra = null, addLabel = "Ajouter au panier", favoriteActive = false, onToggleFavorite }) {
+export default function ProductSheet({ product, initialMode = "video", label = "", onClose, onAdd, extra = null, addLabel = "Ajouter au panier", favoriteActive = false, onToggleFavorite, ratingSlot = null, reviewsSlot = null }) {
   const dialogRef = useRef(null);
   useModalFocus(Boolean(product), dialogRef);
 
@@ -58,6 +60,7 @@ export default function ProductSheet({ product, initialMode = "video", label = "
                 )}
               </div>
               <PriceTag product={product} className="text-2xl mt-4 block" />
+              {ratingSlot}
               <div className="mt-3">
                 <AvailabilityBadge product={product} showDetail />
               </div>
@@ -75,6 +78,7 @@ export default function ProductSheet({ product, initialMode = "video", label = "
               >
                 {addLabel}
               </button>
+              {reviewsSlot}
             </div>
           </motion.div>
         </>

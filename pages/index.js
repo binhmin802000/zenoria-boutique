@@ -46,6 +46,8 @@ import { REVIEWS_KEY, DEFAULT_REVIEWS, parseReviewsSetting } from "@/lib/reviews
 import StorySection, { OPEN_STORY_EVENT } from "@/components/StorySection";
 // ZENORIA_REVIEWS_STEP1_V1 : panneau « Mes commandes & avis »
 import MyReviewsPanel from "@/components/MyReviewsPanel";
+// ZENORIA_REVIEWS_STEP3_V1 : affichage des avis (fiche bague + section) et aperçu admin
+import { ReviewRatingLine, ProductReviewsList, ReviewsSection, openReviewsSection } from "@/components/Reviews";
 import { Star as StarIcon } from "lucide-react";
 import TextLines from "@/components/TextLines";
 // ============================================================
@@ -1038,6 +1040,8 @@ export default function ZenoriaShop() {
         </section>
         {/* NOTRE HISTOIRE : textes modifiables dans /admin > Contenu du site > Textes du site */}
         <StorySection texts={siteTexts} />
+        {/* AVIS CLIENTES : visibles si l'interrupteur est sur ON, ou en aperçu pour l'administration */}
+        {(reviewsCfg.enabled || isAdmin) && <ReviewsSection reviewsCfg={reviewsCfg} isAdmin={isAdmin} products={products} />}
         {/* QUIZ COULEURS (invitation) : la page du quiz est /quiz */}
         <section id="quiz" className="max-w-6xl mx-auto px-6 py-20">
           <div className="rounded-[2.5rem] p-8 md:p-12 grid lg:grid-cols-[1.2fr_.8fr] gap-10 items-center" style={{ background: "linear-gradient(120deg,#eee3f5,#f6e3df)" }}>
@@ -1541,6 +1545,8 @@ export default function ZenoriaShop() {
         onAdd={(p) => { addToCart(p); setSelected(null); }}
         favoriteActive={selected ? favIds.includes(selected.id) : false}
         onToggleFavorite={() => selected && toggleFavorite(selected.id)}
+        ratingSlot={selected && (reviewsCfg.enabled || isAdmin) ? <ReviewRatingLine productId={selected.id} reviewsCfg={reviewsCfg} isAdmin={isAdmin} onSeeAll={() => { const id = selected.id; setSelected(null); openReviewsSection(id); }} /> : null}
+        reviewsSlot={selected && (reviewsCfg.enabled || isAdmin) ? <ProductReviewsList productId={selected.id} reviewsCfg={reviewsCfg} isAdmin={isAdmin} onSeeAll={() => { const id = selected.id; setSelected(null); openReviewsSection(id); }} /> : null}
       />
       {/* AUTHENTIFICATION */}
       <AuthModal open={authModalOpen} onClose={() => { setAuthModalOpen(false); setAuthModalMode("login"); }} initialMode={authModalMode} />

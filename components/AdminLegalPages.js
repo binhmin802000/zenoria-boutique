@@ -6,17 +6,22 @@ import { REVIEWS_KEY, parseReviewsSetting, buildReviewsValue, describeReviews } 
 
 // ============================================================
 // CARTES « AVIS CLIENTES » ET « POLITIQUE DE CONFIDENTIALITÉ » (onglet « Contenu du site » de /admin)
-// ZENORIA_STORY_REVIEWS_V1
+// ZENORIA_STORY_REVIEWS_V1 · ZENORIA_REVIEWS_STEP1_V1
 //
-// Avis clientes : un interrupteur unique, table « site_settings », clé « reviews », valeur { "enabled": true|false }.
-//   ON  : avis visibles, page /charte-des-avis et lien du footer visibles ;
-//   OFF : tout est masqué (/charte-des-avis renvoie 404). Les avis déjà déposés restent en base.
-//   Ligne absente ou illisible : OFF (voir lib/reviewsSettings.js).
+// Avis clientes : table « site_settings », clé « reviews », valeur { "enabled": true|false, "mode": "full"|"stars" }.
+//   Interrupteur ON  : avis visibles, page /charte-des-avis et lien du footer visibles ;
+//   Interrupteur OFF : tout est masqué (/charte-des-avis renvoie 404). Les avis déjà déposés restent en base.
+//   Mode « étoiles + commentaires » ou « étoiles seulement » : s'applique à TOUS les avis à la fois.
+//   Ligne absente ou illisible : OFF, mode complet (voir lib/reviewsSettings.js).
 // Confidentialité : aucune action possible, la page reste toujours en ligne (obligation RGPD).
-// Prérequis SQL : contrainte site_settings_reviews_valid et lecture publique de la clé « reviews ».
 // ============================================================
 
 const TIME_ZONE = "Europe/Paris";
+
+const MODES = [
+  { id: "full", title: "Étoiles + commentaires", text: "Note et texte publiés, réponse de la boutique possible. Formulaire complet." },
+  { id: "stars", title: "Étoiles seulement", text: "Seules les notes sont publiées. Le champ commentaire disparaît ; les textes déjà reçus restent en base, non affichés." },
+];
 
 function formatDateTime(value) {
   if (!value) return null;
@@ -26,7 +31,7 @@ function formatDateTime(value) {
 function friendlyError(err) {
   const msg = (err && err.message) || String(err || "");
   if (/site_settings_reviews_valid|violates check constraint/i.test(msg)) {
-    return "La base refuse cette valeur. Vérifiez que la contrainte site_settings_reviews_valid est bien installée dans Supabase.";
+    return "La base refuse cette valeur. Vérifiez que le script supabase_reviews.sql a bien été exécuté dans Supabase.";
   }
   if (/relation|does not exist|schema cache|could not find the table/i.test(msg)) {
     return "La table des réglages n'est pas installée. Exécutez le script supabase_site_settings.sql dans Supabase (SQL Editor).";
@@ -68,29 +73,44 @@ export default function AdminLegalPages() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const enabled = parseReviewsSetting(row ? row.value : null).enabled;
+  const current = parseReviewsSetting(row ? row.value : null);
   const disabled = loading || Boolean(loadError) || saving;
   const savedAt = row ? formatDateTime(row.updated_at) : null;
 
-  const toggle = async () => {
-    const next = !enabled;
+  const save = async (next, message) => {
     setError("");
     setSaving(true);
     try {
       const { error: err } = await supabase
         .from(SITE_SETTINGS_TABLE)
-        .upsert({ key: REVIEWS_KEY, value: buildReviewsValue({ enabled: next }) }, { onConflict: "key" });
+        .upsert({ key: REVIEWS_KEY, value: buildReviewsValue(next) }, { onConflict: "key" });
       if (err) throw err;
-      setToast(
-        next
-          ? "Avis clientes activés : la charte des avis est en ligne. Les visiteurs le voient au prochain chargement de la page."
-          : "Avis clientes désactivés : avis et charte des avis sont masqués. Les avis déjà déposés sont conservés."
-      );
+      setToast(message);
       await load();
     } catch (err) {
       setError("Échec de l'enregistrement : " + friendlyError(err));
     }
     setSaving(false);
+  };
+
+  const toggle = () => {
+    const next = { ...current, enabled: !current.enabled };
+    save(
+      next,
+      next.enabled
+        ? "Avis clientes activés : la charte des avis est en ligne. Les visiteurs le voient au prochain chargement de la page."
+        : "Avis clientes désactivés : avis et charte des avis sont masqués. Les avis déjà déposés sont conservés."
+    );
+  };
+
+  const setMode = (mode) => {
+    if (mode === current.mode) return;
+    save(
+      { ...current, mode },
+      mode === "stars"
+        ? "Mode « étoiles seulement » enregistré : commentaires et réponses ne sont plus affichés."
+        : "Mode « étoiles + commentaires » enregistré."
+    );
   };
 
   return (
@@ -118,16 +138,40 @@ export default function AdminLegalPages() {
             <button
               type="button"
               role="switch"
-              aria-checked={enabled}
+              aria-checked={current.enabled}
               aria-label="Avis clientes et charte des avis"
               onClick={toggle}
               disabled={disabled}
               data-testid="reviews-switch"
-              className={`relative h-7 w-12 rounded-full transition-colors disabled:opacity-50 ${enabled ? "bg-emerald-600" : "bg-[#d9cfd3]"}`}
+              className={`relative h-7 w-12 rounded-full transition-colors disabled:opacity-50 ${current.enabled ? "bg-emerald-600" : "bg-[#d9cfd3]"}`}
             >
-              <span className={`absolute top-1 left-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${enabled ? "translate-x-5" : ""}`} />
+              <span className={`absolute top-1 left-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${current.enabled ? "translate-x-5" : ""}`} />
             </button>
           </div>
+        </div>
+
+        <div className="mt-4">
+          <div className="text-xs text-[#54434c] font-medium mb-2">Mode d&apos;affichage</div>
+          <div className="grid sm:grid-cols-2 gap-2" role="radiogroup" aria-label="Mode d'affichage des avis">
+            {MODES.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                role="radio"
+                aria-checked={current.mode === m.id}
+                onClick={() => setMode(m.id)}
+                disabled={disabled}
+                data-testid={`reviews-mode-${m.id}`}
+                className={`text-left rounded-xl border px-3 py-2 disabled:opacity-60 ${current.mode === m.id ? "border-[#8f6075] bg-[#f5edf1]" : "border-[#eadfe4] bg-white hover:bg-[#fdfbfc]"}`}
+              >
+                <div className="text-sm font-medium text-[#412f3b]">{m.title}</div>
+                <div className="text-[11px] text-[#8b737e] leading-4 mt-0.5">{m.text}</div>
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] text-[#8b737e] mt-2 leading-4">
+            Le mode s&apos;applique à tous les avis à la fois, et la charte s&apos;adapte automatiquement. On ne masque jamais certains commentaires et pas d&apos;autres.
+          </p>
         </div>
 
         {toast && <div data-testid="reviews-toast" className="mt-4 rounded-xl bg-emerald-50 text-emerald-700 px-4 py-3 text-sm">{toast}</div>}

@@ -1,4 +1,4 @@
-// ZENORIA_STORY_REVIEWS_V1
+// ZENORIA_STORY_REVIEWS_V1 · ZENORIA_REVIEWS_STEP1_V1
 import React from "react";
 import Head from "next/head";
 import { supabase } from "@/lib/supabase";
@@ -9,10 +9,10 @@ import { fetchReviewsSetting, REVIEWS_RULES } from "@/lib/reviewsSettings";
 //
 // Visible seulement si l'interrupteur « Avis clientes » est activé (/admin > Contenu du site).
 // Désactivé, absent ou illisible : vraie page 404.
+// S'adapte au mode d'affichage : « étoiles + commentaires » ou « étoiles seulement ».
 // Informations exigées par l'article D111-17 du Code de la consommation : contrôle des avis,
 // dates, critère de classement, contrepartie, délais de publication et de conservation.
 // Les valeurs chiffrées viennent de REVIEWS_RULES (lib/reviewsSettings.js).
-// Même mise en page que pages/mentions-legales.js et pages/confidentialite.js.
 // ============================================================
 
 const CONTACT_EMAIL = "bagues.mandala@proton.me";
@@ -28,11 +28,12 @@ export async function getServerSideProps({ res }) {
   const setting = await fetchReviewsSetting(supabase);
   res.setHeader("Cache-Control", "no-store, max-age=0");
   if (!setting.enabled) return { notFound: true };
-  return { props: {} };
+  return { props: { mode: setting.mode } };
 }
 
-export default function CharteDesAvis() {
+export default function CharteDesAvis({ mode }) {
   const r = REVIEWS_RULES;
+  const starsOnly = mode === "stars";
   const maxChars = r.maxCommentLength.toLocaleString("fr-FR");
   return (
     <div className="min-h-screen bg-[#fbf8f4] text-[#342b32]">
@@ -54,7 +55,7 @@ export default function CharteDesAvis() {
         </p>
 
         <Section id="qui" title="Qui peut déposer un avis ?">
-          <p>Seules les clientes ayant reçu une commande peuvent donner leur avis sur les bijoux achetés. Chaque avis porte ainsi la mention « Achat vérifié ».</p>
+          <p>Seules les clientes disposant d&apos;un compte et ayant reçu leur commande peuvent donner leur avis sur les bijoux achetés. Chaque avis porte ainsi la mention « Achat vérifié ».</p>
         </Section>
 
         <Section id="quand" title="Quand ?">
@@ -62,16 +63,21 @@ export default function CharteDesAvis() {
         </Section>
 
         <Section id="contenu" title="Contenu d'un avis">
-          <p>Une note de 1 à 5 étoiles (obligatoire) et un commentaire facultatif de {maxChars} caractères maximum.</p>
+          {starsOnly ? (
+            <p>Un avis se compose d&apos;une note de 1 à 5 étoiles. Les commentaires écrits ne sont actuellement pas publiés.</p>
+          ) : (
+            <p>Une note de 1 à 5 étoiles (obligatoire) et un commentaire facultatif de {maxChars} caractères maximum.</p>
+          )}
         </Section>
 
         <Section id="controle" title="Contrôle des avis">
           <p>Chaque avis est relu par notre équipe avant publication, sous {r.moderationDays} jours ouvrés maximum. Nous ne modifions jamais le contenu d&apos;un avis, et nous publions aussi bien les avis positifs que les avis négatifs.</p>
-          <p>Un avis peut être refusé uniquement s&apos;il contient des propos injurieux ou discriminatoires, des données personnelles, de la publicité, ou s&apos;il ne concerne pas le produit. Son autrice est alors informée du motif du refus.</p>
+          <p>Un avis peut être refusé uniquement s&apos;il contient des propos injurieux ou discriminatoires, des données personnelles, de la publicité, ou s&apos;il ne concerne pas le produit. Son autrice est alors informée du motif du refus dans son espace « Mes commandes &amp; avis ».</p>
         </Section>
 
         <Section id="affichage" title="Affichage et classement">
           <p>Les avis sont présentés du plus récent au plus ancien. Chaque avis affiche sa date de publication et la date de la commande concernée. La note moyenne d&apos;un bijou apparaît à partir de {r.minReviewsForAverage} avis publiés.</p>
+          {!starsOnly && <p>Zenoria peut répondre publiquement à un avis ; la réponse est affichée sous l&apos;avis concerné.</p>}
         </Section>
 
         <Section id="contrepartie" title="Contrepartie">
@@ -79,7 +85,7 @@ export default function CharteDesAvis() {
         </Section>
 
         <Section id="duree" title="Durée de publication">
-          <p>Un avis reste en ligne {r.publicationYears} ans. Son autrice peut demander à tout moment qu&apos;il soit supprimé.</p>
+          <p>Un avis reste en ligne {r.publicationYears} ans. Son autrice peut le retirer à tout moment depuis son espace « Mes commandes &amp; avis », ou en nous écrivant.</p>
         </Section>
 
         <Section id="donnees" title="Vos données">

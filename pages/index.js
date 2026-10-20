@@ -44,6 +44,9 @@ import { SITE_TEXTS_KEY, DEFAULT_TEXTS, resolveSiteTexts } from "@/lib/siteTexts
 // ZENORIA_STORY_REVIEWS_V1
 import { REVIEWS_KEY, DEFAULT_REVIEWS, parseReviewsSetting } from "@/lib/reviewsSettings";
 import StorySection, { OPEN_STORY_EVENT } from "@/components/StorySection";
+// ZENORIA_REVIEWS_STEP1_V1 : panneau « Mes commandes & avis »
+import MyReviewsPanel from "@/components/MyReviewsPanel";
+import { Star as StarIcon } from "lucide-react";
 import TextLines from "@/components/TextLines";
 // ============================================================
 // RÉGLAGES DE LA BOUTIQUE (à adapter facilement)
@@ -252,6 +255,7 @@ export default function ZenoriaShop() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [reviewsPanelOpen, setReviewsPanelOpen] = useState(false); // panneau « Mes commandes & avis »
   const [isAdmin, setIsAdmin] = useState(false);
   // Charge le catalogue + les codes promo, puis restaure le panier sauvegardé
   useEffect(() => {
@@ -729,6 +733,16 @@ export default function ZenoriaShop() {
                       <Settings size={16} /> Administration
                     </a>
                   )}
+                  {/* ZENORIA_REVIEWS_STEP1_V1 : avis ouverts, ou administration (tests) */}
+                  {(reviewsCfg.enabled || isAdmin) && (
+                    <button
+                      type="button"
+                      onClick={() => { setAccountMenuOpen(false); setReviewsPanelOpen(true); }}
+                      className="flex items-center gap-2 text-sm text-[#8f6075] hover:text-[#71485b] mb-2"
+                    >
+                      <StarIcon size={16} /> Mes commandes &amp; avis
+                    </button>
+                  )}
                   <button
                     onClick={handleLogout}
                     className="flex items-center gap-2 text-sm text-[#8f6075] hover:text-[#71485b]"
@@ -774,6 +788,11 @@ export default function ZenoriaShop() {
               user ? (
                 <>
                   {isAdmin && <a href="/admin" className="text-left text-[#8f6075]">Administration</a>}
+                  {(reviewsCfg.enabled || isAdmin) && (
+                    <button onClick={() => { setReviewsPanelOpen(true); setMenu(false); }} className="text-left text-[#8f6075]">
+                      Mes commandes &amp; avis
+                    </button>
+                  )}
                   <button onClick={() => { handleLogout(); setMenu(false); }} className="text-left text-[#8f6075]">
                     Se déconnecter ({user.email})
                   </button>
@@ -1421,6 +1440,8 @@ export default function ZenoriaShop() {
           </>
         )}
       </AnimatePresence>
+      {/* MES COMMANDES & AVIS (ZENORIA_REVIEWS_STEP1_V1) */}
+      <MyReviewsPanel open={reviewsPanelOpen} onClose={() => setReviewsPanelOpen(false)} user={user} isAdmin={isAdmin} reviewsCfg={reviewsCfg} />
       {/* MES FAVORIS */}
       <AnimatePresence>
         {favPanelOpen && (

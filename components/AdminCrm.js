@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { supabase, getMediaUrl } from "@/lib/supabase";
+import { orderStatusInfo, formatOrderPrice, formatOrderReference } from "@/lib/orderDisplay"; // ZENORIA_ACCOUNT_STEP13_V1
 
 // ============================================================
 // GROUPE « CRM » de l'administration (/admin)
@@ -193,38 +194,13 @@ export function CrmAccounts() {
 // (pages/api/webhooks/stripe.js), jamais a la main.
 // ============================================================
 
-const ORDER_STATUS_LABELS = {
-  pending: { label: "En attente", className: "bg-amber-50 text-amber-700" },
-  paid: { label: "Payée", className: "bg-emerald-50 text-emerald-700" },
-  shipped: { label: "Expédiée", className: "bg-sky-50 text-sky-700" },
-  delivered: { label: "Livrée", className: "bg-violet-50 text-violet-700" },
-  cancelled: { label: "Annulée", className: "bg-red-50 text-red-700" },
-  refunded: { label: "Remboursée", className: "bg-[#f5edf1] text-[#8f6075]" },
-  expired: { label: "Expirée", className: "bg-gray-100 text-gray-500" },
-};
-
+// ZENORIA_ACCOUNT_STEP13_V1 : ORDER_STATUS_LABELS, formatOrderPrice et formatOrderReference sont désormais
+// partagés avec l'espace cliente, voir lib/orderDisplay.js
 function orderStatusBadge(status) {
-  const info = ORDER_STATUS_LABELS[status] || { label: status || "—", className: "bg-[#f5edf1] text-[#54434c]" };
+  const info = orderStatusInfo(status);
   return (
     <span className={`rounded-full px-3 py-1 text-xs whitespace-nowrap ${info.className}`}>{info.label}</span>
   );
-}
-
-function formatOrderPrice(n) {
-  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(Number(n) || 0);
-}
-
-// Référence lisible : ZEN-AAAA-MMJJ-NNNN (année, mois+jour de la commande, puis
-// l'identifiant de la commande complété à 4 chiffres). Purement un formatage
-// d'affichage : la vraie clé reste orders.id, aucune nouvelle colonne nécessaire.
-function formatOrderReference(order) {
-  const d = order.created_at ? new Date(order.created_at) : null;
-  const counter = String(order.id).padStart(4, "0");
-  if (!d) return `ZEN-${counter}`;
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `ZEN-${year}-${month}${day}-${counter}`;
 }
 
 // Petite vignette d'un article de commande : reprend la meme logique que

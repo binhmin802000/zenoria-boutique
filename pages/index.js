@@ -235,6 +235,15 @@ export default function ZenoriaShop() {
   const [favPanelOpen, setFavPanelOpen] = useState(false);
   const [menu, setMenu] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
+  // ZENORIA_ACCOUNT_STEP13_V1 : retour depuis /compte (« Commander à nouveau ») -> ouvre le panier
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("panier") === "compte") {
+      setCartOpen(true);
+      window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+    }
+  }, []);
   const [quizReturn, setQuizReturn] = useState(""); // adresse « /quiz#r=… » quand la visiteuse vient du quiz et veut y revenir
   const [selected, setSelected] = useState(null);
   const [selectedMode, setSelectedMode] = useState("video");

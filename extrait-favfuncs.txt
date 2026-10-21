@@ -1,0 +1,25 @@
+﻿
+> pages\index.js:27:  readLocalFavorites,
+> pages\index.js:28:  toggleLocalFavorite,
+  pages\index.js:29:  fetchFavoriteIds,
+> pages\index.js:30:  addFavorite,
+> pages\index.js:31:  removeFavorite,
+  pages\index.js:32:  mergeLocalFavoritesIntoAccount,
+> pages\index.js:33:} from "@/lib/favorites";
+  pages\index.js:34:import { formatPrice, getAvailability } from "@/lib/shopUtils";
+  pages\index.js:35:import { parseCartReturnHash, encodeResultHash } from "@/lib/quizState";
+> pages\index.js:364:    setFavIds(readLocalFavorites());
+  pages\index.js:365:  }, []);
+  pages\index.js:366:  // Heure du navigateur, rafraîchie chaque minute : un bandeau échu disparaît et le compte à rebours avance 
+sans recharger la page.
+> pages\index.js:409:        setFavIds(readLocalFavorites());
+  pages\index.js:410:      }
+  pages\index.js:411:      checkAdmin(currentUser);
+> pages\index.js:473:      if (isFav) removeFavorite(user.id, productId);
+> pages\index.js:474:      else addFavorite(user.id, productId);
+  pages\index.js:475:    } else {
+> pages\index.js:476:      setFavIds(toggleLocalFavorite(productId));
+  pages\index.js:477:    }
+  pages\index.js:478:  };
+
+

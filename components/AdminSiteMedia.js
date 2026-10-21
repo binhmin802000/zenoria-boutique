@@ -10,6 +10,7 @@ import {
   SITE_MEDIA_TABLE,
   SITE_SLOT_HERO_VIDEO,
   SITE_SLOT_SAVOIR_FAIRE,
+  SITE_SLOT_ACCOUNT_HERO, // ZENORIA_ACCOUNT_STEP12_V1
 } from "@/lib/supabase";
 import { WATERMARK_CIRCLE_URL } from "@/lib/prepareImage";
 import { CIRCLE_ASPECT, CIRCLE_FRAME_SIZE, CIRCLE_PHOTO_MAX_SIDE, HERO_VIDEO_MAX_SECONDS } from "@/lib/cropMath";
@@ -41,6 +42,13 @@ const MAX_ORIGINAL_MB = 95; // taille maximale du fichier d'origine choisi
 // Vues du site simulées dans la fenêtre de cadrage
 const HERO_VIEWS = [{ key: "hero", label: "Bannière d'accueil (cercle de 420 px)", w: 420, h: 420, circle: true }];
 const SAVOIR_VIEWS = [{ key: "savoir", label: "Section Savoir-faire (cercle de 380 px)", w: 380, h: 380, circle: true }];
+// ZENORIA_ACCOUNT_STEP12_V1 : bandeau de l'espace cliente (/compte), format large 21:9
+const ACCOUNT_HERO_ASPECT = 21 / 9;
+const ACCOUNT_HERO_MAX_SIDE = 1900;
+const ACCOUNT_HERO_VIEWS = [
+  { key: "hero-pc", label: "Mon compte, ordinateur", w: 448, h: 192 },
+  { key: "hero-mobile", label: "Mon compte, mobile", w: 280, h: 200 },
+];
 
 const SLOTS = [
   {
@@ -60,6 +68,17 @@ const SLOTS = [
     fallback: "Aucune photo dédiée : le site affiche la première photo de la première collection en ligne.",
     addLabel: "Ajouter une photo",
     replaceLabel: "Remplacer la photo",
+  },
+  {
+    // ZENORIA_ACCOUNT_STEP12_V1
+    slot: SITE_SLOT_ACCOUNT_HERO,
+    kind: "photo",
+    wide: true,
+    title: "Bandeau de l'espace cliente",
+    description: "Affiché en haut de la page « Mon compte ». Format large ; un voile ivoire est ajouté à gauche (ordinateur) ou en bas (mobile) : placez le bijou plutôt à droite.",
+    fallback: "Aucune image dédiée : la page « Mon compte » affiche l'image par défaut « Fondu lumineux ».",
+    addLabel: "Ajouter une image",
+    replaceLabel: "Remplacer l'image",
   },
 ];
 
@@ -98,6 +117,7 @@ export default function AdminSiteMedia() {
   const [busy, setBusy] = useState("");
   const [photoRequest, setPhotoRequest] = useState(null); // { file, slot }
   const [videoRequest, setVideoRequest] = useState(null); // { id, file, slot }
+  const [wideRequest, setWideRequest] = useState(null); // ZENORIA_ACCOUNT_STEP12_V1 : { file, slot } (bandeau 21:9)
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -145,6 +165,7 @@ export default function AdminSiteMedia() {
       return;
     }
     if (cfg.kind === "video") setVideoRequest({ id: Date.now(), file, slot: cfg.slot });
+    else if (cfg.wide) setWideRequest({ file, slot: cfg.slot }); // ZENORIA_ACCOUNT_STEP12_V1
     else setPhotoRequest({ file, slot: cfg.slot });
   };
 
@@ -177,6 +198,13 @@ export default function AdminSiteMedia() {
     publish(req.slot, req.file, { crop: result.crop });
   };
 
+  // ZENORIA_ACCOUNT_STEP12_V1 : bandeau large — recadrage 21:9, 1 900 px
+  const finishWide = (result) => {
+    const req = wideRequest;
+    setWideRequest(null);
+    if (!req || result.action !== "crop") return;
+    publish(req.slot, req.file, { crop: result.crop, maxSide: ACCOUNT_HERO_MAX_SIDE });
+  };
   const finishVideo = (result) => {
     const req = videoRequest;
     setVideoRequest(null);
@@ -187,7 +215,7 @@ export default function AdminSiteMedia() {
   const remove = async (cfg) => {
     const row = rows[cfg.slot];
     if (!row) return;
-    if (!window.confirm(`Retirer « ${cfg.title} » ? Le site reviendra au média de la première collection.`)) return;
+    if (!window.confirm(`Retirer « ${cfg.title} » ? ${cfg.wide ? "La page Mon compte reviendra à l'image par défaut." : "Le site reviendra au média de la première collection."}`)) return;
     setBusy(cfg.slot);
     setError("");
     try {
@@ -234,7 +262,7 @@ export default function AdminSiteMedia() {
               <p className="text-xs text-[#8b737e] mt-1 leading-4">{cfg.description}</p>
 
               <div className="flex items-center gap-4 mt-4">
-                <div className="h-36 w-36 shrink-0 rounded-full overflow-hidden bg-[#f5edf1] border border-white shadow-md grid place-items-center">
+                <div className={`${cfg.wide ? "h-24 w-56 rounded-xl" : "h-36 w-36 rounded-full"} shrink-0 overflow-hidden bg-[#f5edf1] border border-white shadow-md grid place-items-center`}>
                   {url ? (
                     cfg.kind === "video" ? (
                       <video src={url} autoPlay loop muted playsInline data-testid={`preview-${cfg.slot}`} className="w-full h-full object-cover" />
@@ -287,7 +315,7 @@ export default function AdminSiteMedia() {
                 )}
               </div>
               <p className="text-[11px] text-[#8b737e] mt-3 leading-4">
-                Cadrage carré, découpé en cercle par le site. Filigrane « © 2026 ZENORIA » au centre, tout en bas du cercle.
+                {cfg.wide ? "Cadrage large (21:9). Filigrane « © 2026 ZENORIA » centré en bas." : "Cadrage carré, découpé en cercle par le site. Filigrane « © 2026 ZENORIA » au centre, tout en bas du cercle."}
                 {cfg.kind === "video" ? " Le traitement se fait dans votre navigateur, en temps réel : restez sur cet onglet." : ""}
               </p>
             </section>
@@ -313,6 +341,20 @@ export default function AdminSiteMedia() {
       {/* TEXTES DU SITE : Savoir-faire et page d'accueil */}
       <AdminSiteTexts />
 
+      {/* ZENORIA_ACCOUNT_STEP12_V1 : CADRAGE DU BANDEAU DE L'ESPACE CLIENTE (21:9) */}
+      {wideRequest && (
+        <PhotoCropper
+          file={wideRequest.file}
+          onResult={finishWide}
+          aspect={ACCOUNT_HERO_ASPECT}
+          maxFrameW={640}
+          views={ACCOUNT_HERO_VIEWS}
+          position="cercle"
+          watermarkUrl={WATERMARK_CIRCLE_URL}
+          maxSide={ACCOUNT_HERO_MAX_SIDE}
+          allowWhole={false}
+        />
+      )}
       {/* CADRAGE ET TRAITEMENT DE LA VIDÉO D'ACCUEIL */}
       {videoRequest && (
         <VideoCropper

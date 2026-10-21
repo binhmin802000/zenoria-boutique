@@ -1,19 +1,21 @@
-// ZENORIA_ACCOUNT_STEP11_V1
+// ZENORIA_ACCOUNT_STEP11_V1 · ZENORIA_ACCOUNT_STEP12_V1
 import React, { useCallback, useEffect, useState } from "react";
 import Head from "next/head";
 import { Home, Package, Star, Heart, UserCog, ShieldCheck, LogOut } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { supabase, getMediaUrl, SITE_MEDIA_TABLE, SITE_SLOT_ACCOUNT_HERO } from "@/lib/supabase";
 import { fetchReviewsSetting, DEFAULT_REVIEWS } from "@/lib/reviewsSettings";
 
 // ============================================================
-// PAGE « MON COMPTE » — /compte (espace cliente) · étape 1.1 : structure et navigation
+// PAGE « MON COMPTE » — /compte (espace cliente)
 //
 // Page affichée côté navigateur (la session Supabase vit dans le navigateur), non indexée.
 // Non connectée ou session expirée : retour à l'accueil avec la fenêtre de connexion ouverte
 // (/?connexion=compte), puis retour automatique ici après la connexion (pages/index.js).
 // Rubriques accessibles par adresse directe : /compte#accueil, #commandes, #avis, #favoris, #profil, #donnees.
 // « Mes avis » : visible si l'interrupteur des avis est sur ON, ou pour l'administration.
-// Le contenu des rubriques arrive aux étapes suivantes (1.2 à 1.6 de la feuille de route).
+// Bandeau (étape 1.2) : image de l'emplacement « account_hero » (Admin › Contenu du site), sinon image par
+// défaut public/images/compte-fondu-lumineux.jpg. Voile ivoire à gauche (ordinateur) ou en bas (mobile).
+// Le contenu des rubriques arrive aux étapes suivantes (1.3 à 1.6 de la feuille de route).
 // ============================================================
 
 const SECTIONS = [
@@ -25,6 +27,7 @@ const SECTIONS = [
   { id: "donnees", label: "Mes données", icon: ShieldCheck, step: "1.6" },
 ];
 const RETURN_KEY = "zenoria_return_to";
+const DEFAULT_HERO = "/images/compte-fondu-lumineux.jpg";
 
 function readHash() {
   if (typeof window === "undefined") return "accueil";
@@ -37,6 +40,7 @@ export default function Compte() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [reviewsCfg, setReviewsCfg] = useState(DEFAULT_REVIEWS);
   const [section, setSection] = useState("accueil");
+  const [heroUrl, setHeroUrl] = useState(DEFAULT_HERO);
 
   const goLogin = useCallback(() => {
     try {
@@ -58,13 +62,15 @@ export default function Compte() {
         return;
       }
       setUser(u);
-      const [adm, cfg] = await Promise.all([
+      const [adm, cfg, hero] = await Promise.all([
         supabase.from("admin_users").select("user_id").eq("user_id", u.id).maybeSingle(),
         fetchReviewsSetting(supabase),
+        supabase.from(SITE_MEDIA_TABLE).select("path").eq("slot", SITE_SLOT_ACCOUNT_HERO).maybeSingle(),
       ]);
       if (!alive) return;
       setIsAdmin(Boolean(adm && !adm.error && adm.data));
       setReviewsCfg(cfg);
+      if (hero && !hero.error && hero.data && hero.data.path) setHeroUrl(getMediaUrl(hero.data.path, "site"));
     });
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_OUT" || !session) {
@@ -120,16 +126,52 @@ export default function Compte() {
         </main>
       ) : (
         <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8" data-testid="account-page">
-          {/* BANDEAU D'ACCUEIL (image modifiable à l'étape 1.2) */}
+          {/* BANDEAU D'ACCUEIL (ZENORIA_ACCOUNT_HERO_B_V1) — rendu validé « Proposition B · Ivoire champagne ».
+              Photo entière calée à droite ; zone du bijou intacte ; fondu progressif vers la gauche ;
+              fond champagne + halo chaud ; voile limité à la zone du texte.
+              Image modifiable dans Admin › Contenu du site (emplacement account_hero) :
+              cadrer le bijou dans la moitié droite de l'image pour conserver cet effet. */}
           <section
             data-testid="account-hero"
-            className="relative rounded-[1.5rem] overflow-hidden min-h-[170px] sm:min-h-[190px] flex items-end sm:items-center mb-6"
-            style={{ background: "linear-gradient(120deg,#fbf3ef 0%,#f6e4e6 55%,#efd9df 100%)" }}
+            className="relative rounded-[1.5rem] overflow-hidden h-[220px] sm:h-[240px] flex items-center mb-6 border border-[#efe2d6]"
+            style={{
+              background: [
+                "radial-gradient(ellipse 34% 75% at 17% 45%, rgba(255,244,232,.85) 0%, rgba(255,244,232,0) 100%)",
+                "linear-gradient(100deg, #fcf7f0 0%, #f9f0e5 35%, #f6eae0 60%, #f4e7de 100%)",
+              ].join(","),
+            }}
           >
-            <div className="relative px-6 sm:px-8 py-6 max-w-md">
-              <p className="text-[11px] uppercase tracking-[.25em] text-[#b48a5a]">Mon compte</p>
-              <h1 className="font-serif text-3xl sm:text-4xl text-[#412f3b] mt-1">Bonjour</h1>
-              <p className="text-xs text-[#8b737e] mt-1 truncate">{user.email}</p>
+            {/* Photo : toute la hauteur, calée à droite (décalée sur mobile) ;
+                masque : transparent au bord gauche, opaque avant la zone du bijou (environ 42 % de la largeur de l'image) */}
+            <img
+              src={heroUrl}
+              alt=""
+              aria-hidden="true"
+              draggable="false"
+              onError={() => setHeroUrl(DEFAULT_HERO)}
+              className="absolute inset-y-0 right-[-26%] sm:right-0 h-full w-auto max-w-none select-none pointer-events-none"
+              style={{
+                WebkitMaskImage: "linear-gradient(to right, transparent 0%, rgba(0,0,0,.12) 10%, rgba(0,0,0,.4) 20%, rgba(0,0,0,.75) 31%, #000 42%)",
+                maskImage: "linear-gradient(to right, transparent 0%, rgba(0,0,0,.12) 10%, rgba(0,0,0,.4) 20%, rgba(0,0,0,.75) 31%, #000 42%)",
+              }}
+            />
+            {/* Voile champagne limité à la zone du texte (ne touche pas le bijou) */}
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 hidden sm:block"
+              style={{ background: "linear-gradient(90deg, rgba(252,247,240,.6) 0%, rgba(250,243,234,.5) 22%, rgba(249,240,229,.18) 38%, rgba(249,240,229,0) 48%)" }}
+            />
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 sm:hidden"
+              style={{ background: "linear-gradient(90deg, rgba(252,247,240,.75) 0%, rgba(250,243,234,.55) 34%, rgba(249,240,229,.15) 50%, rgba(249,240,229,0) 58%)" }}
+            />
+
+            <div className="relative pl-5 pr-3 sm:px-14 max-w-[56%] sm:max-w-md">
+              <p className="text-[10px] sm:text-[11px] uppercase tracking-[.28em] text-[#b48a5a]">Mon compte</p>
+              <h1 className="font-serif text-3xl sm:text-5xl text-[#4a3743] mt-1.5 leading-tight">Bonjour</h1>
+              <span aria-hidden="true" className="block h-px w-12 sm:w-14 mt-2.5 mb-2" style={{ background: "linear-gradient(90deg, #c9a679, rgba(201,166,121,0))" }} />
+              <p className="text-[11px] sm:text-sm text-[#705e68] truncate" title={user.email}>{user.email}</p>
             </div>
           </section>
 

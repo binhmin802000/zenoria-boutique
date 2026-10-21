@@ -1,10 +1,10 @@
-// ZENORIA_ACCOUNT_STEP11_V1 · ZENORIA_ACCOUNT_STEP12_V1 · ZENORIA_ACCOUNT_HERO_B_V1 · ZENORIA_ACCOUNT_STEP13_V1
+// ZENORIA_ACCOUNT_STEP11_V1 · ZENORIA_ACCOUNT_STEP12_V1 · ZENORIA_ACCOUNT_HERO_B_V1 · ZENORIA_ACCOUNT_STEP13_V1 · ZENORIA_ACCOUNT_STEP14_V1
 import React, { useCallback, useEffect, useState } from "react";
 import Head from "next/head";
 import { Home, Package, Star, Heart, UserCog, ShieldCheck, LogOut, Truck, RotateCw, ChevronLeft } from "lucide-react";
 import { supabase, getMediaUrl, SITE_MEDIA_TABLE, SITE_SLOT_ACCOUNT_HERO } from "@/lib/supabase";
 import { SITE_SETTINGS_TABLE } from "@/lib/siteSettings";
-import { fetchReviewsSetting, DEFAULT_REVIEWS } from "@/lib/reviewsSettings";
+import { fetchReviewsSetting, DEFAULT_REVIEWS, REVIEWS_RULES, REFUSAL_REASONS, reviewErrorMessage } from "@/lib/reviewsSettings";
 import { CONTACT_KEY, DEFAULT_CONTACT, parseContactSetting, buildMailtoLink, buildWhatsAppLink, buildSignalLink } from "@/lib/contactSettings";
 import { CUSTOMER_VISIBLE_STATUSES, TRACKING_STEPS, orderStatusInfo, formatOrderPrice, formatOrderReference } from "@/lib/orderDisplay";
 
@@ -16,23 +16,23 @@ import { CUSTOMER_VISIBLE_STATUSES, TRACKING_STEPS, orderStatusInfo, formatOrder
 // (/?connexion=compte), puis retour automatique ici après la connexion (pages/index.js).
 // Rubriques accessibles par adresse directe : /compte#accueil, #commandes, #avis, #favoris, #profil, #donnees.
 // « Mes avis » : visible si l'interrupteur des avis est sur ON, ou pour l'administration.
-// Bandeau : image de l'emplacement « account_hero » (Admin › Contenu du site), sinon image par défaut
-// public/images/compte-fondu-lumineux.jpg. Rendu validé « Ivoire champagne » (étape 1.2).
+// Bandeau : rendu validé « Ivoire champagne » (étape 1.2), modifiable dans Admin › Contenu du site.
 //
-// Étape 1.3 — Accueil et Mes commandes :
-//  - seules les commandes payées, expédiées ou livrées sont affichées (CUSTOMER_VISIBLE_STATUSES) ;
-//  - le prix de chaque bijou est celui réellement payé (order_items.product_price), jamais le prix
-//    actuel du catalogue ;
-//  - le suivi (Payée/Expédiée/Livrée) est daté depuis order_status_history ;
-//  - « Commander à nouveau » ajoute au panier EXISTANT (sans le vider) les bijoux encore en vente,
-//    signale ceux qui ne le sont plus, puis propose d'aller voir le panier (/?panier=compte, géré par
-//    pages/index.js qui ouvre alors le panier automatiquement) ;
-//  - « Une question sur cette commande ? » réutilise les canaux de contact réglés dans l'admin, avec
-//    la référence ZEN glissée dans le message (e-mail et WhatsApp la pré-remplissent ; pour Signal,
-//    qui ne permet pas de préremplir, le message est à copier) ;
-//  - clé du panier (CART_STORAGE_KEY) et quantité maximale par bijou (MAX_QTY_PER_PRODUCT) dupliquées
-//    volontairement depuis pages/index.js, faute d'un lib partagé : à garder synchronisées si l'une
-//    des deux valeurs change un jour (voir vigilance de l'état des lieux sur les listes dupliquées).
+// Étape 1.3 — Accueil et Mes commandes (voir le détail dans le code ci-dessous).
+//
+// Étape 1.4 — Mes avis et Mes favoris :
+//  - Mes avis : reprend la logique de l'ancien panneau « Mes commandes & avis » (components/MyReviewsPanel.js,
+//    désormais retiré de pages/index.js), présentée en section de page plutôt qu'en panneau latéral.
+//    Fonctions SQL : list_reviewable_items, submit_review, withdraw_review (tous les contrôles côté base).
+//  - Mes favoris : reprend la logique du panneau « Mes favoris » de pages/index.js (addFavorite,
+//    removeFavorite, lib/favorites). Simplification validée : pas de « Voir la fiche » (la fenêtre du
+//    bijou n'existe que sur l'accueil) ; un lien « Voir toutes les créations » renvoie à l'accueil.
+//    « Ajouter au panier » suit le même principe que « Commander à nouveau » (panier existant, puis
+//    retour à l'accueil avec ?panier=compte qui l'ouvre automatiquement, voir pages/index.js).
+//  - Le cœur de l'en-tête (pages/index.js) garde son propre panneau rapide « Mes favoris », inchangé.
+//  - CART_STORAGE_KEY et MAX_QTY_PER_PRODUCT restent dupliqués depuis pages/index.js (voir étape 1.3) ;
+//    effectivePrice (prix promo) est également dupliqué ici à l'identique de pages/index.js : à garder
+//    synchronisé si cette règle change un jour (vigilance listes dupliquées, état des lieux).
 // ============================================================
 
 const SECTIONS = [
@@ -48,6 +48,13 @@ const DEFAULT_HERO = "/images/compte-fondu-lumineux.jpg";
 const CART_STORAGE_KEY = "zenoria_cart_v2"; // doit rester identique à pages/index.js
 const MAX_QTY_PER_PRODUCT = 10; // doit rester identique à pages/index.js
 const TIME_ZONE = "Europe/Paris";
+const REVIEW_LABELS = ["", "Décevante", "Moyenne", "Bien", "Très bien", "Coup de cœur"];
+const REVIEW_STATUS = {
+  pending: { label: "En attente de relecture", cls: "bg-amber-50 text-amber-800" },
+  published: { label: "Publié", cls: "bg-emerald-50 text-emerald-700" },
+  refused: { label: "Non publié", cls: "bg-red-50 text-red-700" },
+  withdrawn: { label: "Retiré", cls: "bg-[#f3f1f5] text-[#8b737e]" },
+};
 
 function readHash() {
   if (typeof window === "undefined") return "accueil";
@@ -57,6 +64,18 @@ function readHash() {
 function formatDate(value) {
   if (!value) return "";
   return new Date(value).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: TIME_ZONE });
+}
+function daysLeft(deadline) {
+  const ms = new Date(deadline).getTime() - Date.now();
+  return Math.max(0, Math.ceil(ms / 86400000));
+}
+// Prix réellement appliqué : le prix promotionnel s'il est défini et inférieur au prix normal
+// (dupliqué à l'identique de pages/index.js, voir la note en tête de fichier).
+function effectivePrice(p) {
+  return p && p.promoPrice != null && p.promoPrice < p.price ? p.promoPrice : p.price;
+}
+function formatEUR(n) {
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(Number(n) || 0);
 }
 
 function ProductThumb({ item }) {
@@ -70,6 +89,26 @@ function ProductThumb({ item }) {
     );
   }
   return <div className="h-14 w-14 rounded-xl shrink-0 bg-[#f5edf1] grid place-items-center text-[#c9b6be] text-[10px] text-center px-1">{item.product_name || "Bijou"}</div>;
+}
+
+function FavThumb({ product, size = "h-16 w-16" }) {
+  const [err, setErr] = useState(false);
+  const src = product.photos && product.photos[0] ? getMediaUrl(product.photos[0], product.slug) : null;
+  if (src && !err) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt="" onError={() => setErr(true)} className={`${size} rounded-xl object-cover shrink-0 bg-[#f5edf1]`} />;
+  }
+  return <div className={`${size} rounded-xl shrink-0 bg-[#f5edf1] grid place-items-center text-[#c9b6be] text-[10px] text-center px-1`}>{product.name}</div>;
+}
+
+function Stars({ value, size = 14 }) {
+  return (
+    <span className="inline-flex gap-0.5" aria-label={`${value} sur 5`}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <Star key={i} size={size} className={i <= value ? "fill-[#b48a5a] text-[#b48a5a]" : "text-[#e2d6da]"} />
+      ))}
+    </span>
+  );
 }
 
 function Timeline({ order }) {
@@ -109,15 +148,9 @@ function QuestionPanel({ order, contactCfg, onClose }) {
     }
   };
   const channels = [];
-  if (contactCfg.email.enabled && contactCfg.email.value) {
-    channels.push({ id: "email", label: "Par e-mail", href: buildMailtoLink(contactCfg.email.value, subject, mailBody) });
-  }
-  if (contactCfg.whatsapp.enabled && contactCfg.whatsapp.value) {
-    channels.push({ id: "whatsapp", label: "WhatsApp", href: buildWhatsAppLink(contactCfg.whatsapp.value, waText) });
-  }
-  if (contactCfg.signal.enabled && contactCfg.signal.value) {
-    channels.push({ id: "signal", label: "Signal", href: buildSignalLink(contactCfg.signal.value) });
-  }
+  if (contactCfg.email.enabled && contactCfg.email.value) channels.push({ id: "email", label: "Par e-mail", href: buildMailtoLink(contactCfg.email.value, subject, mailBody) });
+  if (contactCfg.whatsapp.enabled && contactCfg.whatsapp.value) channels.push({ id: "whatsapp", label: "WhatsApp", href: buildWhatsAppLink(contactCfg.whatsapp.value, waText) });
+  if (contactCfg.signal.enabled && contactCfg.signal.value) channels.push({ id: "signal", label: "Signal", href: buildSignalLink(contactCfg.signal.value) });
   return (
     <div className="mt-3 rounded-xl border border-[#eadfe4] bg-[#fbf7f9] p-3" data-testid="question-panel">
       <p className="text-xs text-[#54434c] mb-2">Choisissez un canal : votre message mentionne déjà la commande {ref}.</p>
@@ -225,8 +258,25 @@ export default function Compte() {
   const [questionOpenId, setQuestionOpenId] = useState(null);
   const [reorderBusyId, setReorderBusyId] = useState(null);
   const [reorderMsg, setReorderMsg] = useState("");
-  const [reviewableCount, setReviewableCount] = useState(0);
-  const [favoritesCount, setFavoritesCount] = useState(0);
+
+  // --- Mes avis (étape 1.4) ---
+  const [reviewItems, setReviewItems] = useState([]);
+  const [myReviews, setMyReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsLoaded, setReviewsLoaded] = useState(false);
+  const [reviewError, setReviewError] = useState("");
+  const [reviewToast, setReviewToast] = useState("");
+  const [reviewForm, setReviewForm] = useState(null);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewSending, setReviewSending] = useState(false);
+  const [withdrawConfirmId, setWithdrawConfirmId] = useState(null);
+
+  // --- Mes favoris (étape 1.4) ---
+  const [favLoading, setFavLoading] = useState(false);
+  const [favLoaded, setFavLoaded] = useState(false);
+  const [favProducts, setFavProducts] = useState([]);
+  const [favMsg, setFavMsg] = useState("");
 
   const goLogin = useCallback(() => {
     try {
@@ -277,23 +327,20 @@ export default function Compte() {
     return () => window.removeEventListener("hashchange", sync);
   }, []);
 
-  // Commandes, canaux de contact, favoris et bijoux à évaluer : chargés une fois la cliente connue
+  // Commandes, canaux de contact et bijoux à évaluer (pour le raccourci de l'accueil)
   useEffect(() => {
     if (!user) return undefined;
     let alive = true;
     (async () => {
       setOrdersLoading(true);
-      const [ordersRes, contactRes, favRes, reviewRes] = await Promise.all([
-        supabase.from("orders").select("*").in("status", CUSTOMER_VISIBLE_STATUSES).order("created_at", { ascending: false }),
+      const [ordersRes, contactRes, reviewRes] = await Promise.all([
+        supabase.from("orders").select("*").eq("user_id", user.id).in("status", CUSTOMER_VISIBLE_STATUSES).order("created_at", { ascending: false }), // ZENORIA_ACCOUNT_FIX1_V1 : filtre explicite (ne pas dépendre de la RLS, qui laisse un compte admin tout voir)
         supabase.from(SITE_SETTINGS_TABLE).select("value").eq("key", CONTACT_KEY).maybeSingle(),
-        supabase.from("customer_favorites").select("product_id", { count: "exact", head: true }),
         supabase.rpc("list_reviewable_items"),
       ]);
       if (!alive) return;
       setContactCfg(parseContactSetting(contactRes && !contactRes.error && contactRes.data ? contactRes.data.value : null));
-      setFavoritesCount((favRes && typeof favRes.count === "number") ? favRes.count : 0);
-      const reviewable = (reviewRes && !reviewRes.error && reviewRes.data) || [];
-      setReviewableCount(reviewable.filter((r) => r.can_review).length);
+      setReviewItems((reviewRes && !reviewRes.error && reviewRes.data) || []);
 
       const list = (ordersRes && !ordersRes.error && ordersRes.data) || [];
       if (list.length === 0) {
@@ -329,6 +376,154 @@ export default function Compte() {
   }, [user]);
 
   const showReviews = Boolean(reviewsCfg.enabled || isAdmin);
+  const canUseReviews = Boolean(user) && showReviews;
+  const starsOnly = reviewsCfg.mode === "stars";
+  const reviewableCount = reviewItems.filter((r) => r.can_review).length;
+
+  // Chargement de « Mes avis », à l'ouverture de la rubrique
+  const loadReviews = useCallback(async () => {
+    if (!canUseReviews) return;
+    setReviewsLoading(true);
+    setReviewError("");
+    try {
+      const [a, b] = await Promise.all([
+        supabase.rpc("list_reviewable_items"),
+        supabase
+          .from("reviews")
+          .select("id, order_id, product_id, rating, comment, status, refusal_reason, reply, reply_at, created_at, published_at, is_test, products(name)")
+          .order("created_at", { ascending: false }),
+      ]);
+      if (a.error) throw a.error;
+      if (b.error) throw b.error;
+      setReviewItems(a.data || []);
+      setMyReviews(b.data || []);
+    } catch (err) {
+      setReviewError(reviewErrorMessage(err));
+    }
+    setReviewsLoading(false);
+    setReviewsLoaded(true);
+  }, [canUseReviews]);
+
+  useEffect(() => {
+    if (section === "avis" && canUseReviews && !reviewsLoaded) loadReviews();
+  }, [section, canUseReviews, reviewsLoaded, loadReviews]);
+
+  useEffect(() => {
+    if (!reviewToast) return undefined;
+    const t = setTimeout(() => setReviewToast(""), 4000);
+    return () => clearTimeout(t);
+  }, [reviewToast]);
+
+  const openReviewForm = (it) => {
+    setReviewForm(it);
+    setReviewRating(0);
+    setReviewComment("");
+    setReviewError("");
+  };
+  const sendReview = async () => {
+    if (!reviewForm || reviewRating < 1) return;
+    setReviewSending(true);
+    setReviewError("");
+    try {
+      const { error: err } = await supabase.rpc("submit_review", {
+        p_order_id: reviewForm.order_id,
+        p_product_id: reviewForm.product_id,
+        p_rating: reviewRating,
+        p_comment: starsOnly ? null : reviewComment,
+      });
+      if (err) throw err;
+      setReviewForm(null);
+      setReviewToast(`Merci ! Votre avis sera relu sous ${REVIEWS_RULES.moderationDays} jours ouvrés maximum.`);
+      await loadReviews();
+    } catch (err) {
+      setReviewError(reviewErrorMessage(err));
+    }
+    setReviewSending(false);
+  };
+  const withdrawReview = async (id) => {
+    setReviewError("");
+    try {
+      const { error: err } = await supabase.rpc("withdraw_review", { p_review_id: id });
+      if (err) throw err;
+      setWithdrawConfirmId(null);
+      setReviewToast("Votre avis a été retiré.");
+      await loadReviews();
+    } catch (err) {
+      setReviewError(reviewErrorMessage(err));
+    }
+  };
+  const reviewProductName = (r) => {
+    if (r.products && r.products.name) return r.products.name;
+    const it = reviewItems.find((i) => i.order_id === r.order_id && i.product_id === r.product_id);
+    return it ? it.product_name : "Bijou";
+  };
+
+  // Chargement de « Mes favoris », à l'ouverture de la rubrique
+  const loadFavorites = useCallback(async () => {
+    if (!user) return;
+    setFavLoading(true);
+    try {
+      const favRes = await supabase.from("customer_favorites").select("product_id").eq("user_id", user.id);
+      const ids = (favRes && !favRes.error && favRes.data) ? favRes.data.map((r) => r.product_id) : [];
+      if (ids.length === 0) {
+        setFavProducts([]);
+      } else {
+        const prodRes = await supabase.from("products").select("id, slug, name, price, promo_price, photos, active").in("id", ids);
+        const byId = {};
+        (prodRes.data || []).forEach((p) => { byId[p.id] = { ...p, promoPrice: p.promo_price }; });
+        setFavProducts(ids.map((id) => byId[id]).filter(Boolean));
+      }
+    } catch (e) {
+      // favoris illisibles : liste vide plutôt qu'une erreur bloquante
+      setFavProducts([]);
+    }
+    setFavLoading(false);
+    setFavLoaded(true);
+  }, [user]);
+
+  useEffect(() => {
+    if (section === "favoris" && user && !favLoaded) loadFavorites();
+  }, [section, user, favLoaded, loadFavorites]);
+
+  useEffect(() => {
+    if (!favMsg) return undefined;
+    const t = setTimeout(() => setFavMsg(""), 3500);
+    return () => clearTimeout(t);
+  }, [favMsg]);
+
+  const removeFromFavorites = async (productId) => {
+    setFavProducts((prev) => prev.filter((p) => p.id !== productId));
+    try {
+      await supabase.from("customer_favorites").delete().eq("user_id", user.id).eq("product_id", productId);
+    } catch (e) {
+      // la suppression a échoué silencieusement : on garde la liste optimiste, un rechargement la corrigera
+    }
+    setFavMsg("Retiré des favoris.");
+  };
+
+  const addFavoriteToCart = (p) => {
+    try {
+      let cart = { items: [], promo: null };
+      try {
+        const raw = window.localStorage.getItem(CART_STORAGE_KEY);
+        if (raw) {
+          const saved = JSON.parse(raw);
+          cart = { items: Array.isArray(saved.items) ? saved.items.slice() : [], promo: saved.promo || null };
+        }
+      } catch (e) {
+        // panier illisible : on repart d'un panier vide
+      }
+      const existing = cart.items.find((c) => c.id === p.id);
+      const qty = Math.min(MAX_QTY_PER_PRODUCT, (existing ? existing.qty : 0) + 1);
+      if (existing) existing.qty = qty;
+      else cart.items.push({ id: p.id, qty });
+      window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+      window.location.href = "/?panier=compte";
+    } catch (e) {
+      setFavMsg("Impossible d'ajouter ce bijou au panier pour le moment.");
+    }
+  };
+
   const visible = SECTIONS.filter((s) => !s.reviews || showReviews);
   const current = visible.find((s) => s.id === section) || visible[0];
 
@@ -338,7 +533,7 @@ export default function Compte() {
     setSelectedOrderId(null);
     setQuestionOpenId(null);
     setReorderMsg("");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    // ZENORIA_ACCOUNT_FIX1_V1 : plus de retour forcé en haut de page (le menu reste visible, sticky)
   };
 
   const logout = async () => {
@@ -384,6 +579,7 @@ export default function Compte() {
 
   const selectedOrder = orders.find((o) => o.id === selectedOrderId) || null;
   const lastOrder = orders[0] || null;
+  const maxChars = REVIEWS_RULES.maxCommentLength;
 
   return (
     <div className="min-h-screen bg-[#fbf8f4] text-[#342b32]">
@@ -405,11 +601,10 @@ export default function Compte() {
         </main>
       ) : (
         <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8" data-testid="account-page">
-          {/* BANDEAU D'ACCUEIL (ZENORIA_ACCOUNT_HERO_B_V1) — rendu validé « Proposition B · Ivoire champagne ».
+          {/* BANDEAU D'ACCUEIL — rendu validé « Proposition B · Ivoire champagne ».
               Photo entière calée à droite ; zone du bijou intacte ; fondu progressif vers la gauche ;
               fond champagne + halo chaud ; voile limité à la zone du texte.
-              Image modifiable dans Admin › Contenu du site (emplacement account_hero) :
-              cadrer le bijou dans la moitié droite de l'image pour conserver cet effet. */}
+              Image modifiable dans Admin › Contenu du site (emplacement account_hero). */}
           <section
             data-testid="account-hero"
             className="relative rounded-[1.5rem] overflow-hidden h-[220px] sm:h-[240px] flex items-center mb-6 border border-[#efe2d6]"
@@ -432,16 +627,8 @@ export default function Compte() {
                 maskImage: "linear-gradient(to right, transparent 0%, rgba(0,0,0,.12) 10%, rgba(0,0,0,.4) 20%, rgba(0,0,0,.75) 31%, #000 42%)",
               }}
             />
-            <div
-              aria-hidden="true"
-              className="absolute inset-0 hidden sm:block"
-              style={{ background: "linear-gradient(90deg, rgba(252,247,240,.6) 0%, rgba(250,243,234,.5) 22%, rgba(249,240,229,.18) 38%, rgba(249,240,229,0) 48%)" }}
-            />
-            <div
-              aria-hidden="true"
-              className="absolute inset-0 sm:hidden"
-              style={{ background: "linear-gradient(90deg, rgba(252,247,240,.75) 0%, rgba(250,243,234,.55) 34%, rgba(249,240,229,.15) 50%, rgba(249,240,229,0) 58%)" }}
-            />
+            <div aria-hidden="true" className="absolute inset-0 hidden sm:block" style={{ background: "linear-gradient(90deg, rgba(252,247,240,.6) 0%, rgba(250,243,234,.5) 22%, rgba(249,240,229,.18) 38%, rgba(249,240,229,0) 48%)" }} />
+            <div aria-hidden="true" className="absolute inset-0 sm:hidden" style={{ background: "linear-gradient(90deg, rgba(252,247,240,.75) 0%, rgba(250,243,234,.55) 34%, rgba(249,240,229,.15) 50%, rgba(249,240,229,0) 58%)" }} />
 
             <div className="relative pl-5 pr-3 sm:px-14 max-w-[56%] sm:max-w-md">
               <p className="text-[10px] sm:text-[11px] uppercase tracking-[.28em] text-[#b48a5a]">Mon compte</p>
@@ -499,8 +686,8 @@ export default function Compte() {
                       </button>
                     )}
                     <button type="button" onClick={() => go("favoris")} className="text-left rounded-2xl border border-[#eee2e5] p-4 hover:border-[#d9c5cc]">
-                      <div className="font-serif text-2xl text-[#412f3b]">{favoritesCount}</div>
-                      <div className="text-xs text-[#8b737e]">favori{favoritesCount > 1 ? "s" : ""}</div>
+                      <div className="font-serif text-2xl text-[#412f3b]">{favLoaded ? favProducts.length : "…"}</div>
+                      <div className="text-xs text-[#8b737e]">favori{favProducts.length > 1 ? "s" : ""}</div>
                     </button>
                   </div>
 
@@ -577,7 +764,192 @@ export default function Compte() {
                 </div>
               )}
 
-              {current && !["accueil", "commandes"].includes(current.id) && (
+              {current && current.id === "avis" && (
+                <div data-testid="section-avis">
+                  <h2 className="font-serif text-2xl text-[#412f3b] mb-1">Mes avis</h2>
+                  {!canUseReviews ? (
+                    <p className="text-sm text-[#70656a]">Les avis clientes ouvriront bientôt.</p>
+                  ) : (
+                    <>
+                      {!reviewsCfg.enabled && isAdmin && (
+                        <div className="rounded-xl bg-amber-50 text-amber-900 px-4 py-3 text-xs leading-5 mb-4">
+                          Interrupteur « Avis clientes » sur OFF : cette rubrique n&apos;est visible que par l&apos;administration, pour les tests.
+                        </div>
+                      )}
+                      {reviewToast && <div className="rounded-xl bg-emerald-50 text-emerald-700 px-4 py-3 text-sm mb-4">{reviewToast}</div>}
+                      {reviewError && <div role="alert" className="rounded-xl bg-red-50 text-red-600 px-4 py-3 text-sm mb-4">{reviewError}</div>}
+
+                      <h3 className="font-serif text-lg text-[#412f3b] mb-2 mt-2">Bijoux à évaluer</h3>
+                      {reviewsLoading && reviewItems.length === 0 ? (
+                        <p className="text-sm text-[#8b737e]">Chargement…</p>
+                      ) : reviewItems.length === 0 ? (
+                        <p className="text-sm text-[#70656a]">Aucun bijou livré pour l&apos;instant. Vous pourrez donner votre avis pendant {REVIEWS_RULES.windowDays} jours après la livraison.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {reviewItems.map((it) => {
+                            const st = it.review_status ? REVIEW_STATUS[it.review_status] : null;
+                            const isOpen = reviewForm && reviewForm.order_id === it.order_id && reviewForm.product_id === it.product_id;
+                            return (
+                              <div key={`${it.order_id}-${it.product_id}`} className="rounded-2xl border border-[#eee2e5] p-3">
+                                <div className="flex justify-between gap-2 items-start">
+                                  <div className="min-w-0">
+                                    <div className="font-serif text-base leading-tight truncate">{it.product_name}</div>
+                                    <div className="text-[11px] text-[#8b737e] mt-1">
+                                      Commande n° {it.order_id} · livrée le {formatDate(it.delivered_at)}
+                                      {it.can_review && ` · encore ${daysLeft(it.deadline)} jour${daysLeft(it.deadline) > 1 ? "s" : ""}`}
+                                    </div>
+                                  </div>
+                                  {it.can_review && !isOpen ? (
+                                    <button type="button" onClick={() => openReviewForm(it)} className="shrink-0 rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-3 py-1 text-xs">
+                                      Donner mon avis
+                                    </button>
+                                  ) : !it.can_review && st && (it.review_status === "pending" || it.review_status === "published") ? (
+                                    <span className={`shrink-0 text-[10px] rounded-full px-2 py-0.5 ${st.cls}`}>{st.label}</span>
+                                  ) : !it.can_review ? (
+                                    <span className="shrink-0 text-[10px] text-[#8b737e]">Délai dépassé</span>
+                                  ) : null}
+                                </div>
+                                {isOpen && (
+                                  <div className="mt-3 pt-3 border-t border-[#eee2e5]">
+                                    <div className="flex gap-1" role="radiogroup" aria-label="Votre note">
+                                      {[1, 2, 3, 4, 5].map((i) => (
+                                        <button key={i} type="button" role="radio" aria-checked={reviewRating === i} aria-label={`${i} étoile${i > 1 ? "s" : ""}`} onClick={() => setReviewRating(i)} className="p-0.5">
+                                          <Star size={26} className={i <= reviewRating ? "fill-[#b48a5a] text-[#b48a5a]" : "text-[#e2d6da]"} />
+                                        </button>
+                                      ))}
+                                    </div>
+                                    <div className="text-[11px] text-[#8b737e] mt-1">{reviewRating ? `${reviewRating}/5 · ${REVIEW_LABELS[reviewRating]}` : "Choisissez une note (obligatoire)"}</div>
+                                    {!starsOnly && (
+                                      <div className="mt-3">
+                                        <label htmlFor="review-comment" className="text-xs text-[#54434c]">Votre commentaire (facultatif)</label>
+                                        <textarea
+                                          id="review-comment"
+                                          rows={4}
+                                          maxLength={maxChars}
+                                          value={reviewComment}
+                                          onChange={(e) => setReviewComment(e.target.value)}
+                                          placeholder="Qu'avez-vous pensé de votre bague ? Évitez les données personnelles (téléphone, adresse…)."
+                                          className="mt-1 w-full rounded-xl border border-[#eadfe4] focus:border-[#8f6075] px-3 py-2 text-sm leading-6 outline-none bg-white"
+                                        />
+                                        <div className="text-right text-[11px] text-[#8b737e]">{reviewComment.length.toLocaleString("fr-FR")} / {maxChars.toLocaleString("fr-FR")}</div>
+                                      </div>
+                                    )}
+                                    <p className="text-[11px] text-[#8b737e] leading-4 mt-2">
+                                      Votre avis sera publié avec votre prénom et l&apos;initiale de votre nom, après relecture sous {REVIEWS_RULES.moderationDays} jours ouvrés maximum. Il reste en ligne {REVIEWS_RULES.publicationYears} ans ; vous pouvez le retirer à tout moment.{" "}
+                                      {reviewsCfg.enabled && <a href="/charte-des-avis" target="_blank" rel="noopener noreferrer" className="underline text-[#8f6075]">Charte des avis</a>}
+                                    </p>
+                                    <div className="flex gap-2 mt-3">
+                                      <button type="button" onClick={sendReview} disabled={reviewSending || reviewRating < 1} className="rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-4 h-9 text-sm disabled:opacity-50">
+                                        {reviewSending ? "Envoi…" : "Envoyer mon avis"}
+                                      </button>
+                                      <button type="button" onClick={() => setReviewForm(null)} className="rounded-full border border-[#d9c5cc] px-4 h-9 text-sm hover:bg-[#f5edf1]">Annuler</button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <h3 className="font-serif text-lg text-[#412f3b] mb-2 mt-6">Mes avis</h3>
+                      {myReviews.length === 0 ? (
+                        <p className="text-sm text-[#70656a]">Vous n&apos;avez pas encore déposé d&apos;avis.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {myReviews.map((r) => {
+                            const st = REVIEW_STATUS[r.status] || REVIEW_STATUS.pending;
+                            return (
+                              <div key={r.id} className="rounded-2xl border border-[#eee2e5] p-3">
+                                <div className="flex justify-between gap-2 items-start">
+                                  <div className="min-w-0">
+                                    <div className="font-serif text-base leading-tight truncate">{reviewProductName(r)}</div>
+                                    <div className="mt-1"><Stars value={r.rating} /></div>
+                                  </div>
+                                  <div className="shrink-0 flex flex-col items-end gap-1">
+                                    <span className={`text-[10px] rounded-full px-2 py-0.5 ${st.cls}`}>{st.label}</span>
+                                    {r.is_test && <span className="text-[10px] rounded-full px-2 py-0.5 bg-[#eef0f6] text-[#4a5578]">Test · jamais publié</span>}
+                                  </div>
+                                </div>
+                                {r.comment && <p className="text-sm text-[#54434c] leading-6 mt-2 whitespace-pre-line break-words">{r.comment}</p>}
+                                <div className="text-[11px] text-[#8b737e] mt-1">
+                                  {r.status === "published" && r.published_at ? `Publié le ${formatDate(r.published_at)}` : `Envoyé le ${formatDate(r.created_at)}`}
+                                </div>
+                                {r.status === "refused" && (
+                                  <div className="text-[11px] text-red-700 mt-1 leading-4">
+                                    Motif : {REFUSAL_REASONS[r.refusal_reason] || "non précisé"}. Vous pouvez déposer un nouvel avis tant que le délai de {REVIEWS_RULES.windowDays} jours court.
+                                  </div>
+                                )}
+                                {r.reply && r.status === "published" && (
+                                  <div className="mt-2 rounded-xl bg-[#f8f2f4] px-3 py-2">
+                                    <div className="text-[11px] text-[#8f6075]">💬 Réponse de Zenoria</div>
+                                    <p className="text-sm text-[#54434c] leading-6 whitespace-pre-line break-words">{r.reply}</p>
+                                  </div>
+                                )}
+                                {(r.status === "pending" || r.status === "published") && (
+                                  <div className="mt-2">
+                                    {withdrawConfirmId === r.id ? (
+                                      <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                                        <span className="text-[#54434c]">Retirer définitivement cet avis ?</span>
+                                        <button type="button" onClick={() => withdrawReview(r.id)} className="rounded-full border border-red-200 text-red-700 px-3 py-1 hover:bg-red-50">Oui, retirer</button>
+                                        <button type="button" onClick={() => setWithdrawConfirmId(null)} className="underline text-[#8b737e]">Annuler</button>
+                                      </div>
+                                    ) : (
+                                      <button type="button" onClick={() => setWithdrawConfirmId(r.id)} className="text-[11px] underline text-[#8f6075]">Retirer mon avis</button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {current && current.id === "favoris" && (
+                <div data-testid="section-favoris">
+                  <div className="flex justify-between items-center mb-1">
+                    <h2 className="font-serif text-2xl text-[#412f3b]">Mes favoris</h2>
+                    <a href="/" className="text-xs text-[#8f6075] underline">Voir toutes les créations</a>
+                  </div>
+                  {favMsg && <div className="rounded-xl bg-emerald-50 text-emerald-700 px-4 py-3 text-sm my-3">{favMsg}</div>}
+                  {favLoading && favProducts.length === 0 ? (
+                    <p className="text-sm text-[#8b737e] mt-3">Chargement…</p>
+                  ) : favProducts.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Heart className="mx-auto text-[#b88d9f] mb-3" size={36} />
+                      <p className="font-serif text-xl text-[#412f3b] mb-1">Aucun favori pour l&apos;instant</p>
+                      <p className="text-sm text-[#8b737e] mb-4">Touchez le cœur d&apos;une création pour la retrouver ici.</p>
+                      <a href="/" className="inline-block rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-5 h-10 leading-10 text-sm">Découvrir les créations</a>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 mt-3">
+                      {favProducts.map((p) => (
+                        <div key={p.id} className="flex gap-3 rounded-2xl border border-[#eee2e5] p-3">
+                          <FavThumb product={p} />
+                          <div className="flex-1 min-w-0 flex flex-col justify-between">
+                            <div>
+                              <div className="font-serif text-base leading-tight truncate">{p.name}</div>
+                              <div className="text-sm text-[#412f3b] mt-1">{formatEUR(effectivePrice(p))}</div>
+                            </div>
+                            <div className="flex gap-2 mt-2">
+                              <button type="button" onClick={() => removeFromFavorites(p.id)} className="rounded-full border border-[#d9c5cc] px-3 py-1 text-xs hover:bg-[#f5edf1]">Retirer des favoris</button>
+                              <button type="button" onClick={() => addFavoriteToCart(p)} disabled={!p.active} className="rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-3 py-1 text-xs disabled:opacity-50">
+                                {p.active ? "Ajouter au panier" : "Plus en vente"}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {current && !["accueil", "commandes", "avis", "favoris"].includes(current.id) && (
                 <>
                   <h2 className="font-serif text-2xl text-[#412f3b]">{current.label}</h2>
                   <p className="text-sm text-[#8b737e] mt-2">
@@ -587,11 +959,7 @@ export default function Compte() {
                 </>
               )}
 
-              <button
-                type="button"
-                onClick={logout}
-                className="lg:hidden mt-8 inline-flex items-center gap-2 text-sm text-[#8b737e] underline"
-              >
+              <button type="button" onClick={logout} className="lg:hidden mt-8 inline-flex items-center gap-2 text-sm text-[#8b737e] underline">
                 <LogOut size={15} /> Se déconnecter
               </button>
             </section>

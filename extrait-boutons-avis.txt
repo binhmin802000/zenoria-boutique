@@ -1,0 +1,41 @@
+﻿
+  pages\index.js:44:// ZENORIA_STORY_REVIEWS_V1
+  pages\index.js:45:import { REVIEWS_KEY, DEFAULT_REVIEWS, parseReviewsSetting } from "@/lib/reviewsSettings";
+  pages\index.js:46:import StorySection, { OPEN_STORY_EVENT } from "@/components/StorySection";
+> pages\index.js:47:// ZENORIA_REVIEWS_STEP1_V1 : panneau « Mes commandes & avis »
+  pages\index.js:48:import MyReviewsPanel from "@/components/MyReviewsPanel";
+  pages\index.js:49:// ZENORIA_REVIEWS_STEP3_V1 : affichage des avis (fiche bague + section) et aperçu admin
+  pages\index.js:50:import { ReviewRatingLine, ProductReviewsList, ReviewsSection, openReviewsSection } from "@/components/Reviews";
+  pages\index.js:266:  const [user, setUser] = useState(null);
+  pages\index.js:267:  const [authLoading, setAuthLoading] = useState(true);
+  pages\index.js:268:  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+> pages\index.js:269:  const [reviewsPanelOpen, setReviewsPanelOpen] = useState(false); // panneau « Mes commandes & avis »
+  pages\index.js:270:  // ZENORIA_ACCOUNT_STEP11_V1 : arrivée depuis /compte sans session -> fenêtre de connexion ouverte
+  pages\index.js:271:  useEffect(() => {
+  pages\index.js:272:    if (typeof window === "undefined") return;
+  pages\index.js:778:                      onClick={() => { setAccountMenuOpen(false); setReviewsPanelOpen(true); }}
+  pages\index.js:779:                      className="flex items-center gap-2 text-sm text-[#8f6075] hover:text-[#71485b] mb-2"
+  pages\index.js:780:                    >
+> pages\index.js:781:                      <StarIcon size={16} /> Mes commandes &amp; avis
+  pages\index.js:782:                    </button>
+  pages\index.js:783:                  )}
+  pages\index.js:784:                  <button
+  pages\index.js:829:                  <a href="/compte" className="text-left text-[#8f6075]">Mon compte</a>
+  pages\index.js:830:                  {(reviewsCfg.enabled || isAdmin) && (
+  pages\index.js:831:                    <button onClick={() => { setReviewsPanelOpen(true); setMenu(false); }} 
+className="text-left text-[#8f6075]">
+> pages\index.js:832:                      Mes commandes &amp; avis
+  pages\index.js:833:                    </button>
+  pages\index.js:834:                  )}
+  pages\index.js:835:                  <button onClick={() => { handleLogout(); setMenu(false); }} className="text-left 
+text-[#8f6075]">
+  pages\index.js:1481:          </>
+  pages\index.js:1482:        )}
+  pages\index.js:1483:      </AnimatePresence>
+> pages\index.js:1484:      {/* MES COMMANDES & AVIS (ZENORIA_REVIEWS_STEP1_V1) */}
+  pages\index.js:1485:      <MyReviewsPanel open={reviewsPanelOpen} onClose={() => setReviewsPanelOpen(false)} user={user} 
+isAdmin={isAdmin} reviewsCfg={reviewsCfg} />
+  pages\index.js:1486:      {/* MES FAVORIS */}
+  pages\index.js:1487:      <AnimatePresence>
+
+

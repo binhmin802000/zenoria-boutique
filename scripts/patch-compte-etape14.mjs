@@ -12,6 +12,9 @@
 // posé à l'étape 1.1, suffit désormais). Le panneau « Mes favoris » du cœur de l'en-tête NE CHANGE PAS.
 // components/MyReviewsPanel.js est laissé en place (simplement plus utilisé), rien n'est supprimé.
 // Met à jour pages/compte.js avec le contenu complet des rubriques Mes avis et Mes favoris.
+//
+// Les repères sur pages/index.js tolèrent n'importe quelle indentation (espaces/tabulations),
+// pour rester fiables même si le fichier a été reformaté entre-temps.
 // ============================================================
 import fs from "node:fs";
 import path from "node:path";
@@ -37,67 +40,97 @@ function read(rel) {
   return { rel, bom, eol, text: text.replace(/\r\n/g, "\n") };
 }
 const toDisk = (f, text) => (f.bom ? "\uFEFF" : "") + (f.eol === "\r\n" ? text.replace(/\n/g, "\r\n") : text);
-function once(text, needle, replacer, label, file) {
-  const n = text.split(needle).length - 1;
+
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Construit une regex tolérante à l'indentation : chaque ligne de `lines` peut être précédée de
+// n'importe quels espaces/tabulations. L'indentation de la PREMIÈRE ligne est capturée (groupe 1),
+// pour pouvoir la réutiliser dans un texte de remplacement qui garde le même niveau d'indentation.
+function flexBlock(lines) {
+  const body = lines.map((l, i) => (i === 0 ? "([ \\t]*)" : "[ \\t]*") + escapeRegex(l)).join("\\n");
+  return new RegExp(body);
+}
+function countMatches(text, re) {
+  const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+  return (text.match(g) || []).length;
+}
+function once(text, re, replacer, label, file) {
+  const n = countMatches(text, re);
   if (n !== 1) fail(`repère « ${label} » trouvé ${n} fois dans ${file} (1 attendu)`);
-  return text.replace(needle, replacer);
+  return text.replace(re, replacer);
 }
 
 function patchIndex(t) {
   const f = "pages/index.js";
-  // 1. Menu compte (ordinateur) : retirer le bouton « Mes commandes & avis »
+
+  // 1. Menu compte (ordinateur) : retirer tout le bloc (commentaire + bouton conditionnel)
   t = once(
     t,
-    `                {/* ZENORIA_REVIEWS_STEP1_V1 : avis ouverts, ou administration (tests) */}\n` +
-    `                {(reviewsCfg.enabled || isAdmin) && (\n` +
-    `                  <button\n` +
-    `                    type="button"\n` +
-    `                    onClick={() => { setAccountMenuOpen(false); setReviewsPanelOpen(true); }}\n` +
-    `                    className="flex items-center gap-2 text-sm text-[#8f6075] hover:text-[#71485b] mb-2"\n` +
-    `                  >\n` +
-    `                    <StarIcon size={16} /> Mes commandes &amp; avis\n` +
-    `                  </button>\n` +
-    `                )}\n`,
+    flexBlock([
+      "{/* ZENORIA_REVIEWS_STEP1_V1 : avis ouverts, ou administration (tests) */}",
+      "{(reviewsCfg.enabled || isAdmin) && (",
+      "<button",
+      'type="button"',
+      "onClick={() => { setAccountMenuOpen(false); setReviewsPanelOpen(true); }}",
+      'className="flex items-center gap-2 text-sm text-[#8f6075] hover:text-[#71485b] mb-2"',
+      ">",
+      "<StarIcon size={16} /> Mes commandes &amp; avis",
+      "</button>",
+      ")}",
+    ]),
     "",
     "bouton « Mes commandes & avis » du menu compte",
     f
   );
-  // 2. Menu mobile : retirer le bouton équivalent
+
+  // 2. Menu mobile : retirer le bloc équivalent
   t = once(
     t,
-    `                {(reviewsCfg.enabled || isAdmin) && (\n` +
-    `                  <button onClick={() => { setReviewsPanelOpen(true); setMenu(false); }} className="text-left text-[#8f6075]">\n` +
-    `                    Mes commandes &amp; avis\n` +
-    `                  </button>\n` +
-    `                )}\n`,
+    flexBlock([
+      "{(reviewsCfg.enabled || isAdmin) && (",
+      '<button onClick={() => { setReviewsPanelOpen(true); setMenu(false); }} className="text-left text-[#8f6075]">',
+      "Mes commandes &amp; avis",
+      "</button>",
+      ")}",
+    ]),
     "",
     "bouton « Mes commandes & avis » du menu mobile",
     f
   );
-  // 3. Retrait de l'affichage du panneau
+
+  // 3. Retrait de l'affichage du panneau (remplacé par un commentaire, même indentation conservée)
   t = once(
     t,
-    `      {/* MES COMMANDES & AVIS (ZENORIA_REVIEWS_STEP1_V1) */}\n` +
-    `      <MyReviewsPanel open={reviewsPanelOpen} onClose={() => setReviewsPanelOpen(false)} user={user} isAdmin={isAdmin} reviewsCfg={reviewsCfg} />\n`,
-    `      {/* ${MARK} : panneau « Mes commandes & avis » retiré, son contenu vit désormais dans /compte#avis */}\n`,
+    flexBlock([
+      "{/* MES COMMANDES & AVIS (ZENORIA_REVIEWS_STEP1_V1) */}",
+      "<MyReviewsPanel open={reviewsPanelOpen} onClose={() => setReviewsPanelOpen(false)} user={user} isAdmin={isAdmin} reviewsCfg={reviewsCfg} />",
+    ]),
+    (m, ind) => `${ind}{/* ${MARK} : panneau « Mes commandes & avis » retiré, son contenu vit désormais dans /compte#avis */}`,
     "affichage <MyReviewsPanel />",
     f
   );
-  // 4. Retrait de l'import et de l'état devenus inutiles
+
+  // 4. Retrait de l'import devenu inutile
   t = once(
     t,
-    `// ZENORIA_REVIEWS_STEP1_V1 : panneau « Mes commandes & avis »\nimport MyReviewsPanel from "@/components/MyReviewsPanel";\n`,
-    `// ${MARK} : import MyReviewsPanel retiré (contenu repris dans /compte#avis)\n`,
+    flexBlock([
+      "// ZENORIA_REVIEWS_STEP1_V1 : panneau « Mes commandes & avis »",
+      'import MyReviewsPanel from "@/components/MyReviewsPanel";',
+    ]),
+    (m, ind) => `${ind}// ${MARK} : import MyReviewsPanel retiré (contenu repris dans /compte#avis)`,
     "import MyReviewsPanel",
     f
   );
+
+  // 5. Retrait de l'état devenu inutile
   t = once(
     t,
-    `const [reviewsPanelOpen, setReviewsPanelOpen] = useState(false); // panneau « Mes commandes & avis »\n`,
-    `// ${MARK} : état reviewsPanelOpen retiré (plus de panneau latéral pour les avis)\n`,
+    flexBlock(['const [reviewsPanelOpen, setReviewsPanelOpen] = useState(false); // panneau « Mes commandes & avis »']),
+    (m, ind) => `${ind}// ${MARK} : état reviewsPanelOpen retiré (plus de panneau latéral pour les avis)`,
     "état reviewsPanelOpen",
     f
   );
+
   return t;
 }
 

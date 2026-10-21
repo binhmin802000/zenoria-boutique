@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import AdminBilling from "@/components/AdminBilling"; // ZENORIA_BILLING_STEP2_V1
 import { RefreshCw } from "lucide-react";
 import { supabase, getMediaUrl } from "@/lib/supabase";
 import { orderStatusInfo, formatOrderPrice, formatOrderReference } from "@/lib/orderDisplay"; // ZENORIA_ACCOUNT_STEP13_V1
@@ -373,6 +374,8 @@ export function AdminOrders() {
 
   return (
     <>
+      {/* ZENORIA_BILLING_STEP2_V1 */}
+      <AdminBilling />
       <div className="flex justify-between items-center mb-5 gap-3">
         <div>
           <h1 className="font-serif text-2xl">Commandes</h1>

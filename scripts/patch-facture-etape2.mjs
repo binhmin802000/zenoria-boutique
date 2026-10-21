@@ -1,0 +1,101 @@
+// ============================================================
+// scripts/patch-facture-etape2.mjs — FACTURATION, étape 2 (interrupteur TVA + identité vendeur)
+// ZENORIA_BILLING_STEP2_V1
+//
+// Prérequis : supabase_invoices.sql exécuté (étape 1 : compteur, table invoices, fonction
+// issue_invoice_for_order). Ce script ajoute SEULEMENT la carte d'administration ; rien n'est
+// encore visible côté cliente (bouton « Télécharger la facture » = étape 3).
+//
+// Usage (dossier zenoria, branche facturation-pdf) :
+//   node scripts\patch-facture-etape2.mjs --dry-run
+//   node scripts\patch-facture-etape2.mjs
+//
+// Crée  : lib/billingSettings.js, components/AdminBilling.js
+// Modifie : components/AdminCrm.js (ajoute <AdminBilling /> en haut de l'écran « Commandes »)
+// ============================================================
+import fs from "node:fs";
+import path from "node:path";
+import { execSync } from "node:child_process";
+
+const MARK = "ZENORIA_BILLING_STEP2_V1";
+const BRANCH = "facturation-pdf";
+const DRY = process.argv.includes("--dry-run");
+const NEW_FILES = {
+  "lib/billingSettings.js": "// ============================================================\n// RÉGLAGES DE FACTURATION (TVA + identité vendeur) — ZENORIA_BILLING_STEP2_V1\n//\n// Fichier SANS dépendance, sur le modèle de lib/reviewsSettings.js.\n// Utilisé par l'administration (components/AdminBilling.js) et par la fonction SQL\n// issue_invoice_for_order (supabase_invoices.sql), qui lit directement la colonne jsonb.\n//\n// Enregistrement : table « site_settings », clé « billing », valeur JSON :\n//     { \"vat_enabled\": false, \"vat_rate\": 20,\n//       \"seller_name\": \"\", \"seller_address\": \"\", \"seller_siret\": \"\", \"seller_vat_number\": \"\" }\n//\n//   vat_enabled : interrupteur « Assujettie à la TVA » (false par défaut : franchise en base)\n//   vat_rate    : taux en %, utilisé seulement si vat_enabled = true\n//\n// Option A (validée) : si vat_enabled passe à true, LES PRIX AFFICHÉS NE CHANGENT PAS.\n// La TVA est alors calculée comme incluse dans ces prix (montant HT = TTC / (1 + taux/100)).\n// Chaque facture déjà émise garde ses propres valeurs figées (table invoices) : changer ce\n// réglage n'affecte jamais une facture déjà émise, seulement les prochaines.\n//\n// Tant qu'un champ vendeur est vide, la facture affiche « À compléter » plutôt qu'un blanc\n// silencieux (voir pages/compte.js / l'admin, describeBilling ci-dessous).\n// Cette clé n'est volontairement PAS dans la lecture publique de site_settings (elle peut\n// contenir le SIRET) : réservée aux administrateurs.\n// ============================================================\n\nexport const BILLING_KEY = \"billing\";\n\nexport const DEFAULT_BILLING = Object.freeze({\n  vat_enabled: false,\n  vat_rate: 20,\n  seller_name: \"\",\n  seller_address: \"\",\n  seller_siret: \"\",\n  seller_vat_number: \"\",\n});\n\nexport function parseBillingSetting(value) {\n  const v = value && typeof value === \"object\" && !Array.isArray(value) ? value : {};\n  const rate = Number(v.vat_rate);\n  return {\n    vat_enabled: typeof v.vat_enabled === \"boolean\" ? v.vat_enabled : DEFAULT_BILLING.vat_enabled,\n    vat_rate: Number.isFinite(rate) && rate >= 0 && rate <= 100 ? rate : DEFAULT_BILLING.vat_rate,\n    seller_name: typeof v.seller_name === \"string\" ? v.seller_name.slice(0, 200) : \"\",\n    seller_address: typeof v.seller_address === \"string\" ? v.seller_address.slice(0, 300) : \"\",\n    seller_siret: typeof v.seller_siret === \"string\" ? v.seller_siret.slice(0, 40) : \"\",\n    seller_vat_number: typeof v.seller_vat_number === \"string\" ? v.seller_vat_number.slice(0, 40) : \"\",\n  };\n}\n\nexport function buildBillingValue(s) {\n  return parseBillingSetting(s);\n}\n\nexport function sameBillingSetting(a, b) {\n  const x = parseBillingSetting(a);\n  const y = parseBillingSetting(b);\n  return Object.keys(DEFAULT_BILLING).every((k) => x[k] === y[k]);\n}\n\n// Résumé pour l'admin : ce qui manque avant de pouvoir émettre une vraie facture conforme\nexport function billingMissingFields(setting) {\n  const s = parseBillingSetting(setting);\n  const missing = [];\n  if (!s.seller_name) missing.push(\"nom du vendeur\");\n  if (!s.seller_address) missing.push(\"adresse\");\n  if (!s.seller_siret) missing.push(\"SIRET\");\n  if (s.vat_enabled && !s.seller_vat_number) missing.push(\"n° de TVA intracommunautaire\");\n  return missing;\n}\n\nexport function describeBilling(setting) {\n  const s = parseBillingSetting(setting);\n  const missing = billingMissingFields(s);\n  const base = s.vat_enabled ? `TVA activée (${s.vat_rate} %)` : \"TVA non applicable (franchise en base)\";\n  return missing.length ? `${base} · à compléter : ${missing.join(\", \")}` : `${base} · informations complètes`;\n}\n",
+  "components/AdminBilling.js": "import React, { useCallback, useEffect, useState } from \"react\";\nimport { Receipt, RefreshCw } from \"lucide-react\";\nimport { supabase } from \"@/lib/supabase\";\nimport { SITE_SETTINGS_TABLE } from \"@/lib/siteSettings\";\nimport { BILLING_KEY, parseBillingSetting, buildBillingValue, sameBillingSetting, billingMissingFields } from \"@/lib/billingSettings\";\n\n// ============================================================\n// CARTE « FACTURATION » (Admin › CRM › Commandes) — ZENORIA_BILLING_STEP2_V1\n//\n// Réglages lus par la fonction SQL issue_invoice_for_order (supabase_invoices.sql) au moment où une\n// facture est émise pour la première fois. Changer ce réglage n'affecte jamais une facture déjà\n// émise (table invoices, verrouillée après création) : seulement les prochaines factures.\n//\n// Option A (validée) : activer la TVA ne change pas les prix affichés aux clientes ; la TVA est\n// calculée comme incluse dans ces prix au moment de l'émission de chaque facture.\n// ============================================================\n\nconst TIME_ZONE = \"Europe/Paris\";\n\nfunction formatDateTime(value) {\n  if (!value) return null;\n  return new Date(value).toLocaleString(\"fr-FR\", { dateStyle: \"short\", timeStyle: \"short\", timeZone: TIME_ZONE });\n}\n\nfunction friendlyError(err) {\n  const msg = (err && err.message) || String(err || \"\");\n  if (/site_settings_billing_valid|violates check constraint/i.test(msg)) {\n    return \"La base refuse cette valeur. Vérifiez que le script supabase_invoices.sql a bien été exécuté dans Supabase.\";\n  }\n  if (/row-level security|permission denied|not authorized|unauthorized/i.test(msg)) {\n    return \"Enregistrement refusé : ce compte n'a pas les droits d'administration.\";\n  }\n  return msg;\n}\n\nexport default function AdminBilling() {\n  const [row, setRow] = useState(null);\n  const [draft, setDraft] = useState({ ...parseBillingSetting(null) });\n  const [loading, setLoading] = useState(true);\n  const [loadError, setLoadError] = useState(\"\");\n  const [saving, setSaving] = useState(false);\n  const [error, setError] = useState(\"\");\n  const [toast, setToast] = useState(\"\");\n\n  const load = useCallback(async () => {\n    setLoading(true);\n    setLoadError(\"\");\n    try {\n      const res = await supabase.from(SITE_SETTINGS_TABLE).select(\"*\").eq(\"key\", BILLING_KEY).maybeSingle();\n      if (res.error) {\n        setLoadError(friendlyError(res.error));\n      } else {\n        setRow(res.data || null);\n        setDraft(parseBillingSetting(res.data ? res.data.value : null));\n      }\n    } catch (err) {\n      setLoadError(friendlyError(err));\n    }\n    setLoading(false);\n  }, []);\n\n  useEffect(() => {\n    load();\n  }, [load]);\n\n  useEffect(() => {\n    if (!toast) return undefined;\n    const t = setTimeout(() => setToast(\"\"), 4000);\n    return () => clearTimeout(t);\n  }, [toast]);\n\n  const saved = parseBillingSetting(row ? row.value : null);\n  const dirty = !sameBillingSetting(draft, saved);\n  const disabled = loading || Boolean(loadError) || saving;\n  const missing = billingMissingFields(draft);\n  const rateInvalid = draft.vat_enabled && !(Number(draft.vat_rate) >= 0 && Number(draft.vat_rate) <= 100);\n\n  const setField = (key, value) => {\n    setDraft((d) => ({ ...d, [key]: value }));\n    setError(\"\");\n  };\n\n  const save = async () => {\n    if (rateInvalid) {\n      setError(\"Le taux de TVA doit être compris entre 0 et 100.\");\n      return;\n    }\n    setError(\"\");\n    setSaving(true);\n    try {\n      const { error: err } = await supabase\n        .from(SITE_SETTINGS_TABLE)\n        .upsert({ key: BILLING_KEY, value: buildBillingValue(draft) }, { onConflict: \"key\" });\n      if (err) throw err;\n      setToast(\"Réglages de facturation enregistrés. Les prochaines factures émises en tiendront compte.\");\n      await load();\n    } catch (err) {\n      setError(\"Échec de l'enregistrement : \" + friendlyError(err));\n    }\n    setSaving(false);\n  };\n\n  const cancel = () => setDraft(saved);\n\n  const savedAt = row ? formatDateTime(row.updated_at) : null;\n  const inputCls = \"mt-1 w-full rounded-xl border border-[#eadfe4] focus:border-[#8f6075] px-3 h-10 text-sm outline-none bg-white disabled:opacity-60\";\n\n  return (\n    <section data-testid=\"billing-panel\" className=\"rounded-2xl bg-white border border-[#eee2e5] p-5 mb-6\">\n      <div className=\"flex justify-between items-start gap-3\">\n        <div className=\"min-w-0\">\n          <h2 className=\"font-serif text-xl flex items-center gap-2\">\n            <Receipt size={18} className=\"text-[#8f6075]\" /> Facturation\n          </h2>\n          <p className=\"text-xs text-[#8b737e] mt-1 leading-4\">\n            Identité affichée sur les factures et TVA applicable. Activer la TVA ne change pas les prix affichés aux\n            clientes : elle est calculée comme incluse dans ces prix. Une facture déjà émise ne change jamais.\n          </p>\n        </div>\n        <button\n          type=\"button\"\n          onClick={load}\n          disabled={loading}\n          aria-label=\"Actualiser les réglages de facturation\"\n          className=\"shrink-0 h-9 w-9 grid place-items-center rounded-full border border-[#d9c5cc] hover:bg-[#f5edf1] disabled:opacity-60\"\n        >\n          <RefreshCw size={14} className={loading ? \"animate-spin\" : \"\"} />\n        </button>\n      </div>\n\n      <div className=\"grid sm:grid-cols-2 gap-4 mt-4\">\n        <div>\n          <label className=\"text-xs text-[#54434c] font-medium\" htmlFor=\"seller_name\">Nom du vendeur</label>\n          <input\n            id=\"seller_name\"\n            type=\"text\"\n            value={draft.seller_name}\n            disabled={disabled}\n            onChange={(e) => setField(\"seller_name\", e.target.value)}\n            placeholder=\"À compléter\"\n            className={inputCls}\n          />\n        </div>\n        <div>\n          <label className=\"text-xs text-[#54434c] font-medium\" htmlFor=\"seller_siret\">SIRET</label>\n          <input\n            id=\"seller_siret\"\n            type=\"text\"\n            value={draft.seller_siret}\n            disabled={disabled}\n            onChange={(e) => setField(\"seller_siret\", e.target.value)}\n            placeholder=\"À compléter\"\n            className={inputCls}\n          />\n        </div>\n        <div className=\"sm:col-span-2\">\n          <label className=\"text-xs text-[#54434c] font-medium\" htmlFor=\"seller_address\">Adresse</label>\n          <input\n            id=\"seller_address\"\n            type=\"text\"\n            value={draft.seller_address}\n            disabled={disabled}\n            onChange={(e) => setField(\"seller_address\", e.target.value)}\n            placeholder=\"À compléter\"\n            className={inputCls}\n          />\n        </div>\n      </div>\n\n      <div className=\"mt-5 pt-4 border-t border-[#eee2e5]\">\n        <div className=\"flex items-center justify-between gap-3\">\n          <div>\n            <div className=\"text-sm font-medium text-[#412f3b]\">Assujettie à la TVA</div>\n            <div className=\"text-[11px] text-[#8b737e]\">Désactivé : mention « TVA non applicable, art. 293 B du CGI » sur les factures.</div>\n          </div>\n          <button\n            type=\"button\"\n            role=\"switch\"\n            aria-checked={draft.vat_enabled}\n            aria-label=\"Assujettie à la TVA\"\n            onClick={() => setField(\"vat_enabled\", !draft.vat_enabled)}\n            disabled={disabled}\n            data-testid=\"billing-vat-switch\"\n            className={`relative h-7 w-12 rounded-full transition-colors disabled:opacity-50 shrink-0 ${draft.vat_enabled ? \"bg-emerald-600\" : \"bg-[#d9cfd3]\"}`}\n          >\n            <span className={`absolute top-1 left-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${draft.vat_enabled ? \"translate-x-5\" : \"\"}`} />\n          </button>\n        </div>\n\n        {draft.vat_enabled && (\n          <div className=\"grid sm:grid-cols-2 gap-4 mt-4\">\n            <div>\n              <label className=\"text-xs text-[#54434c] font-medium\" htmlFor=\"vat_rate\">Taux de TVA (%)</label>\n              <input\n                id=\"vat_rate\"\n                type=\"number\"\n                min={0}\n                max={100}\n                step=\"0.1\"\n                value={draft.vat_rate}\n                disabled={disabled}\n                onChange={(e) => setField(\"vat_rate\", e.target.value === \"\" ? \"\" : Number(e.target.value))}\n                aria-invalid={rateInvalid}\n                className={`${inputCls} ${rateInvalid ? \"border-red-300\" : \"\"}`}\n              />\n            </div>\n            <div>\n              <label className=\"text-xs text-[#54434c] font-medium\" htmlFor=\"seller_vat_number\">N° de TVA intracommunautaire</label>\n              <input\n                id=\"seller_vat_number\"\n                type=\"text\"\n                value={draft.seller_vat_number}\n                disabled={disabled}\n                onChange={(e) => setField(\"seller_vat_number\", e.target.value)}\n                placeholder=\"À compléter\"\n                className={inputCls}\n              />\n            </div>\n          </div>\n        )}\n      </div>\n\n      {missing.length > 0 && (\n        <div className=\"mt-4 rounded-xl bg-amber-50 text-amber-900 px-4 py-3 text-xs leading-5\">\n          À compléter avant une mise en ligne réelle : {missing.join(\", \")}. En attendant, les factures afficheront « À compléter » à ces emplacements.\n        </div>\n      )}\n      {toast && <div data-testid=\"billing-toast\" className=\"mt-4 rounded-xl bg-emerald-50 text-emerald-700 px-4 py-3 text-sm\">{toast}</div>}\n      {loadError && <div role=\"alert\" className=\"mt-4 rounded-xl bg-red-50 text-red-600 px-4 py-3 text-sm\">{loadError}</div>}\n      {error && <div role=\"alert\" className=\"mt-4 rounded-xl bg-red-50 text-red-600 px-4 py-3 text-sm\">{error}</div>}\n\n      <div className=\"flex flex-wrap items-center gap-3 mt-5\">\n        <button\n          type=\"button\"\n          onClick={save}\n          disabled={disabled || !dirty || rateInvalid}\n          data-testid=\"billing-save\"\n          className=\"rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-6 h-10 text-sm disabled:opacity-50 disabled:hover:bg-[#8f6075]\"\n        >\n          {saving ? \"Enregistrement...\" : \"Enregistrer\"}\n        </button>\n        {dirty && !disabled && (\n          <button type=\"button\" onClick={cancel} className=\"rounded-full border border-[#d9c5cc] px-5 h-10 text-sm hover:bg-[#f5edf1]\">\n            Annuler\n          </button>\n        )}\n        {!loadError && !loading && (\n          <p className=\"text-[11px] text-[#54434c] leading-4\">\n            {savedAt && (\n              <span className=\"text-[#8b737e]\">\n                Modifié le {savedAt}\n                {row && row.updated_by_email ? ` · ${row.updated_by_email}` : \"\"}\n              </span>\n            )}\n            {!row && <span className=\"text-[#8b737e]\">Rien d&apos;enregistré (franchise en base par défaut)</span>}\n          </p>\n        )}\n      </div>\n    </section>\n  );\n}\n"
+};
+
+const ok = (m) => console.log("  \u2713 " + m);
+const info = (m) => console.log("  \u00b7 " + m);
+class Stop extends Error {}
+const fail = (m) => { throw new Stop(m); };
+const git = (cmd) => execSync(`git ${cmd}`, { encoding: "utf8" }).trim();
+
+function read(rel) {
+  if (!fs.existsSync(rel)) fail(`fichier introuvable : ${rel} (lancez le script depuis le dossier zenoria)`);
+  let text = fs.readFileSync(rel, "utf8");
+  const bom = text.charCodeAt(0) === 0xfeff;
+  if (bom) text = text.slice(1);
+  const eol = text.includes("\r\n") ? "\r\n" : "\n";
+  return { rel, bom, eol, text: text.replace(/\r\n/g, "\n") };
+}
+const toDisk = (f, text) => (f.bom ? "\uFEFF" : "") + (f.eol === "\r\n" ? text.replace(/\n/g, "\r\n") : text);
+
+function patchCrm(t) {
+  const f = "components/AdminCrm.js";
+  if (/AdminBilling/.test(t)) fail(`${f} mentionne déjà AdminBilling : vérifiez à la main`);
+
+  // 1. import, juste après le premier import (React, ...)
+  const importRe = /^import React, \{ useCallback, useEffect, useMemo, useState \} from "react";[ \t]*$/m;
+  if ((t.match(importRe) || []).length !== 1) fail("repère « import React… » introuvable ou multiple dans components/AdminCrm.js");
+  t = t.replace(importRe, (m) => `${m}\nimport AdminBilling from "@/components/AdminBilling"; // ${MARK}`);
+
+  // 2. insertion de <AdminBilling /> au tout début du rendu de AdminOrders (seul écran dont le
+  //    titre affiché est exactement "Commandes" ; la regex tolère l'indentation réelle du fichier).
+  const re = /(<>[ \t]*\n([ \t]*)<div className="flex justify-between items-center mb-5 gap-3">[ \t]*\n[ \t]*<div>[ \t]*\n[ \t]*<h1 className="font-serif text-2xl">Commandes<\/h1>)/;
+  const n = (t.match(new RegExp(re.source, "g")) || []).length;
+  if (n !== 1) fail(`repère « en-tête de l'écran Commandes » trouvé ${n} fois dans ${f} (1 attendu)`);
+  t = t.replace(re, (m, _full, ind) => {
+    const i = ind || "      ";
+    return m.replace("<>", `<>\n${i}{/* ${MARK} */}\n${i}<AdminBilling />`);
+  });
+  return t;
+}
+
+try {
+  console.log(`\nFacturation · étape 2 (TVA + identité vendeur)${DRY ? " — VÉRIFICATION SEULE" : ""}\n`);
+  let branch = "";
+  try { branch = git("rev-parse --abbrev-ref HEAD"); } catch (e) { fail("git introuvable ou dossier hors dépôt"); }
+  if (branch !== BRANCH) fail(`branche actuelle « ${branch} » : créez-la ou passez dessus (git switch -c ${BRANCH})`);
+  ok(`branche ${BRANCH}`);
+
+  const crm = read("components/AdminCrm.js");
+  const touched = crm.text.includes(MARK) ? [] : ["components/AdminCrm.js"];
+  const dirty = touched.length ? git(`status --porcelain -- ${touched.join(" ")}`) : "";
+  if (dirty) fail(`modifications locales non commitées :\n${dirty}\n  (git restore <fichier>, ou commit avant de relancer)`);
+  ok("fichiers concernés identiques au dernier commit");
+
+  const writes = [];
+  const eol = crm.eol;
+  for (const [rel, content] of Object.entries(NEW_FILES)) {
+    if (fs.existsSync(rel)) {
+      if (read(rel).text === content) { info(`${rel} : déjà présent, identique`); continue; }
+      fail(`${rel} existe déjà avec un contenu différent : renommez-le ou supprimez-le, puis relancez`);
+    }
+    writes.push({ rel, data: eol === "\r\n" ? content.replace(/\n/g, "\r\n") : content, label: "créé" });
+  }
+  if (crm.text.includes(MARK)) info("components/AdminCrm.js : déjà modifié, laissé tel quel");
+  else writes.push({ rel: "components/AdminCrm.js", data: toDisk(crm, patchCrm(crm.text)), label: "modifié" });
+
+  ok("tous les repères ont été trouvés");
+  if (DRY) { console.log(`\nVérification réussie : ${writes.length} fichier(s) seraient écrits. Rien n'a été modifié.\n`); process.exit(0); }
+  for (const w of writes) {
+    fs.mkdirSync(path.dirname(w.rel), { recursive: true });
+    fs.writeFileSync(w.rel, w.data, "utf8");
+    ok(`${w.rel} ${w.label}`);
+  }
+  console.log(`\nTerminé : ${writes.length} fichier(s) écrit(s). Suite : npm run build, puis git status -sb.\n`);
+} catch (e) {
+  if (e instanceof Stop) { console.error(`\n\u2717 ARRÊT : ${e.message}\nAucun fichier n'a été modifié.\n`); process.exit(1); }
+  throw e;
+}

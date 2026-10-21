@@ -258,6 +258,29 @@ export default function ZenoriaShop() {
   const [authLoading, setAuthLoading] = useState(true);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [reviewsPanelOpen, setReviewsPanelOpen] = useState(false); // panneau « Mes commandes & avis »
+  // ZENORIA_ACCOUNT_STEP11_V1 : arrivée depuis /compte sans session -> fenêtre de connexion ouverte
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("connexion") === "compte") {
+      setAuthModalMode("login");
+      setAuthModalOpen(true);
+      window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+    }
+  }, []);
+  // ZENORIA_ACCOUNT_STEP11_V1 : connexion réussie après une demande venant de /compte -> retour à l'espace cliente (10 min max)
+  useEffect(() => {
+    if (!user || typeof window === "undefined") return;
+    try {
+      const raw = window.sessionStorage.getItem("zenoria_return_to");
+      if (!raw) return;
+      window.sessionStorage.removeItem("zenoria_return_to");
+      const r = JSON.parse(raw);
+      if (r && typeof r.to === "string" && r.to.startsWith("/compte") && Date.now() - r.at < 600000) window.location.href = r.to;
+    } catch (e) {
+      // valeur illisible : on reste sur l'accueil
+    }
+  }, [user]);
   const [isAdmin, setIsAdmin] = useState(false);
   // Charge le catalogue + les codes promo, puis restaure le panier sauvegardé
   useEffect(() => {
@@ -735,6 +758,10 @@ export default function ZenoriaShop() {
                       <Settings size={16} /> Administration
                     </a>
                   )}
+                  {/* ZENORIA_ACCOUNT_STEP11_V1 : espace cliente */}
+                  <a href="/compte" data-testid="menu-account-link" className="flex items-center gap-2 text-sm text-[#8f6075] hover:text-[#71485b] mb-2">
+                    <User size={16} /> Mon compte
+                  </a>
                   {/* ZENORIA_REVIEWS_STEP1_V1 : avis ouverts, ou administration (tests) */}
                   {(reviewsCfg.enabled || isAdmin) && (
                     <button
@@ -790,6 +817,7 @@ export default function ZenoriaShop() {
               user ? (
                 <>
                   {isAdmin && <a href="/admin" className="text-left text-[#8f6075]">Administration</a>}
+                  <a href="/compte" className="text-left text-[#8f6075]">Mon compte</a>
                   {(reviewsCfg.enabled || isAdmin) && (
                     <button onClick={() => { setReviewsPanelOpen(true); setMenu(false); }} className="text-left text-[#8f6075]">
                       Mes commandes &amp; avis

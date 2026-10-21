@@ -1,0 +1,40 @@
+﻿
+> lib\contactSettings.js:59:export function buildContactValue(s) {
+  lib\contactSettings.js:60:  return parseContactSetting(s);
+  lib\contactSettings.js:61:}
+  lib\contactSettings.js:62:
+  lib\contactSettings.js:63:export function sameContactSetting(a, b) {
+  lib\contactSettings.js:64:  const x = parseContactSetting(a);
+  lib\contactSettings.js:65:  const y = parseContactSetting(b);
+  lib\contactSettings.js:66:  return CHANNELS.every((ch) => x[ch].enabled === y[ch].enabled && x[ch].value === y[ch].value);
+  lib\contactSettings.js:67:}
+  lib\contactSettings.js:68:
+  lib\contactSettings.js:69:// Construit l'URL mailto:, avec objet et corps pré-remplis (texte neutre,
+> lib\contactSettings.js:71:export function buildMailtoLink(email) {
+  lib\contactSettings.js:72:  const subject = encodeURIComponent("Question depuis le site Zenoria");
+  lib\contactSettings.js:73:  const body = encodeURIComponent("Bonjour,\r\n\r\n");
+  lib\contactSettings.js:74:  return `mailto:${email}?subject=${subject}&body=${body}`;
+  lib\contactSettings.js:75:}
+  lib\contactSettings.js:76:
+  lib\contactSettings.js:77:// Construit l'URL wa.me : WhatsApp attend uniquement des chiffres (sans
+  lib\contactSettings.js:78:// le "+", sans espaces, sans tirets).
+> lib\contactSettings.js:79:export function buildWhatsAppLink(phone) {
+  lib\contactSettings.js:80:  const digits = String(phone || "").replace(/\D/g, "");
+  lib\contactSettings.js:81:  return `https://wa.me/${digits}`;
+  lib\contactSettings.js:82:}
+  lib\contactSettings.js:83:
+  lib\contactSettings.js:84:// Construit l'URL signal.me : Signal attend le format international
+  lib\contactSettings.js:85:// complet avec le "+".
+> lib\contactSettings.js:86:export function buildSignalLink(phone) {
+  lib\contactSettings.js:87:  const digits = String(phone || "").replace(/[^\d]/g, "");
+  lib\contactSettings.js:88:  return `https://signal.me/#p/+${digits}`;
+  lib\contactSettings.js:89:}
+  lib\contactSettings.js:90:
+  lib\contactSettings.js:91:// Texte du réglage enregistré, pour l'administration
+  lib\contactSettings.js:92:export function describeContact(setting) {
+  lib\contactSettings.js:93:  const s = parseContactSetting(setting);
+  lib\contactSettings.js:94:  const parts = CHANNELS.filter((ch) => s[ch].enabled).map((ch) => {
+  lib\contactSettings.js:95:    const label = ch === "email" ? "e-mail" : ch === "whatsapp" ? "WhatsApp" : "Signal";
+  lib\contactSettings.js:96:    return label;
+
+

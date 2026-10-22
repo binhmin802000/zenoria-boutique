@@ -1,7 +1,36 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import AdminBilling from "@/components/AdminBilling"; // ZENORIA_BILLING_STEP2_V1
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, FileDown } from "lucide-react"; // ZENORIA_INVOICE_STEP3B_V1
 import { supabase, getMediaUrl } from "@/lib/supabase";
+
+// ZENORIA_INVOICE_STEP3B_V1 : télécharge la facture PDF d'une commande depuis l'admin (même route que l'espace cliente ;
+// issue_invoice_for_order autorise un compte administrateur à générer la facture de n'importe quelle commande).
+async function downloadInvoiceAdmin(orderId, onError) {
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data && data.session ? data.session.access_token : null;
+    if (!token) { onError("Session expirée : reconnectez-vous."); return; }
+    const res = await fetch(`/api/invoice/${orderId}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) {
+      let message = "Impossible de générer la facture pour le moment.";
+      try { const j = await res.json(); if (j && j.error) message = j.error; } catch (e) { /* réponse non JSON */ }
+      onError(message);
+      return;
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const match = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "");
+    a.href = url;
+    a.download = match ? match[1] : `facture-${orderId}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (e) {
+    onError("Impossible de générer la facture pour le moment.");
+  }
+}
 import { orderStatusInfo, formatOrderPrice, formatOrderReference } from "@/lib/orderDisplay"; // ZENORIA_ACCOUNT_STEP13_V1
 
 // ============================================================
@@ -238,6 +267,9 @@ export function AdminOrders() {
   const [openOrderId, setOpenOrderId] = useState(null);
   const [shippingDraft, setShippingDraft] = useState({});
   const [shippingBusyId, setShippingBusyId] = useState(null);
+  const [invoiceBusyId, setInvoiceBusyId] = useState(null); // ZENORIA_INVOICE_STEP3B_V1
+  const [invoiceErrorId, setInvoiceErrorId] = useState(null); // ZENORIA_INVOICE_STEP3B_V1
+  const [invoiceErrorMsg, setInvoiceErrorMsg] = useState(""); // ZENORIA_INVOICE_STEP3B_V1
   const CARRIERS = ["Colissimo", "Mondial Relay", "Chronopost", "DPD", "Colis Privé"];
 
   const updateOrderStatus = async (orderId, action, extra) => {
@@ -595,7 +627,27 @@ export function AdminOrders() {
                           >
                             Marquer comme livrée
                           </button>
+                          {/* ZENORIA_INVOICE_STEP3B_V1 : facture générée à la demande (recomposée depuis des données figées) */}
+                          {["paid", "shipped", "delivered"].includes(o.status) && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                setInvoiceBusyId(o.id);
+                                setInvoiceErrorId(null);
+                                await downloadInvoiceAdmin(o.id, (msg) => { setInvoiceErrorId(o.id); setInvoiceErrorMsg(msg); });
+                                setInvoiceBusyId(null);
+                              }}
+                              disabled={invoiceBusyId === o.id}
+                              data-testid="invoice-download-admin"
+                              className="flex items-center gap-1.5 rounded-full border border-[#d9c5cc] text-[#54434c] hover:bg-[#f5edf1] text-xs font-medium px-4 h-9 transition disabled:opacity-50"
+                            >
+                              <FileDown size={13} /> {invoiceBusyId === o.id ? "Génération…" : "Facture"}
+                            </button>
+                          )}
                         </div>
+                        {invoiceErrorId === o.id && (
+                          <div role="alert" className="mt-2 rounded-xl bg-red-50 text-red-600 px-3 py-2 text-xs">{invoiceErrorMsg}</div>
+                        )}
                       </div>
 
                       <div className="grid md:grid-cols-2 gap-4">

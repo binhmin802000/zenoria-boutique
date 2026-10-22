@@ -1,7 +1,8 @@
 // ZENORIA_ACCOUNT_STEP11_V1 · ZENORIA_ACCOUNT_STEP12_V1 · ZENORIA_ACCOUNT_HERO_B_V1 · ZENORIA_ACCOUNT_STEP13_V1 · ZENORIA_ACCOUNT_STEP14_V1
 import React, { useCallback, useEffect, useState } from "react";
 import Head from "next/head";
-import { Home, Package, Star, Heart, UserCog, ShieldCheck, LogOut, Truck, RotateCw, ChevronLeft } from "lucide-react";
+import { Home, Package, Star, Heart, UserCog, ShieldCheck, LogOut, Truck, RotateCw, ChevronLeft, FileDown } from "lucide-react"; // ZENORIA_INVOICE_STEP3_V1
+import { supabase as supabaseForInvoice } from "@/lib/supabase"; // ZENORIA_INVOICE_STEP3_V1
 import { supabase, getMediaUrl, SITE_MEDIA_TABLE, SITE_SLOT_ACCOUNT_HERO } from "@/lib/supabase";
 import { SITE_SETTINGS_TABLE } from "@/lib/siteSettings";
 import { fetchReviewsSetting, DEFAULT_REVIEWS, REVIEWS_RULES, REFUSAL_REASONS, reviewErrorMessage } from "@/lib/reviewsSettings";
@@ -175,7 +176,38 @@ function QuestionPanel({ order, contactCfg, onClose }) {
   );
 }
 
+// ZENORIA_INVOICE_STEP3_V1 : télécharge la facture PDF d'une commande. Le jeton de la session en cours est
+// transmis à la route API, qui vérifie elle-même (côté base) que la commande appartient
+// bien à la cliente connectée, ou qu'il s'agit d'un accès administrateur.
+async function downloadInvoice(orderId, onError) {
+  try {
+    const { data } = await supabaseForInvoice.auth.getSession();
+    const token = data && data.session ? data.session.access_token : null;
+    if (!token) { onError("Connectez-vous pour télécharger votre facture."); return; }
+    const res = await fetch(`/api/invoice/${orderId}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) {
+      let message = "Impossible de générer la facture pour le moment.";
+      try { const j = await res.json(); if (j && j.error) message = j.error; } catch (e) { /* réponse non JSON */ }
+      onError(message);
+      return;
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const match = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "");
+    a.href = url;
+    a.download = match ? match[1] : `facture-${orderId}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (e) {
+    onError("Impossible de générer la facture pour le moment.");
+  }
+}
 function OrderDetail({ order, contactCfg, questionOpen, setQuestionOpen, onBack, onReorder, reorderBusy, reorderMsg }) {
+  const [invoiceBusy, setInvoiceBusy] = useState(false); // ZENORIA_INVOICE_STEP3_V1
+  const [invoiceError, setInvoiceError] = useState(""); // ZENORIA_INVOICE_STEP3_V1
   const info = orderStatusInfo(order.status);
   const total = Number(order.total) || 0;
   return (
@@ -238,7 +270,18 @@ function OrderDetail({ order, contactCfg, questionOpen, setQuestionOpen, onBack,
         <button type="button" onClick={() => setQuestionOpen(questionOpen ? null : order.id)} className="rounded-full border border-[#d9c5cc] px-4 h-10 text-sm hover:bg-[#f5edf1]">
           Une question sur cette commande ?
         </button>
+        {/* ZENORIA_INVOICE_STEP3_V1 : facture PDF, générée à la demande (recomposée depuis des données figées) */}
+        <button
+          type="button"
+          onClick={async () => { setInvoiceBusy(true); setInvoiceError(""); await downloadInvoice(order.id, setInvoiceError); setInvoiceBusy(false); }}
+          disabled={invoiceBusy}
+          data-testid="invoice-download-btn"
+          className="flex items-center gap-2 rounded-full border border-[#d9c5cc] px-4 h-10 text-sm hover:bg-[#f5edf1] disabled:opacity-50"
+        >
+          <FileDown size={15} /> {invoiceBusy ? "Génération…" : "Télécharger la facture"}
+        </button>
       </div>
+      {invoiceError && <div role="alert" className="mt-3 rounded-xl bg-red-50 text-red-600 px-4 py-3 text-sm">{invoiceError}</div>}
       {questionOpen === order.id && <QuestionPanel order={order} contactCfg={contactCfg} onClose={() => setQuestionOpen(null)} />}
     </div>
   );

@@ -562,9 +562,16 @@ export default function ZenoriaShop() {
     }
     setCheckoutLoading(true);
     try {
+      // ZENORIA_ORDER_OWNER_V1: ne jamais envoyer le jeton dans le JSON ou dans Stripe.
+      const { data: checkoutAuth, error: checkoutAuthError } = await supabase.auth.getSession();
+      if (checkoutAuthError) throw new Error("Session indisponible");
+      const checkoutToken = checkoutAuth && checkoutAuth.session ? checkoutAuth.session.access_token : null;
       const res = await fetch("/api/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(checkoutToken ? { Authorization: `Bearer ${checkoutToken}` } : {}),
+        },
         body: JSON.stringify({
           items: cartItems.map((it) => ({ id: it.id, qty: it.qty })),
           promoCode: promoCode || null,

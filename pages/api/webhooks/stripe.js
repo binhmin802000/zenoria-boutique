@@ -87,6 +87,10 @@ export default async function handler(req, res) {
     }
 
     const meta = session.metadata || {};
+    // ZENORIA_ORDER_OWNER_V1: metadata ajoutee uniquement par notre checkout serveur.
+    const metadataUserId = typeof meta.zenoria_user_id === "string"
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(meta.zenoria_user_id)
+      ? meta.zenoria_user_id : null;
     let cartItems = [];
     try {
       cartItems = JSON.parse(meta.cart_items || "[]");
@@ -134,7 +138,7 @@ export default async function handler(req, res) {
       const { data: orderRow, error: orderErr } = await supabaseAdmin
         .from("orders")
         .insert({
-          user_id: null,
+          user_id: metadataUserId,
           guest_email: customer.email || null,
           status: "paid",
           is_test: event.livemode === false,

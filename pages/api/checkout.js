@@ -36,6 +36,28 @@ export default async function handler(req, res) {
   }
 
   try {
+    // ZENORIA_ORDER_OWNER_V1: identite verifiee par Supabase, jamais fournie par le JSON client.
+    let checkoutUser = null;
+    const authorization = req.headers.authorization;
+    if (authorization !== undefined) {
+      const match = typeof authorization === "string" && /^Bearer ([^\s]+)$/i.exec(authorization);
+      if (!match) return res.status(401).json({ ok: false, error: "Connexion invalide. Reconnectez-vous." });
+      let authResult;
+      try {
+        authResult = await supabaseAdmin.auth.getUser(match[1]);
+      } catch {
+        return res.status(503).json({ ok: false, error: "Verification de connexion indisponible. Reessayez." });
+      }
+      if (authResult.error) {
+        const status = Number(authResult.error.status);
+        const unavailable = !status || status >= 500 || status === 429;
+        return res.status(unavailable ? 503 : 401).json({ ok: false, error: unavailable
+          ? "Verification de connexion indisponible. Reessayez."
+          : "Session expiree ou invalide. Reconnectez-vous." });
+      }
+      checkoutUser = authResult.data && authResult.data.user;
+      if (!checkoutUser || !checkoutUser.id) return res.status(401).json({ ok: false, error: "Reconnectez-vous avant de payer." });
+    }
     const { items, promoCode } = req.body || {};
 
     if (!Array.isArray(items) || items.length === 0) {
@@ -119,7 +141,7 @@ export default async function handler(req, res) {
       const { data: pendingOrder, error: pendingErr } = await supabaseAdmin
         .from("orders")
         .insert({
-          user_id: null,
+          user_id: checkoutUser ? checkoutUser.id : null,
           guest_email: "en_attente@zenoria.local", // temporaire : remplace par le vrai e-mail une fois le webhook confirme
           status: "pending",
           is_test: !String(process.env.STRIPE_SECRET_KEY || "").startsWith("sk_live_"),
@@ -182,6 +204,7 @@ export default async function handler(req, res) {
       shipping_address_collection: { allowed_countries: ["FR"] },
       phone_number_collection: { enabled: true },
       metadata: {
+        zenoria_user_id: checkoutUser ? checkoutUser.id : "",
         promo_code: normalizedPromoCode || "",
         order_id: pendingOrderId ? String(pendingOrderId) : "",
         cart_items: JSON.stringify(

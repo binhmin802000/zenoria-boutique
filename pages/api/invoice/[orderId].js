@@ -56,7 +56,7 @@ export default async function handler(req, res) {
 
     const [itemsRes, orderRes] = await Promise.all([
       supabase.from("order_items").select("product_name, product_price, qty").eq("order_id", orderId),
-      supabase.from("orders").select("id, created_at, carrier, tracking_number").eq("id", orderId).maybeSingle(),
+      supabase.from("orders").select("id, created_at").eq("id", orderId).maybeSingle(),
     ]);
     if (itemsRes.error) throw itemsRes.error;
 
@@ -65,8 +65,8 @@ export default async function handler(req, res) {
     const pdfBuffer = await generateInvoicePdf({
       invoice: { ...invoice, order_reference: orderReference },
       orderItems: itemsRes.data || [],
-      carrier: orderRes.data ? orderRes.data.carrier : null,
-      trackingNumber: orderRes.data ? orderRes.data.tracking_number : null,
+      carrier: invoice.delivery_carrier || null, // ZENORIA_INVOICE_DELIVERY_LOGO_V1
+      trackingNumber: invoice.delivery_tracking_number || null,
     });
 
     res.setHeader("Content-Type", "application/pdf");

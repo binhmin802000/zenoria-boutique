@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import AdminBilling from "@/components/AdminBilling"; // ZENORIA_BILLING_STEP2_V1
+import AdminPaymentMethods from "@/components/AdminPaymentMethods"; // ZENORIA_PAYMENT_STEP2_V1
 import { RefreshCw, FileDown } from "lucide-react"; // ZENORIA_INVOICE_STEP3B_V1
 import { supabase, getMediaUrl } from "@/lib/supabase";
 
@@ -408,6 +409,8 @@ export function AdminOrders() {
     <>
       {/* ZENORIA_BILLING_STEP2_V1 */}
       <AdminBilling />
+      {/* ZENORIA_PAYMENT_STEP2_V1 */}
+      <AdminPaymentMethods />
       <div className="flex justify-between items-center mb-5 gap-3">
         <div>
           <h1 className="font-serif text-2xl">Commandes</h1>

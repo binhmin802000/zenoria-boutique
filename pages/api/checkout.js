@@ -21,6 +21,7 @@ import { supabase } from "@/lib/supabase";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { SITE_SETTINGS_TABLE } from "@/lib/siteSettings";
 import { SHIPPING_KEY, DEFAULT_SHIPPING, parseShippingSetting } from "@/lib/shippingSettings";
+import { PAYMENT_METHODS_KEY, parsePaymentMethods } from "@/lib/paymentSettings"; // ZENORIA_PAYMENT_STEP2_V1
 import { computeTotals, effectivePrice } from "@/lib/cartTotals";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -126,6 +127,24 @@ export default async function handler(req, res) {
       .in("key", [SHIPPING_KEY]);
     const shippingRow = (settingsRows || []).find((r) => r.key === SHIPPING_KEY);
     const shippingCfg = parseShippingSetting(shippingRow ? shippingRow.value : null) || DEFAULT_SHIPPING;
+
+    // ZENORIA_PAYMENT_STEP2_V1 : garde-fou carte désactivée (Admin > CRM > Commandes > Moyens de paiement).
+    // Placé AVANT la création de la commande « pending » : aucune commande orpheline si la carte est coupée.
+    // Réglage absent ou illisible = carte active : une panne de lecture ne doit jamais bloquer les ventes.
+    // Le webhook Stripe ne lit pas ce réglage : un paiement déjà lancé avant la coupure reste confirmé.
+    {
+      const { data: payRow } = await supabase
+        .from(SITE_SETTINGS_TABLE)
+        .select("value")
+        .eq("key", PAYMENT_METHODS_KEY)
+        .maybeSingle();
+      if (!parsePaymentMethods(payRow ? payRow.value : null).stripe_enabled) {
+        return res.status(403).json({
+          ok: false,
+          error: "Le paiement par carte bancaire est momentanément indisponible. Merci de réessayer plus tard ou de nous contacter.",
+        });
+      }
+    }
 
     // 5) Recalcule le total avec EXACTEMENT la meme logique que le site
     const totals = computeTotals(lines, promo, shippingCfg);

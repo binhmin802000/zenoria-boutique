@@ -276,9 +276,11 @@ export function AdminOrders() {
   const updateOrderStatus = async (orderId, action, extra) => {
     setShippingBusyId(orderId);
     try {
+      const { data: adminAuth } = await supabase.auth.getSession(); // ZENORIA_ADMIN_ORDER_AUTH_V1
+      const adminToken = adminAuth && adminAuth.session ? adminAuth.session.access_token : null;
       const res = await fetch("/api/admin/orders/update-status", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(adminToken ? { Authorization: "Bearer " + adminToken } : {}) },
         body: JSON.stringify({ orderId, action, ...extra }),
       });
       const data = await res.json();

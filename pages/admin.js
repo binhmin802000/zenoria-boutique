@@ -13,6 +13,8 @@ import AdminHealth from "@/components/AdminHealth";
 import AdminFamilies, { useFamilies, FamilyBadge } from "@/components/AdminFamilies";
 import AdminBanners from "@/components/AdminBanners";
 import { isoToParisLocal } from "@/lib/parisTime";
+import { formatOrderReference } from "@/lib/orderDisplay"; // ZENORIA_PIECE_UNIQUE_STEP3_V1
+import { parsePieceLockError, pieceLockMessage, pieceStateFor, pieceBadgeLabel, relistErrorMessage } from "@/lib/pieceLock";
 import { legacyFamilyText, validateDominantColors, cleanDominantColors, DOMINANT_MAX, DOMINANT_NAME_MAX } from "@/lib/families";
 import { promoCodeStatus, validatePromoDates, formatParis } from "@/lib/banners";
 import { CrmAccounts, CrmRoadmap, AdminOrders } from "@/components/AdminCrm";
@@ -69,6 +71,7 @@ const emptyProduct = {
   video: "",
   color: "from-rose-300 via-pink-100 to-white",
   stone: "💎",
+  is_unique: false, // ZENORIA_PIECE_UNIQUE_STEP3_V1
   active: true,
 };
 
@@ -191,6 +194,10 @@ export default function AdminPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [toast, setToast] = useState("");
+  // ZENORIA_PIECE_UNIQUE_STEP3_V1 : pièces uniques (réservations lues pour l'administratrice)
+  const [pieceHolds, setPieceHolds] = useState([]);
+  const [holdOrders, setHoldOrders] = useState({});
+  const [uniqueWarning, setUniqueWarning] = useState(null);
 
   // Upload de médias (photos / vidéo)
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -293,10 +300,61 @@ export default function AdminPage() {
     };
   }, []);
 
+  // ZENORIA_PIECE_UNIQUE_STEP3_V1 : réservations actives et pièces vendues, avec leur commande (pour la référence ZEN-...)
+  // Une panne de lecture n'empêche pas d'afficher la liste : on affiche simplement sans état de réservation.
+  const loadPieceHolds = async () => {
+    try {
+      const { data: holds, error: holdsErr } = await supabase
+        .from("product_holds")
+        .select("product_id, order_id, status, expires_at")
+        .in("status", ["active", "consumed"]);
+      if (holdsErr || !holds) {
+        setPieceHolds([]);
+        setHoldOrders({});
+        return;
+      }
+      setPieceHolds(holds);
+      const ids = Array.from(new Set(holds.map((h) => h.order_id)));
+      if (ids.length === 0) {
+        setHoldOrders({});
+        return;
+      }
+      const { data: ords, error: ordsErr } = await supabase.from("orders").select("id, status, created_at").in("id", ids);
+      if (ordsErr || !ords) {
+        setHoldOrders({});
+        return;
+      }
+      const map = {};
+      ords.forEach((o) => {
+        map[o.id] = o;
+      });
+      setHoldOrders(map);
+    } catch {
+      setPieceHolds([]);
+      setHoldOrders({});
+    }
+  };
+  // Message lisible pour une erreur de blocage de la base ("" si ce n'est pas une erreur de blocage)
+  const pieceLockText = (message, action) => {
+    const parsed = parsePieceLockError(message);
+    if (!parsed) return "";
+    const order = parsed.orderId ? holdOrders[parsed.orderId] || { id: parsed.orderId } : null;
+    return pieceLockMessage(parsed, order ? formatOrderReference(order) : "", action);
+  };
+  const relistPiece = async (orderId) => {
+    const { error } = await supabase.rpc("admin_relist_piece", { p_order_id: orderId });
+    if (error) {
+      window.alert(relistErrorMessage(error.message));
+      return;
+    }
+    setToast("Pièce remise en vente.");
+    loadPieceHolds();
+  };
   const loadProducts = async () => {
     setProductsLoading(true);
     const { data, error } = await supabase.from("products").select("*").order("id");
     if (!error && data) setProducts(data);
+    await loadPieceHolds(); // ZENORIA_PIECE_UNIQUE_STEP3_V1
     setProductsLoading(false);
   };
 
@@ -332,6 +390,7 @@ export default function AdminPage() {
   };
 
   const openEditProduct = (p) => {
+    setUniqueWarning(null); // ZENORIA_PIECE_UNIQUE_STEP3_V1
     setFormError("");
     setMediaError("");
     setProductForm({
@@ -343,7 +402,7 @@ export default function AdminPage() {
     });
   };
 
-  const closeProductForm = () => setProductForm(null);
+  const closeProductForm = () => { setUniqueWarning(null); setProductForm(null); }; // ZENORIA_PIECE_UNIQUE_STEP3_V1
 
   // --- Couleurs dominantes de la bague (0 à 3) : lues par le quiz couleurs ---
   const addDominantColor = () => {
@@ -501,6 +560,27 @@ export default function AdminPage() {
       setFormError("La saison voisine doit être différente de la famille de la collection.");
       return;
     }
+    // ZENORIA_PIECE_UNIQUE_STEP3_V1 : avertissement (non bloquant) quand on coche « Pièce unique » sur une bague déjà commandée
+    if (productForm.id && productForm.is_unique === true) {
+      const before = products.find((x) => x.id === productForm.id);
+      const alreadyAsked = uniqueWarning && uniqueWarning.productId === productForm.id;
+      if (before && before.is_unique !== true && !alreadyAsked) {
+        try {
+          const { data: stats, error: statsErr } = await supabase.rpc("admin_product_order_stats", { p_product_id: productForm.id });
+          if (!statsErr && stats && (Number(stats.sold_orders) > 0 || Number(stats.open_orders) > 0)) {
+            setUniqueWarning({
+              productId: productForm.id,
+              sold: Number(stats.sold_orders) || 0,
+              open: Number(stats.open_orders) || 0,
+              last: stats.last_sold_at || null,
+            });
+            return;
+          }
+        } catch {
+          // l'avertissement est facultatif : l'enregistrement continue
+        }
+      }
+    }
     const payload = {
       slug: productForm.slug.trim(),
       name: productForm.name.trim(),
@@ -520,6 +600,7 @@ export default function AdminPage() {
       color: productForm.color,
       stone: productForm.stone,
       active: productForm.active,
+      is_unique: productForm.is_unique === true, // ZENORIA_PIECE_UNIQUE_STEP3_V1
     };
 
     setSaving(true);
@@ -532,7 +613,7 @@ export default function AdminPage() {
       setFormError(
         result.error.message.includes("duplicate")
           ? "Cet identifiant (slug) est déjà utilisé par une autre collection."
-          : "Erreur lors de l'enregistrement : " + result.error.message
+          : pieceLockText(result.error.message) || "Erreur lors de l'enregistrement : " + result.error.message
       );
       return;
     }
@@ -545,6 +626,10 @@ export default function AdminPage() {
   const deleteProduct = async (p) => {
     if (!window.confirm(`Supprimer définitivement « ${p.name} » ? Cette action est irréversible.`)) return;
     const { error } = await supabase.from("products").delete().eq("id", p.id);
+    if (error) {
+      window.alert(pieceLockText(error.message, "delete") || "Suppression impossible : " + error.message);
+      return;
+    }
     if (!error) {
       setToast("Collection supprimée.");
       loadProducts();
@@ -552,7 +637,8 @@ export default function AdminPage() {
   };
 
   const toggleActive = async (p) => {
-    await supabase.from("products").update({ active: !p.active }).eq("id", p.id);
+    const { error } = await supabase.from("products").update({ active: !p.active }).eq("id", p.id);
+    if (error) window.alert(pieceLockText(error.message, "toggle") || "Modification impossible : " + error.message);
     loadProducts();
   };
 
@@ -868,6 +954,14 @@ export default function AdminPage() {
                             <div>
                               <div className="font-medium">{p.name}</div>
                               <div className="text-xs text-[#8b737e]">{p.collection}</div>
+                              {p.is_unique === true && (() => {
+                                const st = pieceStateFor(p.id, pieceHolds).state;
+                                return (
+                                  <span className={"inline-block mt-1 rounded-full px-2 py-0.5 text-[10px] " + (st === "sold" ? "bg-[#eeeaec] text-[#6b5f66]" : st === "reserved" ? "bg-amber-50 text-amber-800" : "bg-[#f7efdf] text-[#8a6116]")} data-testid="unique-badge">
+                                    {pieceBadgeLabel(st)}
+                                  </span>
+                                );
+                              })()}
                             </div>
                           </div>
                         </td>
@@ -884,7 +978,7 @@ export default function AdminPage() {
                             formatEUR(p.price)
                           )}
                         </td>
-                        <td className="px-4 py-3">{p.stock}</td>
+                        <td className="px-4 py-3">{p.is_unique === true ? "—" : p.stock}</td>
                         <td className="px-4 py-3">
                           <button
                             onClick={() => toggleActive(p)}
@@ -1107,9 +1201,9 @@ export default function AdminPage() {
                 </label>
 
                 <label className="text-sm">
-                  <span className="text-xs text-[#8b737e]">Stock disponible</span>
-                  <input type="number" min="0" value={productForm.stock} onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
-                    className="mt-1 w-full rounded-xl border border-[#eadfe4] px-3 h-10 outline-none focus:border-[#8f6075]" />
+                  <span className="text-xs text-[#8b737e]">Stock disponible{productForm.is_unique === true ? " (ignoré : la disponibilité vient des réservations)" : ""}</span>
+                  <input type="number" min="0" value={productForm.stock} onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })} disabled={productForm.is_unique === true}
+                    className="mt-1 w-full rounded-xl border border-[#eadfe4] px-3 h-10 outline-none focus:border-[#8f6075] disabled:opacity-50 disabled:bg-[#f6f1f3]" />
                 </label>
                 <label className="text-sm flex items-end">
                   <span className="flex items-center gap-2">
@@ -1117,6 +1211,34 @@ export default function AdminPage() {
                     <span>Visible sur le site</span>
                   </span>
                 </label>
+                <label className="text-sm flex items-end sm:col-span-2" data-testid="unique-checkbox">
+                  <span className="flex items-start gap-2">
+                    <input type="checkbox" checked={productForm.is_unique === true} onChange={(e) => { setUniqueWarning(null); setProductForm({ ...productForm, is_unique: e.target.checked }); }} className="h-4 w-4 mt-0.5" />
+                    <span>
+                      <b>Pièce unique</b>{" "}
+                      <span className="text-xs text-[#8b737e]">(un seul exemplaire : réservée dès la validation d&apos;une commande, vendue une seule fois, quantité limitée à 1)</span>
+                    </span>
+                  </span>
+                </label>
+                {productForm.id && (() => {
+                  const info = pieceStateFor(productForm.id, pieceHolds);
+                  if (info.state === "available") return null;
+                  const order = holdOrders[info.orderId] || { id: info.orderId };
+                  const ref = formatOrderReference(order);
+                  const canRelist = info.state === "sold" && order.status === "refunded";
+                  return (
+                    <div className="sm:col-span-2 rounded-xl bg-amber-50 text-amber-900 px-4 py-3 text-xs leading-5" data-testid="piece-state-box">
+                      {info.state === "reserved"
+                        ? "Cette pièce est réservée par la commande " + ref + ". Annulez ou confirmez d'abord cette commande."
+                        : "Cette pièce est vendue (commande " + ref + ")." + (canRelist ? " La commande est remboursée : vous pouvez remettre la pièce en vente." : " Pour la remettre en vente, marquez d'abord la commande comme remboursée.")}
+                      {canRelist && (
+                        <div className="mt-2">
+                          <button type="button" onClick={() => relistPiece(info.orderId)} className="rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-4 h-8 text-xs">Remettre en vente</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 <label className="text-sm sm:col-span-2">
                   <span className="text-xs text-[#8b737e]">Phrases de présentation (descriptif de vente)</span>
@@ -1262,9 +1384,16 @@ export default function AdminPage() {
                 </div>
               </div>
 
+              {uniqueWarning && uniqueWarning.productId === productForm.id && (
+                <div className="mt-4 rounded-xl bg-amber-50 text-amber-900 px-4 py-3 text-xs leading-5" role="alert" data-testid="unique-warning">
+                  <b>Attention :</b> {uniqueWarning.sold} commande(s) payée(s) et {uniqueWarning.open} commande(s) en attente contiennent déjà cette bague
+                  {uniqueWarning.last ? " (dernière vente le " + new Date(uniqueWarning.last).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }) + ")" : ""}.
+                  {" "}Une pièce unique cochée sera proposée à la vente comme un exemplaire neuf. Cliquez sur « Enregistrer quand même » pour confirmer.
+                </div>
+              )}
               <div className="flex gap-3 mt-6">
                 <button type="submit" disabled={saving || uploadingPhoto || uploadingVideo} className="flex-1 rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white h-11 text-sm font-medium disabled:opacity-60">
-                  {saving ? "Enregistrement..." : "Enregistrer"}
+                  {saving ? "Enregistrement..." : uniqueWarning && uniqueWarning.productId === productForm.id ? "Enregistrer quand même" : "Enregistrer"}
                 </button>
                 <button type="button" onClick={closeProductForm} className="rounded-full border border-[#d9c5cc] px-6 h-11 text-sm">
                   Annuler

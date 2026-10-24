@@ -87,6 +87,7 @@ function mapDbProduct(row) {
     price: Number(row.price),
     promoPrice: row.promo_price !== null && row.promo_price !== undefined ? Number(row.promo_price) : null,
     stock: typeof row.stock === "number" ? row.stock : 0,
+    isUnique: row.is_unique === true,
     pitch: row.pitch || "",
     photos,
     video: row.video || null,
@@ -845,7 +846,7 @@ export default function ZenoriaShop() {
           <div className="max-w-7xl mx-auto px-6 py-20 grid lg:grid-cols-2 items-center gap-14 relative z-10">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
               <div className="text-xs uppercase tracking-[.3em] text-[#8b6578] mb-5">
-                {products.length > 0 ? `${products.length} collections · ` : ""}{siteTexts.hero_label}
+                {products.length > 0 ? `${products.length} ${products.length > 1 ? "bijoux" : "bijou"} · ` : ""}{siteTexts.hero_label}
               </div>
               <h1 className="font-serif text-6xl md:text-8xl leading-none mb-5 text-[#513642]">ZENORIA</h1>
               <p className="font-serif italic text-2xl md:text-3xl text-[#594856] mb-5">
@@ -1315,6 +1316,9 @@ export default function ZenoriaShop() {
                               <div className="text-[11px] text-amber-700 mt-1">{avail.detail}</div>
                             )}
                             <div className={`flex items-center justify-between ${cartDensity === "dense" ? "mt-1" : "mt-2"}`}>
+                              {p.isUnique === true ? (
+                                <span className="text-xs text-[#8b737e]">Pièce unique · 1 exemplaire</span>
+                              ) : (
                               <div className="flex items-center rounded-full border border-[#d9c5cc]">
                                 <button
                                   onClick={() => changeQty(p, -1)}
@@ -1333,6 +1337,7 @@ export default function ZenoriaShop() {
                                   <Plus size={13} />
                                 </button>
                               </div>
+                              )}
                               <div className="font-medium text-sm">{formatPrice(effectivePrice(p) * qty)}</div>
                             </div>
                           </div>

@@ -610,6 +610,12 @@ export default function AdminPage() {
     setSaving(false);
 
     if (result.error) {
+      // ZENORIA_PIECE_UNIQUE_RESET_V1 : un refus de blocage n'a rien enregistre, la case reprend la valeur reelle de la base
+      const lockInfo = parsePieceLockError(result.error.message);
+      if (lockInfo && lockInfo.kind === "locked" && productForm.id) {
+        const persisted = products.find((x) => x.id === productForm.id);
+        if (persisted) setProductForm((f) => (f ? { ...f, is_unique: persisted.is_unique === true } : f));
+      }
       setFormError(
         result.error.message.includes("duplicate")
           ? "Cet identifiant (slug) est déjà utilisé par une autre collection."

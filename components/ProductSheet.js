@@ -20,7 +20,7 @@ import useModalFocus from "@/lib/useModalFocus";
 //  ratingSlot       : facultatif, affiché sous le prix (note des avis) — ZENORIA_REVIEWS_STEP3_V1
 //  reviewsSlot      : facultatif, affiché sous « Ajouter au panier » (derniers avis) — ZENORIA_REVIEWS_STEP3_V1
 // ============================================================================
-export default function ProductSheet({ product, initialMode = "video", label = "", onClose, onAdd, extra = null, addLabel = "Ajouter au panier", favoriteActive = false, onToggleFavorite, ratingSlot = null, reviewsSlot = null }) {
+export default function ProductSheet({ product, initialMode = "video", label = "", onClose, onAdd, extra = null, addLabel = "Ajouter au panier", favoriteActive = false, onToggleFavorite, ratingSlot = null, reviewsSlot = null, uniqueNotice = null }) {
   const dialogRef = useRef(null);
   useModalFocus(Boolean(product), dialogRef);
 
@@ -69,6 +69,7 @@ export default function ProductSheet({ product, initialMode = "video", label = "
                 <p className="text-[15px] leading-7 text-[#54434c] mt-5">{product.pitch}</p>
               )}
               <p className="text-sm leading-6 text-[#70656a] mt-3 italic">{product.energy}</p>
+              {uniqueNotice}
               {extra}
 
               <button

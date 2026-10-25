@@ -201,6 +201,36 @@ function FamilyPill({ product, families }) {
     </span>
   );
 }
+// ZENORIA_PIECE_UNIQUE_STEP4_V1 : encart "pièce unique" affiché sur la fiche produit ouverte.
+// Réutilise contactSettings déjà chargé par la page (aucune nouvelle donnée à lire).
+function UniqueNotice({ product, contactSettings }) {
+  if (!product || product.isUnique !== true) return null;
+  const hasEmail = Boolean(contactSettings.email.enabled && contactSettings.email.value.trim());
+  const hasWhatsapp = Boolean(contactSettings.whatsapp.enabled && contactSettings.whatsapp.value.trim());
+  const subject = `À propos de « ${product.name} »`;
+  const emailBody = `Bonjour,\n\nLe modèle « ${product.name} » m'a touchée, et j'aimerais en savoir plus sur une création qui s'en inspire.\n`;
+  const waText = `Bonjour, le modèle « ${product.name} » m'a touchée, j'aimerais en savoir plus sur une création qui s'en inspire.`;
+  const contactHref = hasEmail
+    ? buildMailtoLink(contactSettings.email.value.trim(), subject, emailBody)
+    : hasWhatsapp
+    ? buildWhatsAppLink(contactSettings.whatsapp.value.trim(), waText)
+    : null;
+  return (
+    <p className="text-sm leading-6 text-[#54434c] mt-4 rounded-xl bg-[#f5edf1] px-4 py-3">
+      <span className="font-medium">✦ Pièce unique</span> — Façonnée une seule fois, elle ne sera jamais reproduite à l'identique.{" "}
+      {contactHref ? (
+        <>
+          Elle vous touche ?{" "}
+          <a href={contactHref} target={hasEmail ? undefined : "_blank"} rel="noopener noreferrer" className="underline text-[#8f6075]">Écrivez-nous</a>
+          {" "}: nous pouvons imaginer une création qui s'en inspire.
+        </>
+      ) : (
+        "Contactez-nous pour en savoir plus sur une création qui s'en inspire."
+      )}
+    </p>
+  );
+}
+
 export default function ZenoriaShop() {
   // --- Catalogue et codes promo, chargés depuis Supabase ---
   const [products, setProducts] = useState([]);
@@ -1001,6 +1031,11 @@ export default function ZenoriaShop() {
                     <div className="relative">
                       <RingVisual product={p} />
                       <FamilyPill product={p} families={families} />
+                      {p.isUnique === true && (
+                        <span className="pointer-events-none absolute left-4 bottom-4 z-10 inline-flex items-center gap-1 rounded-full bg-white/85 backdrop-blur px-3 py-1 text-xs text-[#8f6075]">
+                          ✦ Pièce unique
+                        </span>
+                      )}
                       <FavoriteButton
                         active={favIds.includes(p.id)}
                         onToggle={() => toggleFavorite(p.id)}
@@ -1581,6 +1616,7 @@ export default function ZenoriaShop() {
         onToggleFavorite={() => selected && toggleFavorite(selected.id)}
         ratingSlot={selected && (reviewsCfg.enabled || isAdmin) ? <ReviewRatingLine productId={selected.id} reviewsCfg={reviewsCfg} isAdmin={isAdmin} onSeeAll={() => { const id = selected.id; setSelected(null); openReviewsSection(id); }} /> : null}
         reviewsSlot={selected && (reviewsCfg.enabled || isAdmin) ? <ProductReviewsList productId={selected.id} reviewsCfg={reviewsCfg} isAdmin={isAdmin} onSeeAll={() => { const id = selected.id; setSelected(null); openReviewsSection(id); }} /> : null}
+        uniqueNotice={<UniqueNotice product={selected} contactSettings={contactSettings} />}
       />
       {/* AUTHENTIFICATION */}
       <AuthModal open={authModalOpen} onClose={() => { setAuthModalOpen(false); setAuthModalMode("login"); }} initialMode={authModalMode} />

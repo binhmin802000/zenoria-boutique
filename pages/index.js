@@ -1095,40 +1095,44 @@ export default function ZenoriaShop() {
               type="button"
               onClick={() => window.dispatchEvent(new Event(OPEN_STORY_EVENT))}
               data-testid="univers-card-histoire"
-              className="text-left rounded-[1.5rem] border border-[#eee2e5] bg-white p-6 hover:shadow-md transition"
+              className="relative text-left rounded-[1.5rem] bg-[#3b2b39] p-6 hover:shadow-lg transition overflow-hidden"
             >
-              <BookOpen className="text-[#8f6075] mb-4" size={26} />
-              <div className="font-serif text-xl mb-1">Notre histoire</div>
-              <div className="text-sm text-[#70656a]">Une aventure née d&apos;une passion pour les pierres et le sens.</div>
+              <BookOpen className="text-white mb-4" size={26} />
+              <div className="font-serif text-xl mb-1 text-[#c9a15f]">Notre histoire</div>
+              <div className="text-sm text-white/70">Une aventure née d&apos;une passion pour les pierres et le sens.</div>
+              <ArrowRight size={16} className="absolute right-5 bottom-5 text-[#c9a15f]" />
             </button>
             <button
               type="button"
               onClick={() => scrollToSection("savoir-faire")}
               data-testid="univers-card-savoir-faire"
-              className="text-left rounded-[1.5rem] border border-[#eee2e5] bg-white p-6 hover:shadow-md transition"
+              className="relative text-left rounded-[1.5rem] bg-[#f5edf1] p-6 hover:shadow-lg transition overflow-hidden"
             >
-              <Hand className="text-[#8f6075] mb-4" size={26} />
-              <div className="font-serif text-xl mb-1">Notre savoir-faire</div>
+              <Hand className="text-[#412f3b] mb-4" size={26} />
+              <div className="font-serif text-xl mb-1 text-[#412f3b]">Notre savoir-faire</div>
               <div className="text-sm text-[#70656a]">Des bijoux façonnés avec exigence et bienveillance.</div>
+              <ArrowRight size={16} className="absolute right-5 bottom-5 text-[#8f6075]" />
             </button>
             <button
               type="button"
               onClick={() => scrollToSection("philosophie")}
               data-testid="univers-card-philosophie"
-              className="text-left rounded-[1.5rem] border border-[#eee2e5] bg-white p-6 hover:shadow-md transition"
+              className="relative text-left rounded-[1.5rem] bg-[#8f6075] p-6 hover:shadow-lg transition overflow-hidden"
             >
-              <Gem className="text-[#8f6075] mb-4" size={26} />
-              <div className="font-serif text-xl mb-1">Notre philosophie</div>
-              <div className="text-sm text-[#70656a]">Des créations qui vous ressemblent, pour illuminer votre quotidien.</div>
+              <Gem className="text-white mb-4" size={26} />
+              <div className="font-serif text-xl mb-1 text-white">Notre philosophie</div>
+              <div className="text-sm text-white/70">Des créations qui vous ressemblent, pour illuminer votre quotidien.</div>
+              <ArrowRight size={16} className="absolute right-5 bottom-5 text-white" />
             </button>
             <a
               href="/quiz"
               data-testid="univers-card-quiz"
-              className="text-left block rounded-[1.5rem] border border-[#eee2e5] bg-white p-6 hover:shadow-md transition"
+              className="relative text-left block rounded-[1.5rem] bg-[#fbf8f4] p-6 hover:shadow-lg transition overflow-hidden border border-[#eee2e5]"
             >
-              <Sparkles className="text-[#8f6075] mb-4" size={26} />
-              <div className="font-serif text-xl mb-1">Le quiz couleurs</div>
+              <Sparkles className="text-[#412f3b] mb-4" size={26} />
+              <div className="font-serif text-xl mb-1 text-[#412f3b]">Le quiz couleurs</div>
               <div className="text-sm text-[#70656a]">Trouvez les pierres qui résonnent avec votre énergie.</div>
+              <ArrowRight size={16} className="absolute right-5 bottom-5 text-[#8f6075]" />
             </a>
           </div>
         </section>

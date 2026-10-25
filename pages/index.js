@@ -4,7 +4,7 @@ import Head from "next/head";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShoppingBag, Search, User, Heart, Menu, X, Sparkles, ArrowRight,
-  Gem, Instagram, LogOut, Minus, Plus, Trash2, Tag, Truck, Settings, Mail, MessageCircle, Send
+  Gem, Instagram, LogOut, Minus, Plus, Trash2, Tag, Truck, Settings, Mail, MessageCircle, Send, BookOpen, Hand
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -771,6 +771,7 @@ export default function ZenoriaShop() {
             <button onClick={() => scrollToSection("collections")} className="hover:text-[#8f6075]">Bijoux</button>
             {familiesReady && <button onClick={() => scrollToSection("seasons")} className="hover:text-[#8f6075]">Les saisons</button>}
             <button onClick={() => scrollToSection("savoir-faire")} className="hover:text-[#8f6075]">Savoir-faire</button>
+            <button onClick={() => window.dispatchEvent(new Event(OPEN_STORY_EVENT))} data-testid="nav-histoire" className="hover:text-[#8f6075]">Notre histoire</button>
             <button onClick={() => scrollToSection("philosophie")} className="hover:text-[#8f6075]">Notre philosophie</button>
             <a href="/quiz" data-testid="nav-quiz" className="hover:text-[#8f6075]">Quiz</a>
             <button onClick={() => scrollToSection("contact")} className="hover:text-[#8f6075]">Contact</button>
@@ -844,6 +845,7 @@ export default function ZenoriaShop() {
             <button onClick={() => { scrollToSection("collections"); setMenu(false); }} className="text-left">Bijoux</button>
             {familiesReady && <button onClick={() => { scrollToSection("seasons"); setMenu(false); }} className="text-left">Les saisons</button>}
             <button onClick={() => { scrollToSection("savoir-faire"); setMenu(false); }} className="text-left">Savoir-faire</button>
+            <button onClick={() => { window.dispatchEvent(new Event(OPEN_STORY_EVENT)); setMenu(false); }} data-testid="nav-histoire-mobile" className="text-left">Notre histoire</button>
             <button onClick={() => { scrollToSection("philosophie"); setMenu(false); }} className="text-left">Notre philosophie</button>
             <a href="/quiz" data-testid="nav-quiz-mobile" onClick={() => setMenu(false)} className="text-left">Quiz</a>
             <button onClick={() => { scrollToSection("contact"); setMenu(false); }} className="text-left">Contact</button>
@@ -1080,6 +1082,54 @@ export default function ZenoriaShop() {
                 ))}
               </div>
             )}
+          </div>
+        </section>
+        {/* L'UNIVERS ZENORIA : rubrique de navigation vers Notre histoire, Savoir-faire, Philosophie et le Quiz */}
+        <section id="univers-zenoria" className="max-w-6xl mx-auto px-6 py-16">
+          <div className="text-center mb-10">
+            <div className="text-xs tracking-[.3em] text-[#9c7285] uppercase mb-3">Découvrir</div>
+            <h2 className="font-serif text-4xl">L&apos;univers Zenoria</h2>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event(OPEN_STORY_EVENT))}
+              data-testid="univers-card-histoire"
+              className="text-left rounded-[1.5rem] border border-[#eee2e5] bg-white p-6 hover:shadow-md transition"
+            >
+              <BookOpen className="text-[#8f6075] mb-4" size={26} />
+              <div className="font-serif text-xl mb-1">Notre histoire</div>
+              <div className="text-sm text-[#70656a]">Une aventure née d&apos;une passion pour les pierres et le sens.</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollToSection("savoir-faire")}
+              data-testid="univers-card-savoir-faire"
+              className="text-left rounded-[1.5rem] border border-[#eee2e5] bg-white p-6 hover:shadow-md transition"
+            >
+              <Hand className="text-[#8f6075] mb-4" size={26} />
+              <div className="font-serif text-xl mb-1">Notre savoir-faire</div>
+              <div className="text-sm text-[#70656a]">Des bijoux façonnés avec exigence et bienveillance.</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollToSection("philosophie")}
+              data-testid="univers-card-philosophie"
+              className="text-left rounded-[1.5rem] border border-[#eee2e5] bg-white p-6 hover:shadow-md transition"
+            >
+              <Gem className="text-[#8f6075] mb-4" size={26} />
+              <div className="font-serif text-xl mb-1">Notre philosophie</div>
+              <div className="text-sm text-[#70656a]">Des créations qui vous ressemblent, pour illuminer votre quotidien.</div>
+            </button>
+            <a
+              href="/quiz"
+              data-testid="univers-card-quiz"
+              className="text-left block rounded-[1.5rem] border border-[#eee2e5] bg-white p-6 hover:shadow-md transition"
+            >
+              <Sparkles className="text-[#8f6075] mb-4" size={26} />
+              <div className="font-serif text-xl mb-1">Le quiz couleurs</div>
+              <div className="text-sm text-[#70656a]">Trouvez les pierres qui résonnent avec votre énergie.</div>
+            </a>
           </div>
         </section>
         {/* SAVOIR-FAIRE */}

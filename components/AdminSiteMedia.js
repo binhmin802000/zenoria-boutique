@@ -22,6 +22,7 @@ import AdminShipping from "@/components/AdminShipping";
 import AdminContact from "@/components/AdminContact";
 import AdminLegalPages from "@/components/AdminLegalPages"; // ZENORIA_STORY_REVIEWS_V1
 import AdminSiteTexts from "@/components/AdminSiteTexts";
+import AdminCgv from "@/components/AdminCgv";
 
 // ============================================================
 // ONGLET « CONTENU DU SITE » de l'administration (/admin)
@@ -340,6 +341,8 @@ export default function AdminSiteMedia() {
 
       {/* TEXTES DU SITE : Savoir-faire et page d'accueil */}
       <AdminSiteTexts />
+      {/* CGV : conditions generales de vente, page publique /cgv */}
+      <AdminCgv />
 
       {/* ZENORIA_ACCOUNT_STEP12_V1 : CADRAGE DU BANDEAU DE L'ESPACE CLIENTE (21:9) */}
       {wideRequest && (

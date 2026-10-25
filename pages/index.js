@@ -1236,6 +1236,7 @@ export default function ZenoriaShop() {
                 FAQ
                 <span className="text-[10px] uppercase tracking-wide rounded-full border border-white/20 px-2 py-0.5">Bientôt</span>
               </p>
+              <p><a href="/cgv" className="hover:text-white underline-offset-2 hover:underline">Conditions générales de vente</a></p>
               <p><a href="/mentions-legales" className="hover:text-white underline-offset-2 hover:underline">Mentions légales</a></p>
               <p><a href="/confidentialite" className="hover:text-white underline-offset-2 hover:underline">Politique de confidentialité</a></p>
               {reviewsCfg.enabled && <p><a href="/charte-des-avis" className="hover:text-white underline-offset-2 hover:underline">Charte des avis</a></p>}
@@ -1532,8 +1533,12 @@ export default function ZenoriaShop() {
                       />
                       <span>
                         J&apos;ai lu et j&apos;accepte les{" "}
+                        <a href="/cgv" target="_blank" rel="noopener noreferrer" className="underline text-[#8f6075]">
+                          conditions générales de vente
+                        </a>{" "}
+                        et les{" "}
                         <a href="/mentions-legales" target="_blank" rel="noopener noreferrer" className="underline text-[#8f6075]">
-                          conditions générales de vente et les mentions légales
+                          mentions légales
                         </a>
                       </span>
                     </label>

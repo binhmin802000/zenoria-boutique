@@ -43,7 +43,7 @@ export default function CharteDesAvis({ mode }) {
 
       <header className="border-b border-[#eadfe4] bg-[#fbf8f4]/95">
         <div className="max-w-3xl mx-auto px-6 h-16 flex items-center justify-between">
-          <a href="/" className="font-serif text-xl tracking-[.22em] text-[#412f3b]">ZENORIA</a>
+          <a href="/"><img src="/images/logo-facture.png" alt="Zenoria" className="h-9 w-auto" /></a>
           <a href="/" className="text-sm text-[#8f6075] underline">Retour à la boutique</a>
         </div>
       </header>

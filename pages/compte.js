@@ -1,7 +1,7 @@
 // ZENORIA_ACCOUNT_STEP11_V1 · ZENORIA_ACCOUNT_STEP12_V1 · ZENORIA_ACCOUNT_HERO_B_V1 · ZENORIA_ACCOUNT_STEP13_V1 · ZENORIA_ACCOUNT_STEP14_V1
 import React, { useCallback, useEffect, useState } from "react";
 import Head from "next/head";
-import { Home, Package, Star, Heart, UserCog, ShieldCheck, LogOut, Truck, RotateCw, ChevronLeft, FileDown } from "lucide-react"; // ZENORIA_INVOICE_STEP3_V1
+import { Home, Package, Star, Heart, UserCog, ShieldCheck, LogOut, Truck, ChevronLeft, FileDown } from "lucide-react"; // ZENORIA_INVOICE_STEP3_V1
 import { supabase as supabaseForInvoice } from "@/lib/supabase"; // ZENORIA_INVOICE_STEP3_V1
 import { supabase, getMediaUrl, SITE_MEDIA_TABLE, SITE_SLOT_ACCOUNT_HERO } from "@/lib/supabase";
 import { SITE_SETTINGS_TABLE } from "@/lib/siteSettings";
@@ -28,7 +28,7 @@ import { CUSTOMER_VISIBLE_STATUSES, TRACKING_STEPS, orderStatusInfo, formatOrder
 //  - Mes favoris : reprend la logique du panneau « Mes favoris » de pages/index.js (addFavorite,
 //    removeFavorite, lib/favorites). Simplification validée : pas de « Voir la fiche » (la fenêtre du
 //    bijou n'existe que sur l'accueil) ; un lien « Voir toutes les créations » renvoie à l'accueil.
-//    « Ajouter au panier » suit le même principe que « Commander à nouveau » (panier existant, puis
+//    « Ajouter au panier » suit un principe similaire d'ajout au panier existant (puis
 //    retour à l'accueil avec ?panier=compte qui l'ouvre automatiquement, voir pages/index.js).
 //  - Le cœur de l'en-tête (pages/index.js) garde son propre panneau rapide « Mes favoris », inchangé.
 //  - CART_STORAGE_KEY et MAX_QTY_PER_PRODUCT restent dupliqués depuis pages/index.js (voir étape 1.3) ;
@@ -205,7 +205,7 @@ async function downloadInvoice(orderId, onError) {
     onError("Impossible de générer la facture pour le moment.");
   }
 }
-function OrderDetail({ order, contactCfg, questionOpen, setQuestionOpen, onBack, onReorder, reorderBusy, reorderMsg }) {
+function OrderDetail({ order, contactCfg, questionOpen, setQuestionOpen, onBack }) {
   const [invoiceBusy, setInvoiceBusy] = useState(false); // ZENORIA_INVOICE_STEP3_V1
   const [invoiceError, setInvoiceError] = useState(""); // ZENORIA_INVOICE_STEP3_V1
   const info = orderStatusInfo(order.status);
@@ -236,7 +236,11 @@ function OrderDetail({ order, contactCfg, questionOpen, setQuestionOpen, onBack,
           <div key={i} className="flex items-center gap-3 rounded-xl border border-[#eee2e5] p-2.5">
             <ProductThumb item={it} />
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium text-[#412f3b] truncate">{it.product_name}</div>
+              {it.product && it.product.active && it.product.slug ? (
+                <a href={`/#bague=${encodeURIComponent(it.product.slug)}`} className="text-sm font-medium text-[#412f3b] truncate hover:underline block">{it.product_name}</a>
+              ) : (
+                <div className="text-sm font-medium text-[#412f3b] truncate">{it.product_name}</div>
+              )}
               <div className="text-xs text-[#8b737e]">Quantité {it.qty} · {formatOrderPrice(it.product_price)}</div>
             </div>
           </div>
@@ -261,12 +265,8 @@ function OrderDetail({ order, contactCfg, questionOpen, setQuestionOpen, onBack,
         </div>
       </div>
 
-      {reorderMsg && <div className="mt-4 rounded-xl bg-emerald-50 text-emerald-700 px-4 py-3 text-sm">{reorderMsg}</div>}
 
       <div className="flex flex-wrap gap-2 mt-4">
-        <button type="button" onClick={() => onReorder(order)} disabled={reorderBusy} data-testid="reorder-btn" className="flex items-center gap-2 rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-4 h-10 text-sm disabled:opacity-50">
-          <RotateCw size={15} /> Commander à nouveau
-        </button>
         <button type="button" onClick={() => setQuestionOpen(questionOpen ? null : order.id)} className="rounded-full border border-[#d9c5cc] px-4 h-10 text-sm hover:bg-[#f5edf1]">
           Une question sur cette commande ?
         </button>
@@ -299,8 +299,6 @@ export default function Compte() {
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [contactCfg, setContactCfg] = useState(DEFAULT_CONTACT);
   const [questionOpenId, setQuestionOpenId] = useState(null);
-  const [reorderBusyId, setReorderBusyId] = useState(null);
-  const [reorderMsg, setReorderMsg] = useState("");
 
   // --- Mes avis (étape 1.4) ---
   const [reviewItems, setReviewItems] = useState([]);
@@ -575,7 +573,6 @@ export default function Compte() {
     setSection(id);
     setSelectedOrderId(null);
     setQuestionOpenId(null);
-    setReorderMsg("");
     // ZENORIA_ACCOUNT_FIX1_V1 : plus de retour forcé en haut de page (le menu reste visible, sticky)
   };
 
@@ -584,41 +581,6 @@ export default function Compte() {
     window.location.replace("/");
   };
 
-  const reorder = (order) => {
-    setReorderBusyId(order.id);
-    setReorderMsg("");
-    try {
-      let cart = { items: [], promo: null };
-      try {
-        const raw = window.localStorage.getItem(CART_STORAGE_KEY);
-        if (raw) {
-          const saved = JSON.parse(raw);
-          cart = { items: Array.isArray(saved.items) ? saved.items.slice() : [], promo: saved.promo || null };
-        }
-      } catch (e) {
-        // panier illisible : on repart d'un panier vide, sans bloquer la cliente
-      }
-      let added = 0;
-      let unavailable = 0;
-      order.items.forEach((it) => {
-        if (!it.product_id || !it.product || !it.product.active) {
-          unavailable += 1;
-          return;
-        }
-        const existing = cart.items.find((c) => c.id === it.product_id);
-        const qty = Math.min(MAX_QTY_PER_PRODUCT, (existing ? existing.qty : 0) + (Number(it.qty) || 1));
-        if (existing) existing.qty = qty;
-        else cart.items.push({ id: it.product_id, qty });
-        added += 1;
-      });
-      window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
-      if (added === 0) setReorderMsg("Ces bijoux ne sont plus en vente pour le moment.");
-      else setReorderMsg(unavailable > 0 ? `${added} bijou(x) ajouté(s) au panier. ${unavailable} bijou(x) n'est/ne sont plus en vente.` : `${added} bijou(x) ajouté(s) au panier.`);
-    } catch (e) {
-      setReorderMsg("Impossible d'ajouter ces bijoux au panier pour le moment.");
-    }
-    setReorderBusyId(null);
-  };
 
   const selectedOrder = orders.find((o) => o.id === selectedOrderId) || null;
   const lastOrder = orders[0] || null;
@@ -770,9 +732,6 @@ export default function Compte() {
                       questionOpen={questionOpenId}
                       setQuestionOpen={setQuestionOpenId}
                       onBack={() => setSelectedOrderId(null)}
-                      onReorder={reorder}
-                      reorderBusy={reorderBusyId === selectedOrder.id}
-                      reorderMsg={reorderMsg}
                     />
                   ) : (
                     <>

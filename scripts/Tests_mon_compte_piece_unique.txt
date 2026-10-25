@@ -1,0 +1,73 @@
+Zenoria — Tests locaux : Mon compte (chantier 3)
+Script concerné : patch-piece-unique-moncompte.mjs Fichier modifié : pages/compte.js uniquement.
+
+Avant de commencer
+git status -sb
+
+Attendu : vous êtes sur la branche piece-unique-experience, dossier propre (seul le commit 9c4be50 des chantiers 1/2 doit apparaître dans l'historique, rien en attente).
+
+Étape 1 — Copier le script
+Copiez le fichier dans scripts\patch-piece-unique-moncompte.mjs.
+
+Étape 2 — Vérification (dry-run)
+node scripts\patch-piece-unique-moncompte.mjs --dry-run
+
+Résultat attendu : une suite de lignes "OK repere : ...", deux lignes "OK garde-fou : ...", puis :
+
+Mode : DRY-RUN Tous les controles sont conformes. ... VERIFICATION SEULE : aucun fichier modifie.
+
+Si un message "ECHEC : ..." apparaît à la place, ne continuez pas — envoyez-moi le message d'erreur complet, avec le numéro de ligne mentionné le cas échéant.
+
+Étape 3 — Application
+node scripts\patch-piece-unique-moncompte.mjs --apply
+
+Résultat attendu : mêmes lignes OK, puis "Mode : APPLY" et "Fichier modifie : pages\compte.js".
+
+Étape 4 — Contrôle du diff
+git --no-pager diff -- pages/compte.js
+
+Vérifiez que le diff contient uniquement :
+
+la suppression de RotateCw dans l'import lucide-react ;
+la suppression des deux lignes d'état reorderBusyId / reorderMsg ;
+la suppression complète de la fonction reorder() ;
+la suppression de setReorderMsg("") dans go() ;
+la modification de la signature de OrderDetail (retrait de onReorder, reorderBusy, reorderMsg) ;
+la suppression du message de confirmation et du bouton "Commander à nouveau" ;
+le remplacement du nom du bijou par un bloc conditionnel (lien si le produit existe et est actif, texte simple sinon) ;
+la suppression des 3 props correspondantes dans l'appel à OrderDetail.
+Aucune autre ligne ne doit apparaître.
+
+Étape 5 — Build
+npm run build
+
+Résultat attendu : "Compiled successfully", sans erreur ESLint ni TypeScript (en particulier, aucune erreur du type "RotateCw is defined but never used" ou variable non définie).
+
+Étape 6 — Test local (npm run dev)
+npm run dev
+
+Connectez-vous avec un compte client ayant au moins une commande payée, expédiée ou livrée.
+
+Test 6.1 — Bouton "Commander à nouveau" disparu
+Allez dans Mon compte > Mes commandes.
+Ouvrez le détail d'une commande.
+Attendu : le bouton "Commander à nouveau" n'apparaît plus du tout.
+Les boutons "Une question sur cette commande ?" et "Télécharger la facture" sont toujours présents et fonctionnent normalement.
+Aucun message vert de type "X bijou(x) ajouté(s) au panier" ne doit apparaître nulle part sur cette page (ce mécanisme a été retiré).
+Test 6.2 — Nom du bijou cliquable (produit actif)
+Dans le détail d'une commande contenant un bijou encore en vente (actif) dans le catalogue, cliquez sur son nom.
+Attendu : le nom est souligné au survol (hover:underline), le clic ouvre la page d'accueil et fait apparaître automatiquement la fiche de ce bijou (fenêtre modale avec photo, prix, description).
+Test 6.3 — Nom du bijou non cliquable (produit désactivé ou supprimé)
+Si possible, testez avec une commande contenant un bijou qui n'est plus actif (désactivé dans l'admin) ou dont le produit a été supprimé.
+Attendu : le nom du bijou s'affiche normalement, en texte simple, sans lien, sans soulignement au survol, sans action au clic.
+Si vous n'avez pas de commande de ce type disponible, notez ce test comme "non vérifiable en l'état" plutôt que de le forcer.
+Test 6.4 — Non-régression : Mes favoris
+Allez dans Mon compte > Mes favoris.
+Attendu : le bouton "Ajouter au panier" (ou "Plus en vente") sur chaque favori fonctionne normalement — ce mécanisme est indépendant de "Commander à nouveau" et ne doit pas avoir changé.
+Test 6.5 — Non-régression : reste de la page
+Rubriques Accueil, Mes avis, Profil & sécurité, Mes données : vérifiez qu'elles s'affichent normalement, sans erreur dans la console du navigateur (F12).
+Le raccourci "Dernière commande" sur la rubrique Accueil doit toujours afficher correctement la vignette, la référence et le statut.
+En cas de problème
+Si le dry-run échoue avec "ECHEC : ...", ne lancez pas --apply et envoyez-moi le message exact, y compris la mention éventuelle "ce chantier a peut-être déjà été appliqué".
+Si le build échoue après --apply, n'essayez pas de corriger à la main : envoyez-moi la sortie de npm run build.
+Pour annuler toutes les modifications de ce script : git checkout -- pages/compte.js

@@ -4,7 +4,6 @@ import Head from "next/head";
 // ============================================================
 // PAGE « POLITIQUE DE CONFIDENTIALITÉ » — /confidentialite
 //
-// VERSION PROVISOIRE : les passages « À COMPLÉTER » doivent être renseignés, et l'ensemble relu
 // (idéalement par un juriste) avant l'ouverture de la boutique. Le texte décrit uniquement ce que
 // le site fait aujourd'hui ; il faudra le mettre à jour quand le paiement en ligne sera actif.
 //
@@ -33,7 +32,7 @@ export default function Confidentialite() {
 
       <header className="border-b border-[#eadfe4] bg-[#fbf8f4]/95">
         <div className="max-w-3xl mx-auto px-6 h-16 flex items-center justify-between">
-          <a href="/" className="font-serif text-xl tracking-[.22em] text-[#412f3b]">ZENORIA</a>
+          <a href="/"><img src="/images/logo-facture.png" alt="Zenoria" className="h-9 w-auto" /></a>
           <a href="/" className="text-sm text-[#8f6075] underline">Retour à la boutique</a>
         </div>
       </header>
@@ -42,14 +41,10 @@ export default function Confidentialite() {
         <h1 className="font-serif text-4xl text-[#412f3b]">Politique de confidentialité</h1>
         <p className="text-sm text-[#8b737e] mt-2">Dernière mise à jour : 11 octobre 2026</p>
 
-        <div data-testid="draft-notice" className="mt-6 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[13px] leading-5 px-4 py-3">
-          Version provisoire : les passages surlignés doivent être complétés et le texte relu avant l&apos;ouverture de la boutique.
-        </div>
 
         <Section id="responsable" title="Qui est responsable de vos données ?">
           <p>
-            Le site Zenoria est édité par <Todo>nom ou raison sociale, adresse, numéro d&apos;immatriculation éventuel</Todo>. Pour toute question sur vos données :{" "}
-            <Todo>adresse e-mail de contact</Todo>.
+            Le site Zenoria est édité par une entreprise individuelle immatriculée sous le numéro SIRET 821 828 183 00011. Pour toute question sur vos données : bagues.mandala@proton.me.
           </p>
         </Section>
 
@@ -61,14 +56,13 @@ export default function Confidentialite() {
             </li>
             <li>
               <strong>Les connexions à votre compte.</strong> Lors d&apos;une connexion, la date et l&apos;heure et, selon la configuration de notre prestataire, l&apos;adresse IP et le type de
-              navigateur sont enregistrés. Seuls les administrateurs du site y ont accès, pour la sécurité des comptes. <Todo>durée de conservation</Todo>
+              navigateur sont enregistrés. Seuls les administrateurs du site y ont accès, pour la sécurité des comptes.
             </li>
             <li>
               <strong>Votre panier.</strong> Il est conservé dans votre navigateur, sur votre appareil. Il n&apos;est pas envoyé à nos serveurs tant que vous ne passez pas commande.
             </li>
             <li>
-              <strong>Commandes et paiement.</strong> Le paiement en ligne n&apos;est pas encore actif. <Todo>à compléter à l&apos;ouverture du paiement : données de commande et de livraison, prestataire de
-              paiement, durées de conservation légales</Todo>
+              <strong>Commandes et paiement.</strong> Lorsque vous passez commande, nous enregistrons les articles commandés, le montant, votre adresse de livraison et votre numéro de téléphone (facultatif). Le paiement par carte bancaire est traité directement par Stripe, certifié PCI-DSS : vos coordonnées bancaires ne sont à aucun moment transmises ni conservées par Zenoria. Les données de commande sont conservées pendant la durée légale de conservation des documents commerciaux et comptables (10 ans).
             </li>
           </ul>
         </Section>
@@ -109,13 +103,13 @@ export default function Confidentialite() {
         <Section id="prestataires" title="Qui héberge et traite vos données ?">
           <ul className="list-disc pl-5 space-y-2">
             <li>
-              <strong>Vercel</strong> héberge le site. <Todo>lieu d&apos;hébergement et garanties pour les transferts hors Union européenne</Todo>
+              <strong>Vercel</strong> héberge le site. Données hébergées à Dublin, Irlande.
             </li>
             <li>
-              <strong>Supabase</strong> héberge la base de données, l&apos;authentification et les fichiers (photos et vidéos). Les données sont hébergées dans l&apos;Union européenne (Irlande, région eu-west-1). <Todo>garanties pour les éventuels transferts hors Union européenne</Todo>
+              <strong>Supabase</strong> héberge la base de données, l'authentification et les fichiers (photos et vidéos). Données hébergées à Dublin, Irlande.
             </li>
             <li>
-              <strong>Resend</strong> envoie les e-mails liés aux comptes. <Todo>lieu de traitement et garanties de transfert</Todo>
+              <strong>Resend</strong> envoie les e-mails liés aux comptes. Données hébergées à Dublin, Irlande.
             </li>
           </ul>
         </Section>

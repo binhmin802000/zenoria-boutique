@@ -4,7 +4,7 @@ import Head from "next/head";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShoppingBag, Search, User, Heart, Menu, X, Sparkles, ArrowRight,
-  Gem, Instagram, LogOut, Minus, Plus, Trash2, Tag, Truck, Settings, Mail, MessageCircle, Send
+  Gem, Instagram, LogOut, Minus, Plus, Trash2, Tag, Truck, Settings, Mail, MessageCircle, Send, BookOpen, Hand
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -87,6 +87,7 @@ function mapDbProduct(row) {
     price: Number(row.price),
     promoPrice: row.promo_price !== null && row.promo_price !== undefined ? Number(row.promo_price) : null,
     stock: typeof row.stock === "number" ? row.stock : 0,
+    isUnique: row.is_unique === true,
     pitch: row.pitch || "",
     photos,
     video: row.video || null,
@@ -200,6 +201,36 @@ function FamilyPill({ product, families }) {
     </span>
   );
 }
+// ZENORIA_PIECE_UNIQUE_STEP4_V1 : encart "pièce unique" affiché sur la fiche produit ouverte.
+// Réutilise contactSettings déjà chargé par la page (aucune nouvelle donnée à lire).
+function UniqueNotice({ product, contactSettings }) {
+  if (!product || product.isUnique !== true) return null;
+  const hasEmail = Boolean(contactSettings.email.enabled && contactSettings.email.value.trim());
+  const hasWhatsapp = Boolean(contactSettings.whatsapp.enabled && contactSettings.whatsapp.value.trim());
+  const subject = `À propos de « ${product.name} »`;
+  const emailBody = `Bonjour,\n\nLe modèle « ${product.name} » m'a touchée, et j'aimerais en savoir plus sur une création qui s'en inspire.\n`;
+  const waText = `Bonjour, le modèle « ${product.name} » m'a touchée, j'aimerais en savoir plus sur une création qui s'en inspire.`;
+  const contactHref = hasEmail
+    ? buildMailtoLink(contactSettings.email.value.trim(), subject, emailBody)
+    : hasWhatsapp
+    ? buildWhatsAppLink(contactSettings.whatsapp.value.trim(), waText)
+    : null;
+  return (
+    <p className="text-sm leading-6 text-[#54434c] mt-4 rounded-xl bg-[#f5edf1] px-4 py-3">
+      <span className="font-medium">✦ Pièce unique</span> — Façonnée une seule fois, elle ne sera jamais reproduite à l'identique.{" "}
+      {contactHref ? (
+        <>
+          Elle vous touche ?{" "}
+          <a href={contactHref} target={hasEmail ? undefined : "_blank"} rel="noopener noreferrer" className="underline text-[#8f6075]">Écrivez-nous</a>
+          {" "}: nous pouvons imaginer une création qui s'en inspire.
+        </>
+      ) : (
+        "Contactez-nous pour en savoir plus sur une création qui s'en inspire."
+      )}
+    </p>
+  );
+}
+
 export default function ZenoriaShop() {
   // --- Catalogue et codes promo, chargés depuis Supabase ---
   const [products, setProducts] = useState([]);
@@ -740,6 +771,7 @@ export default function ZenoriaShop() {
             <button onClick={() => scrollToSection("collections")} className="hover:text-[#8f6075]">Bijoux</button>
             {familiesReady && <button onClick={() => scrollToSection("seasons")} className="hover:text-[#8f6075]">Les saisons</button>}
             <button onClick={() => scrollToSection("savoir-faire")} className="hover:text-[#8f6075]">Savoir-faire</button>
+            <button onClick={() => window.dispatchEvent(new Event(OPEN_STORY_EVENT))} data-testid="nav-histoire" className="hover:text-[#8f6075]">Notre histoire</button>
             <button onClick={() => scrollToSection("philosophie")} className="hover:text-[#8f6075]">Notre philosophie</button>
             <a href="/quiz" data-testid="nav-quiz" className="hover:text-[#8f6075]">Quiz</a>
             <button onClick={() => scrollToSection("contact")} className="hover:text-[#8f6075]">Contact</button>
@@ -813,6 +845,7 @@ export default function ZenoriaShop() {
             <button onClick={() => { scrollToSection("collections"); setMenu(false); }} className="text-left">Bijoux</button>
             {familiesReady && <button onClick={() => { scrollToSection("seasons"); setMenu(false); }} className="text-left">Les saisons</button>}
             <button onClick={() => { scrollToSection("savoir-faire"); setMenu(false); }} className="text-left">Savoir-faire</button>
+            <button onClick={() => { window.dispatchEvent(new Event(OPEN_STORY_EVENT)); setMenu(false); }} data-testid="nav-histoire-mobile" className="text-left">Notre histoire</button>
             <button onClick={() => { scrollToSection("philosophie"); setMenu(false); }} className="text-left">Notre philosophie</button>
             <a href="/quiz" data-testid="nav-quiz-mobile" onClick={() => setMenu(false)} className="text-left">Quiz</a>
             <button onClick={() => { scrollToSection("contact"); setMenu(false); }} className="text-left">Contact</button>
@@ -845,7 +878,7 @@ export default function ZenoriaShop() {
           <div className="max-w-7xl mx-auto px-6 py-20 grid lg:grid-cols-2 items-center gap-14 relative z-10">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
               <div className="text-xs uppercase tracking-[.3em] text-[#8b6578] mb-5">
-                {products.length > 0 ? `${products.length} collections · ` : ""}{siteTexts.hero_label}
+                {products.length > 0 ? `${products.length} ${products.length > 1 ? "bijoux" : "bijou"} · ` : ""}{siteTexts.hero_label}
               </div>
               <h1 className="font-serif text-6xl md:text-8xl leading-none mb-5 text-[#513642]">ZENORIA</h1>
               <p className="font-serif italic text-2xl md:text-3xl text-[#594856] mb-5">
@@ -1000,6 +1033,11 @@ export default function ZenoriaShop() {
                     <div className="relative">
                       <RingVisual product={p} />
                       <FamilyPill product={p} families={families} />
+                      {p.isUnique === true && (
+                        <span className="pointer-events-none absolute left-4 bottom-4 z-10 inline-flex items-center gap-1 rounded-full bg-white/85 backdrop-blur px-3 py-1 text-xs text-[#8f6075]">
+                          ✦ Pièce unique
+                        </span>
+                      )}
                       <FavoriteButton
                         active={favIds.includes(p.id)}
                         onToggle={() => toggleFavorite(p.id)}
@@ -1044,6 +1082,58 @@ export default function ZenoriaShop() {
                 ))}
               </div>
             )}
+          </div>
+        </section>
+        {/* L'UNIVERS ZENORIA : rubrique de navigation vers Notre histoire, Savoir-faire, Philosophie et le Quiz */}
+        <section id="univers-zenoria" className="max-w-6xl mx-auto px-6 py-16">
+          <div className="text-center mb-10">
+            <div className="text-xs tracking-[.3em] text-[#9c7285] uppercase mb-3">Découvrir</div>
+            <h2 className="font-serif text-4xl">L&apos;univers Zenoria</h2>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event(OPEN_STORY_EVENT))}
+              data-testid="univers-card-histoire"
+              className="relative text-left rounded-[1.5rem] bg-[#3b2b39] p-6 hover:shadow-lg transition overflow-hidden"
+            >
+              <BookOpen className="text-white mb-4" size={26} />
+              <div className="font-serif text-xl mb-1 text-[#c9a15f]">Notre histoire</div>
+              <div className="text-sm text-white/70">Une aventure née d&apos;une passion pour les pierres et le sens.</div>
+              <ArrowRight size={16} className="absolute right-5 bottom-5 text-[#c9a15f]" />
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollToSection("savoir-faire")}
+              data-testid="univers-card-savoir-faire"
+              className="relative text-left rounded-[1.5rem] bg-[#f5edf1] p-6 hover:shadow-lg transition overflow-hidden"
+            >
+              <Hand className="text-[#412f3b] mb-4" size={26} />
+              <div className="font-serif text-xl mb-1 text-[#412f3b]">Notre savoir-faire</div>
+              <div className="text-sm text-[#70656a]">Des bijoux façonnés avec exigence et bienveillance.</div>
+              <ArrowRight size={16} className="absolute right-5 bottom-5 text-[#8f6075]" />
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollToSection("philosophie")}
+              data-testid="univers-card-philosophie"
+              className="relative text-left rounded-[1.5rem] bg-[#8f6075] p-6 hover:shadow-lg transition overflow-hidden"
+            >
+              <Gem className="text-white mb-4" size={26} />
+              <div className="font-serif text-xl mb-1 text-white">Notre philosophie</div>
+              <div className="text-sm text-white/70">Des créations qui vous ressemblent, pour illuminer votre quotidien.</div>
+              <ArrowRight size={16} className="absolute right-5 bottom-5 text-white" />
+            </button>
+            <a
+              href="/quiz"
+              data-testid="univers-card-quiz"
+              className="relative text-left block rounded-[1.5rem] bg-[#fbf8f4] p-6 hover:shadow-lg transition overflow-hidden border border-[#eee2e5]"
+            >
+              <Sparkles className="text-[#412f3b] mb-4" size={26} />
+              <div className="font-serif text-xl mb-1 text-[#412f3b]">Le quiz couleurs</div>
+              <div className="text-sm text-[#70656a]">Trouvez les pierres qui résonnent avec votre énergie.</div>
+              <ArrowRight size={16} className="absolute right-5 bottom-5 text-[#8f6075]" />
+            </a>
           </div>
         </section>
         {/* SAVOIR-FAIRE */}
@@ -1146,6 +1236,7 @@ export default function ZenoriaShop() {
                 FAQ
                 <span className="text-[10px] uppercase tracking-wide rounded-full border border-white/20 px-2 py-0.5">Bientôt</span>
               </p>
+              <p><a href="/cgv" className="hover:text-white underline-offset-2 hover:underline">Conditions générales de vente</a></p>
               <p><a href="/mentions-legales" className="hover:text-white underline-offset-2 hover:underline">Mentions légales</a></p>
               <p><a href="/confidentialite" className="hover:text-white underline-offset-2 hover:underline">Politique de confidentialité</a></p>
               {reviewsCfg.enabled && <p><a href="/charte-des-avis" className="hover:text-white underline-offset-2 hover:underline">Charte des avis</a></p>}
@@ -1315,6 +1406,9 @@ export default function ZenoriaShop() {
                               <div className="text-[11px] text-amber-700 mt-1">{avail.detail}</div>
                             )}
                             <div className={`flex items-center justify-between ${cartDensity === "dense" ? "mt-1" : "mt-2"}`}>
+                              {p.isUnique === true ? (
+                                <span className="text-xs text-[#8b737e]">Pièce unique · 1 exemplaire</span>
+                              ) : (
                               <div className="flex items-center rounded-full border border-[#d9c5cc]">
                                 <button
                                   onClick={() => changeQty(p, -1)}
@@ -1333,6 +1427,7 @@ export default function ZenoriaShop() {
                                   <Plus size={13} />
                                 </button>
                               </div>
+                              )}
                               <div className="font-medium text-sm">{formatPrice(effectivePrice(p) * qty)}</div>
                             </div>
                           </div>
@@ -1438,8 +1533,12 @@ export default function ZenoriaShop() {
                       />
                       <span>
                         J&apos;ai lu et j&apos;accepte les{" "}
+                        <a href="/cgv" target="_blank" rel="noopener noreferrer" className="underline text-[#8f6075]">
+                          conditions générales de vente
+                        </a>{" "}
+                        et les{" "}
                         <a href="/mentions-legales" target="_blank" rel="noopener noreferrer" className="underline text-[#8f6075]">
-                          conditions générales de vente et les mentions légales
+                          mentions légales
                         </a>
                       </span>
                     </label>
@@ -1576,6 +1675,7 @@ export default function ZenoriaShop() {
         onToggleFavorite={() => selected && toggleFavorite(selected.id)}
         ratingSlot={selected && (reviewsCfg.enabled || isAdmin) ? <ReviewRatingLine productId={selected.id} reviewsCfg={reviewsCfg} isAdmin={isAdmin} onSeeAll={() => { const id = selected.id; setSelected(null); openReviewsSection(id); }} /> : null}
         reviewsSlot={selected && (reviewsCfg.enabled || isAdmin) ? <ProductReviewsList productId={selected.id} reviewsCfg={reviewsCfg} isAdmin={isAdmin} onSeeAll={() => { const id = selected.id; setSelected(null); openReviewsSection(id); }} /> : null}
+        uniqueNotice={<UniqueNotice product={selected} contactSettings={contactSettings} />}
       />
       {/* AUTHENTIFICATION */}
       <AuthModal open={authModalOpen} onClose={() => { setAuthModalOpen(false); setAuthModalMode("login"); }} initialMode={authModalMode} />

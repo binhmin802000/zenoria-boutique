@@ -60,6 +60,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, result });
   } catch (err) {
     const msg = (err && err.message) || String(err);
+    console.error("[data-requests-process] erreur :", msg, err && err.stack);
     if (/REQUEST_NOT_FOUND/.test(msg)) return res.status(404).json({ ok: false, error: "demande introuvable" });
     if (/WRONG_REQUEST_TYPE/.test(msg)) return res.status(409).json({ ok: false, error: "cette demande n'est pas une suppression" });
     if (/ALREADY_PROCESSED/.test(msg)) return res.status(409).json({ ok: false, error: "cette demande a déjà été traitée" });

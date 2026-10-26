@@ -1,6 +1,7 @@
 // ZENORIA_ACCOUNT_STEP11_V1 · ZENORIA_ACCOUNT_STEP12_V1 · ZENORIA_ACCOUNT_HERO_B_V1 · ZENORIA_ACCOUNT_STEP13_V1 · ZENORIA_ACCOUNT_STEP14_V1
 import React, { useCallback, useEffect, useState } from "react";
 import AccountDataSection from "@/components/AccountDataSection";
+import AccountProfileSection from "@/components/AccountProfileSection";
 import Head from "next/head";
 import { Home, Package, Star, Heart, UserCog, ShieldCheck, LogOut, Truck, ChevronLeft, FileDown } from "lucide-react"; // ZENORIA_INVOICE_STEP3_V1
 import { supabase as supabaseForInvoice } from "@/lib/supabase"; // ZENORIA_INVOICE_STEP3_V1
@@ -238,7 +239,7 @@ function OrderDetail({ order, contactCfg, questionOpen, setQuestionOpen, onBack 
             <ProductThumb item={it} />
             <div className="min-w-0 flex-1">
               {it.product && it.product.active && it.product.slug ? (
-                <a href={`/#bague=${encodeURIComponent(it.product.slug)}`} className="text-sm font-medium text-[#412f3b] truncate hover:underline block">{it.product_name}</a>
+                <a href={`/#bague=${encodeURIComponent(it.product.slug)}`} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-[#412f3b] truncate hover:underline block">{it.product_name}</a>
               ) : (
                 <div className="text-sm font-medium text-[#412f3b] truncate">{it.product_name}</div>
               )}
@@ -935,7 +936,11 @@ export default function Compte() {
                           <FavThumb product={p} />
                           <div className="flex-1 min-w-0 flex flex-col justify-between">
                             <div>
-                              <div className="font-serif text-base leading-tight truncate">{p.name}</div>
+                              {p.active && p.slug ? (
+                                <a href={`/#bague=${encodeURIComponent(p.slug)}`} target="_blank" rel="noopener noreferrer" className="font-serif text-base leading-tight truncate hover:underline block">{p.name}</a>
+                              ) : (
+                                <div className="font-serif text-base leading-tight truncate">{p.name}</div>
+                              )}
                               <div className="text-sm text-[#412f3b] mt-1">{formatEUR(effectivePrice(p))}</div>
                             </div>
                             <div className="flex gap-2 mt-2">
@@ -956,7 +961,11 @@ export default function Compte() {
                 <AccountDataSection user={user} />
               )}
 
-              {current && !["accueil", "commandes", "avis", "favoris", "donnees"].includes(current.id) && (
+              {current && current.id === "profil" && (
+                <AccountProfileSection user={user} />
+              )}
+
+              {current && !["accueil", "commandes", "avis", "favoris", "donnees", "profil"].includes(current.id) && (
                 <>
                   <h2 className="font-serif text-2xl text-[#412f3b]">{current.label}</h2>
                   <p className="text-sm text-[#8b737e] mt-2">

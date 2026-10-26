@@ -23,6 +23,7 @@ import AdminContact from "@/components/AdminContact";
 import AdminLegalPages from "@/components/AdminLegalPages"; // ZENORIA_STORY_REVIEWS_V1
 import AdminSiteTexts from "@/components/AdminSiteTexts";
 import AdminCgv from "@/components/AdminCgv";
+import AdminAccordionSection from "@/components/AdminAccordionSection";
 
 // ============================================================
 // ONGLET « CONTENU DU SITE » de l'administration (/admin)
@@ -110,6 +111,8 @@ function friendlyError(err) {
 }
 
 export default function AdminSiteMedia() {
+  const [openGroup, setOpenGroup] = useState("vitrine");
+  const toggleGroup = (id) => setOpenGroup((prev) => (prev === id ? null : id));
   const [rows, setRows] = useState({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -324,25 +327,48 @@ export default function AdminSiteMedia() {
         })}
       </div>
 
-      {/* ANIMATION SAISONNIÈRE DE LA PAGE D'ACCUEIL (automatique, forcée ou désactivée) */}
-      <AdminSeasonFx />
+      <AdminAccordionSection
+        id="vitrine"
+        title="Vitrine & ambiance"
+        count={2}
+        isOpen={openGroup === "vitrine"}
+        onToggle={toggleGroup}
+      >
+        <AdminSeasonFx />
+        <AdminRingAnimation />
+      </AdminAccordionSection>
 
-      {/* ANIMATION « LE GESTE » : bague, couleur du cœur, vitesse et mode de lecture */}
-      <AdminRingAnimation />
+      <AdminAccordionSection
+        id="textes-legal"
+        title="Textes & légal"
+        count={3}
+        isOpen={openGroup === "textes-legal"}
+        onToggle={toggleGroup}
+      >
+        <AdminLegalPages />
+        <AdminSiteTexts />
+        <AdminCgv />
+      </AdminAccordionSection>
 
-      {/* LIVRAISON OFFERTE : montant et interrupteur */}
-      <AdminShipping />
+      <AdminAccordionSection
+        id="vente-livraison"
+        title="Vente & livraison"
+        count={1}
+        isOpen={openGroup === "vente-livraison"}
+        onToggle={toggleGroup}
+      >
+        <AdminShipping />
+      </AdminAccordionSection>
 
-      {/* CANAUX DE CONTACT : e-mail, WhatsApp, Signal */}
-      <AdminContact />
-
-      {/* AVIS CLIENTES (on/off, avec la charte) ET CONFIDENTIALITÉ (toujours en ligne) */}
-      <AdminLegalPages />
-
-      {/* TEXTES DU SITE : Savoir-faire et page d'accueil */}
-      <AdminSiteTexts />
-      {/* CGV : conditions generales de vente, page publique /cgv */}
-      <AdminCgv />
+      <AdminAccordionSection
+        id="contact"
+        title="Contact"
+        count={1}
+        isOpen={openGroup === "contact"}
+        onToggle={toggleGroup}
+      >
+        <AdminContact />
+      </AdminAccordionSection>
 
       {/* ZENORIA_ACCOUNT_STEP12_V1 : CADRAGE DU BANDEAU DE L'ESPACE CLIENTE (21:9) */}
       {wideRequest && (

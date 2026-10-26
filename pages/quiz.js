@@ -5,7 +5,8 @@ import { DEFAULT_SHIPPING, fetchShippingSetting } from "@/lib/shippingSettings";
 import { useSiteStatus } from "@/lib/siteStatus";
 import MediaGuard from "@/components/MediaGuard";
 import BannerBar from "@/components/BannerBar";
-import { QuizHeader, QuizFooter, ShippingStrip } from "@/components/QuizChrome";
+import { QuizHeader, ShippingStrip } from "@/components/QuizChrome";
+import Footer from "@/components/Footer";
 import QuizSteps from "@/components/QuizSteps";
 import QuizResult from "@/components/QuizResult";
 import ProductSheet from "@/components/ProductSheet";
@@ -344,7 +345,7 @@ export default function QuizPage() {
         </div>
       )}
 
-      <QuizFooter seasons={footerSeasons} />
+      <Footer seasons={footerSeasons} logoCompact={false} logoDark={true} />
 
       {/* Fiche bague : le même composant que sur l'accueil, avec « Pourquoi elle vous va » en plus */}
       <ProductSheet

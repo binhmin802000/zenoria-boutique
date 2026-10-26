@@ -1,17 +1,45 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Download, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
+function formatDate(value) {
+  if (!value) return "";
+  return new Date(value).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Paris" });
+}
+
 // ============================================================
-// « MES DONNÉES » — export PDF (immédiat) et demande de suppression
-// (nécessite une validation admin, voir components/AdminDataRequests.js)
+// « MES DONNÉES » — export PDF (immédiat), demande de suppression
+// (validation admin) et affichage du statut de la dernière demande.
 // ============================================================
 export default function AccountDataSection({ user }) {
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
-  const [deletionRequested, setDeletionRequested] = useState(false);
+
+  const [latestRequest, setLatestRequest] = useState(undefined); // undefined = chargement, null = aucune
   const [deletionError, setDeletionError] = useState("");
   const [deletionBusy, setDeletionBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { data, error: err } = await supabase
+          .from("data_requests")
+          .select("id, type, status, requested_at, processed_at")
+          .eq("user_id", user.id)
+          .eq("type", "deletion")
+          .order("requested_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!alive) return;
+        if (err) { setLatestRequest(null); return; }
+        setLatestRequest(data || null);
+      } catch (e) {
+        if (alive) setLatestRequest(null);
+      }
+    })();
+    return () => { alive = false; };
+  }, [user.id]);
 
   const downloadMyData = async () => {
     setExporting(true);
@@ -44,18 +72,27 @@ export default function AccountDataSection({ user }) {
   };
 
   const requestDeletion = async () => {
-    if (!window.confirm("Confirmer votre demande de suppression de compte ? Une administratrice la traitera prochainement.")) return;
+    const confirmText = "Confirmer votre demande de suppression de compte ?\n\nVos informations de livraison seront anonymisées après validation par une administratrice. Vos factures restent conservées pour nos obligations légales (10 ans). Les avis que vous avez publiés resteront visibles, même après la suppression de votre compte.";
+    if (!window.confirm(confirmText)) return;
     setDeletionBusy(true);
     setDeletionError("");
     try {
-      const { error: err } = await supabase.from("data_requests").insert({ user_id: user.id, type: "deletion" });
+      const { data: inserted, error: err } = await supabase
+        .from("data_requests")
+        .insert({ user_id: user.id, type: "deletion" })
+        .select("id, type, status, requested_at, processed_at")
+        .single();
       if (err) throw err;
-      setDeletionRequested(true);
+      setLatestRequest(inserted);
     } catch (e) {
       setDeletionError("Impossible d'enregistrer votre demande pour le moment.");
     }
     setDeletionBusy(false);
   };
+
+  const showForm = latestRequest === null;
+  const isPending = latestRequest && latestRequest.status === "pending";
+  const isDone = latestRequest && latestRequest.status === "done";
 
   return (
     <div data-testid="section-donnees-content">
@@ -79,22 +116,39 @@ export default function AccountDataSection({ user }) {
 
       <div className="rounded-2xl border border-[#eee2e5] p-4">
         <h3 className="font-serif text-lg text-[#412f3b] mb-1">Supprimer mon compte</h3>
-        <p className="text-sm text-[#70656a] mb-3">
-          Votre demande sera examinée par une administratrice. Vos factures restent conservées pour nos obligations légales (10 ans), le reste de vos données personnelles est anonymisé.
-        </p>
-        {deletionError && <div role="alert" className="mb-3 rounded-xl bg-red-50 text-red-600 px-3 py-2 text-sm">{deletionError}</div>}
-        {deletionRequested ? (
-          <p className="text-sm text-emerald-700" data-testid="deletion-requested-msg">Votre demande a bien été enregistrée.</p>
-        ) : (
-          <button
-            type="button"
-            onClick={requestDeletion}
-            disabled={deletionBusy}
-            data-testid="request-deletion-btn"
-            className="flex items-center gap-2 rounded-full border border-[#d9c5cc] px-4 h-10 text-sm hover:bg-[#f5edf1] disabled:opacity-50"
-          >
-            <Trash2 size={15} /> {deletionBusy ? "Envoi…" : "Demander la suppression de mon compte"}
-          </button>
+
+        {isPending && (
+          <p className="text-sm text-[#70656a]" data-testid="deletion-status-pending">
+            Votre demande du {formatDate(latestRequest.requested_at)} est en cours de traitement.
+          </p>
+        )}
+
+        {isDone && (
+          <p className="text-sm text-[#70656a]" data-testid="deletion-status-done">
+            Votre demande a été traitée le {formatDate(latestRequest.processed_at)}. Vos informations de livraison ont été anonymisées. Vos factures restent conservées conformément à nos obligations légales (10 ans). Les avis que vous avez publiés restent visibles tels quels, conformément à notre politique de confidentialité.
+          </p>
+        )}
+
+        {latestRequest === undefined && (
+          <p className="text-sm text-[#8b737e]">Chargement…</p>
+        )}
+
+        {showForm && (
+          <>
+            <p className="text-sm text-[#70656a] mb-3">
+              Votre demande sera examinée par une administratrice. Vos factures restent conservées pour nos obligations légales (10 ans), le reste de vos données personnelles est anonymisé. Les avis que vous avez publiés resteront visibles, même après la suppression de votre compte.
+            </p>
+            {deletionError && <div role="alert" className="mb-3 rounded-xl bg-red-50 text-red-600 px-3 py-2 text-sm">{deletionError}</div>}
+            <button
+              type="button"
+              onClick={requestDeletion}
+              disabled={deletionBusy}
+              data-testid="request-deletion-btn"
+              className="flex items-center gap-2 rounded-full border border-[#d9c5cc] px-4 h-10 text-sm hover:bg-[#f5edf1] disabled:opacity-50"
+            >
+              <Trash2 size={15} /> {deletionBusy ? "Envoi…" : "Demander la suppression de mon compte"}
+            </button>
+          </>
         )}
       </div>
     </div>

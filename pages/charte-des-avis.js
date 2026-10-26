@@ -86,6 +86,7 @@ export default function CharteDesAvis({ mode }) {
 
         <Section id="duree" title="Durée de publication">
           <p>Un avis reste en ligne {r.publicationYears} ans. Son autrice peut le retirer à tout moment depuis son espace « Mes commandes &amp; avis », ou en nous écrivant.</p>
+          <p>Un avis publié reste visible même après la suppression de votre compte, afin de garantir l'authenticité des avis.</p>
         </Section>
 
         <Section id="donnees" title="Vos données">

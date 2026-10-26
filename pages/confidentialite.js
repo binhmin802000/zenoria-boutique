@@ -86,6 +86,7 @@ export default function Confidentialite() {
         <Section id="avis" title="Avis clientes">
           <p>Si vous publiez un avis, nous traitons votre prénom suivi de l&apos;initiale de votre nom, votre note, votre commentaire, la date de l&apos;avis et le bijou concerné. L&apos;avis est rattaché à votre commande, pour garantir la mention « Achat vérifié ».</p>
           <p>Un avis reste en ligne pendant 3 ans, ou jusqu&apos;à ce que vous demandiez sa suppression à l&apos;adresse <a href="mailto:bagues.mandala@proton.me" className="underline text-[#8f6075]">bagues.mandala@proton.me</a>.</p>
+          <p>Les avis, contrôlés, acceptés et publiés restent visibles après la suppression de votre compte, afin de garantir l'authenticité et l'intégrité des avis clients (ils ne peuvent être modifiés après publication, pas même par nos soins). Vous pouvez toutefois retirer un avis à tout moment depuis votre espace client, tant qu'il reste dans la fenêtre de retrait prévue.</p>
         </Section>
 
         <Section id="connexions" title="Journal des connexions">

@@ -60,6 +60,7 @@ export default async function handler(req, res) {
     return res.status(200).send(pdfBuffer);
   } catch (err) {
     const msg = (err && err.message) || String(err);
+    console.error("[data-export] erreur :", msg, err && err.stack);
     if (/NOT_AUTHENTICATED/.test(msg)) return res.status(401).json({ ok: false, error: "connexion requise" });
     if (/NOT_ALLOWED/.test(msg)) return res.status(403).json({ ok: false, error: "ces données ne vous appartiennent pas" });
     return res.status(500).json({ ok: false, error: "impossible de générer l'export pour le moment" });

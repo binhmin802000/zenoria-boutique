@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import Head from "next/head";
-import { Plus, Pencil, Trash2, X, LogOut, Tag, Package, ArrowLeft, Upload, Film, Users, Sparkles, Gauge, Wrench, Activity, Settings, LogIn, Clock, Palette, ShoppingBag, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Pencil, Trash2, X, LogOut, Tag, Package, ArrowLeft, Upload, Film, Users, Sparkles, Gauge, Wrench, Activity, Settings, LogIn, Clock, Palette, ShoppingBag, ChevronDown, ChevronLeft, ChevronRight, ShieldCheck } from "lucide-react";
 import { supabase, getMediaUrl, uploadProductMedia, deleteProductMedia } from "@/lib/supabase";
 import AuthModal from "@/components/AuthModal";
 import AdminConnections from "@/components/AdminConnections";
@@ -20,6 +20,7 @@ import { promoCodeStatus, validatePromoDates, formatParis } from "@/lib/banners"
 import { CrmAccounts, CrmRoadmap, AdminOrders } from "@/components/AdminCrm";
 // ZENORIA_REVIEWS_STEP2_V1 : onglet « Avis »
 import AdminReviews from "@/components/AdminReviews";
+import AdminDataRequests from "@/components/AdminDataRequests";
 import { Star as ReviewsTabIcon } from "lucide-react";
 import { ADMIN_NAV, DEFAULT_NAV, parseAdminHash, buildAdminHash, isAuthCallbackHash, technicalAlertLevel } from "@/lib/adminNav";
 import { worstLevel } from "@/lib/quota";
@@ -155,6 +156,7 @@ const TAB_ICONS = {
   comptes: Users,
   commandes: ShoppingBag,
   avenir: Clock,
+  rgpd: ShieldCheck,
   connexions: LogIn,
   quotas: Gauge,
   maintenance: Wrench,
@@ -174,6 +176,7 @@ export default function AdminPage() {
   const lastSubByGroup = useRef({}); // chaque groupe se souvient de son dernier onglet
   const subBarRef = useRef(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [rgpdPendingCount, setRgpdPendingCount] = useState(0);
   const tab = nav.sub;
 
   const goTo = (group, sub) => {
@@ -886,6 +889,15 @@ export default function AdminPage() {
                                 aria-label={quotaLevel === "critical" ? "Quota critique" : "Quota à surveiller"}
                               />
                             )}
+                            {t.id === "rgpd" && rgpdPendingCount > 0 && (
+                              <span
+                                data-testid="rgpd-pending-badge"
+                                className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#8f6075] text-white text-[10px] font-medium flex items-center justify-center shrink-0"
+                                aria-label={`${rgpdPendingCount} demande(s) RGPD en attente`}
+                              >
+                                {rgpdPendingCount}
+                              </span>
+                            )}
                             {t.id === "maintenance" && maintenanceActive && (
                               <span
                                 data-testid="maintenance-dot"
@@ -1097,6 +1109,8 @@ export default function AdminPage() {
         {tab === "avis" && <AdminReviews />}
 
         {tab === "avenir" && <CrmRoadmap />}
+
+        {tab === "rgpd" && <AdminDataRequests onPendingCountChange={setRgpdPendingCount} />}
 
         {tab === "quotas" && <AdminQuotas status={quota} />}
 

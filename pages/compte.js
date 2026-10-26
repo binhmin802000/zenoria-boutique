@@ -1,5 +1,6 @@
 // ZENORIA_ACCOUNT_STEP11_V1 · ZENORIA_ACCOUNT_STEP12_V1 · ZENORIA_ACCOUNT_HERO_B_V1 · ZENORIA_ACCOUNT_STEP13_V1 · ZENORIA_ACCOUNT_STEP14_V1
 import React, { useCallback, useEffect, useState } from "react";
+import AccountDataSection from "@/components/AccountDataSection";
 import Head from "next/head";
 import { Home, Package, Star, Heart, UserCog, ShieldCheck, LogOut, Truck, ChevronLeft, FileDown } from "lucide-react"; // ZENORIA_INVOICE_STEP3_V1
 import { supabase as supabaseForInvoice } from "@/lib/supabase"; // ZENORIA_INVOICE_STEP3_V1
@@ -951,7 +952,11 @@ export default function Compte() {
                 </div>
               )}
 
-              {current && !["accueil", "commandes", "avis", "favoris"].includes(current.id) && (
+              {current && current.id === "donnees" && (
+                <AccountDataSection user={user} />
+              )}
+
+              {current && !["accueil", "commandes", "avis", "favoris", "donnees"].includes(current.id) && (
                 <>
                   <h2 className="font-serif text-2xl text-[#412f3b]">{current.label}</h2>
                   <p className="text-sm text-[#8b737e] mt-2">

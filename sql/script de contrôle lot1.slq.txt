@@ -1,0 +1,17 @@
+-- Verification 1 : colonnes et contrainte presentes
+select column_name, data_type
+from information_schema.columns
+where table_schema = 'public' and table_name = 'invoices'
+  and column_name in ('payment_method', 'paid_at');
+
+select conname, pg_get_constraintdef(oid) as definition
+from pg_constraint
+where conrelid = 'public.invoices'::regclass and conname = 'invoices_payment_method_valid';
+
+-- Verification 2 : search_path corrige sur les 5 fonctions
+select p.proname, p.proconfig
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.proname in ('create_transfer_order', 'admin_confirm_transfer', 'admin_extend_transfer', 'customer_cancel_transfer_order', 'issue_invoice_for_order')
+order by p.proname;

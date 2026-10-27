@@ -42,6 +42,7 @@ import {
 import { pickPublicBanner, bannerKey, readClosedKeys, writeClosedKeys, getSessionStorage } from "@/lib/publicBanner";
 import { SITE_SETTINGS_TABLE, SEASON_FX_KEY, parseSeasonFxSetting, pickFxSeason } from "@/lib/siteSettings";
 import { SHIPPING_KEY, DEFAULT_SHIPPING, parseShippingSetting, qualifiesForFreeShipping, shippingStripText } from "@/lib/shippingSettings";
+import { PAYMENT_METHODS_KEY, DEFAULT_PAYMENT_METHODS, parsePaymentMethods } from "@/lib/paymentSettings";
 import { SITE_TEXTS_KEY, DEFAULT_TEXTS, resolveSiteTexts } from "@/lib/siteTexts";
 // ZENORIA_STORY_REVIEWS_V1
 import { REVIEWS_KEY, DEFAULT_REVIEWS, parseReviewsSetting } from "@/lib/reviewsSettings";
@@ -236,6 +237,13 @@ export default function ZenoriaShop() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
   const [cgvAccepted, setCgvAccepted] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("card");
+  const [paymentMethodsCfg, setPaymentMethodsCfg] = useState(DEFAULT_PAYMENT_METHODS);
+  const [paymentMethodsLoaded, setPaymentMethodsLoaded] = useState(false);
+  useEffect(() => {
+    if (paymentMethodsCfg.stripe_enabled && !paymentMethodsCfg.transfer_enabled) setPaymentMethod("card");
+    else if (!paymentMethodsCfg.stripe_enabled && paymentMethodsCfg.transfer_enabled) setPaymentMethod("transfer");
+  }, [paymentMethodsCfg.stripe_enabled, paymentMethodsCfg.transfer_enabled]);
   const [paymentConfirmationOpen, setPaymentConfirmationOpen] = useState(false);
   const [viewportH, setViewportH] = useState(800);
   // Favoris : identifiants des bagues aimées. En mode invité, stockés dans le navigateur (lib/favorites.js) ;
@@ -310,7 +318,7 @@ export default function ZenoriaShop() {
         supabase.from("site_media").select("*"),
         optionalQuery(supabase.from("families").select("*").order("sort_order", { ascending: true })),
         optionalQuery(supabase.from("banners").select("*")),
-        optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").in("key", [SEASON_FX_KEY, SHIPPING_KEY, SITE_TEXTS_KEY, CONTACT_KEY, REVIEWS_KEY])),
+        optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").in("key", [SEASON_FX_KEY, SHIPPING_KEY, SITE_TEXTS_KEY, CONTACT_KEY, REVIEWS_KEY, PAYMENT_METHODS_KEY])),
       ]);
       if (!active) return;
       const loadedProducts = !prodErr && prodData ? prodData.map(mapDbProduct) : [];
@@ -333,6 +341,9 @@ export default function ZenoriaShop() {
       const settingRows = fxRes && Array.isArray(fxRes.data) ? fxRes.data : [];
       const fxRow = settingRows.find((r) => r.key === SEASON_FX_KEY) || null;
       const shipRow = settingRows.find((r) => r.key === SHIPPING_KEY) || null;
+      const paymentRow = settingRows.find((r) => r.key === PAYMENT_METHODS_KEY) || null;
+      setPaymentMethodsCfg(parsePaymentMethods(paymentRow ? paymentRow.value : null));
+      setPaymentMethodsLoaded(true);
       const textRow = settingRows.find((r) => r.key === SITE_TEXTS_KEY) || null;
       setFxSetting(parseSeasonFxSetting(fxRow ? fxRow.value : null));
       // Livraison offerte : si la ligne n'existe pas encore (script SQL non exécuté), le site garde la valeur par défaut
@@ -1380,7 +1391,63 @@ export default function ZenoriaShop() {
                         <span>{formatPrice(totals.total)}</span>
                       </div>
                     </div>
-                    {!user && (
+                    {paymentMethodsLoaded && paymentMethodsCfg.transfer_enabled && (
+                      <div data-testid="payment-method-choice" className="space-y-2">
+                        {paymentMethodsCfg.stripe_enabled ? (
+                          <>
+                            <div className="text-[13px] font-medium text-[#412f3b]">Moyen de paiement</div>
+                            <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => { setPaymentMethod("card"); setCheckoutError(""); }}
+                              data-testid="payment-method-card"
+                              className={`rounded-xl border px-3 py-2 text-sm text-left transition ${paymentMethod === "card" ? "border-[#8f6075] bg-[#f5edf1] text-[#412f3b]" : "border-[#d9c5cc] text-[#70656a] hover:bg-[#fbf7f9]"}`}
+                            >
+                              Carte bancaire
+                              <div className="text-[11px] text-[#8b737e] mt-0.5">Paiement immédiat et sécurisé</div>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setPaymentMethod("transfer"); setCheckoutError(""); }}
+                              data-testid="payment-method-transfer"
+                              className={`rounded-xl border px-3 py-2 text-sm text-left transition ${paymentMethod === "transfer" ? "border-[#8f6075] bg-[#f5edf1] text-[#412f3b]" : "border-[#d9c5cc] text-[#70656a] hover:bg-[#fbf7f9]"}`}
+                            >
+                              Virement bancaire
+                              <div className="text-[11px] text-[#8b737e] mt-0.5">Commande réservée, à régler après validation</div>
+                            </button>
+                            </div>
+                          </>
+                        ) : (
+                          <div data-testid="transfer-only-notice" className="rounded-xl bg-[#fbf7f9] border border-[#eee2e5] px-3 py-2.5">
+                            <div className="text-[13px] font-medium text-[#412f3b]">Paiement par virement bancaire</div>
+                            <p className="mt-1 text-[12px] leading-5 text-[#54434c]">Vous validez votre commande, puis vous recevez les coordonnées bancaires et votre référence. Votre commande est réservée dans l&apos;attente de votre virement.</p>
+                          </div>
+                        )}
+                        {paymentMethod === "transfer" && !user && (
+                          <div data-testid="transfer-auth-required" className="rounded-xl bg-[#fbf7f9] border border-[#eee2e5] px-3 py-2.5 text-[12px] text-[#54434c] leading-5">
+                            Un compte Zenoria est nécessaire pour le virement. Il vous permet de retrouver les coordonnées bancaires, votre référence et le suivi de votre commande.
+                            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                              <button type="button" onClick={() => { setAuthModalMode("login"); setAuthModalOpen(true); }} data-testid="transfer-auth-login" className="underline text-[#8f6075]">Me connecter</button>
+                              <span>·</span>
+                              <button type="button" onClick={() => { setAuthModalMode("signup"); setAuthModalOpen(true); }} data-testid="transfer-auth-signup" className="underline text-[#8f6075]">Créer mon compte</button>
+                              {paymentMethodsCfg.stripe_enabled && (
+                                <>
+                                  <span>·</span>
+                                  <button type="button" onClick={() => setPaymentMethod("card")} data-testid="transfer-auth-back-card" className="underline text-[#8f6075]">Choisir la carte</button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {paymentMethodsLoaded && !paymentMethodsCfg.stripe_enabled && !paymentMethodsCfg.transfer_enabled && (
+                      <div data-testid="no-payment-method-available" className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5 text-[12px] text-amber-900 leading-5">
+                        Aucun moyen de paiement n&apos;est disponible actuellement. Merci de réessayer plus tard ou de nous contacter.
+                      </div>
+                    )}
+
+                    {paymentMethodsLoaded && paymentMethodsCfg.stripe_enabled && paymentMethod === "card" && !user && (
                       <p data-testid="account-choice-line" className="text-[12px] text-[#70656a] leading-5">
                         Déjà cliente ?{" "}
                         <button
@@ -1444,7 +1511,7 @@ export default function ZenoriaShop() {
                         {checkoutError}
                       </p>
                     ) : (
-                      <p className="text-[11px] text-center text-[#7e7378]">Paiement sécurisé via Stripe.</p>
+                      paymentMethod === "card" && paymentMethodsCfg.stripe_enabled ? <p className="text-[11px] text-center text-[#7e7378]">Paiement sécurisé via Stripe.</p> : null
                     )}
                   </div>
                 </>

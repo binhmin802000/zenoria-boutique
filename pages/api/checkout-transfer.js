@@ -63,10 +63,12 @@ export default async function handler(req, res) {
     let authResult;
     try {
       authResult = await supabaseAdmin.auth.getUser(match[1]);
-    } catch {
+    } catch (authCatchErr) {
+      console.error("[checkout-transfer] erreur auth.getUser :", authCatchErr && authCatchErr.message, authCatchErr && authCatchErr.stack);
       return res.status(503).json({ ok: false, error: "Vérification de connexion indisponible. Réessayez." });
     }
     if (authResult.error) {
+      console.error("[checkout-transfer] authResult.error :", authResult.error.message, "status:", authResult.error.status);
       const status = Number(authResult.error.status);
       const unavailable = !status || status >= 500 || status === 429;
       return res.status(unavailable ? 503 : 401).json({

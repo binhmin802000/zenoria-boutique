@@ -245,6 +245,9 @@ export default function ZenoriaShop() {
     else if (!paymentMethodsCfg.stripe_enabled && paymentMethodsCfg.transfer_enabled) setPaymentMethod("transfer");
   }, [paymentMethodsCfg.stripe_enabled, paymentMethodsCfg.transfer_enabled]);
   const [paymentConfirmationOpen, setPaymentConfirmationOpen] = useState(false);
+  const [transferShipping, setTransferShipping] = useState({ fullName: "", line1: "", line2: "", postalCode: "", city: "", phone: "" });
+  const [transferResult, setTransferResult] = useState(null); // { orderId, total, dueAt } apres une commande par virement
+  const [cartStep, setCartStep] = useState("cart"); // "cart" | "shipping" (virement : ecran Livraison dedie)
   const [viewportH, setViewportH] = useState(800);
   // Favoris : identifiants des bagues aimées. En mode invité, stockés dans le navigateur (lib/favorites.js) ;
   // une fois connectée, stockés dans Supabase (table customer_favorites), avec fusion additive à la connexion.
@@ -505,6 +508,10 @@ export default function ZenoriaShop() {
     [cartItems, products]
   );
   const cartCount = cartLines.reduce((s, l) => s + l.qty, 0);
+  const transferStep = paymentMethod === "transfer" && Boolean(user) && cartStep === "shipping";
+  useEffect(() => {
+    if (!cartOpen || paymentMethod !== "transfer" || !user || cartLines.length === 0) setCartStep("cart");
+  }, [cartOpen, paymentMethod, user, cartLines.length]);
   const promo = promoCode ? promoCodes[promoCode] : null;
   const totals = useMemo(() => computeTotals(cartLines, promo, shippingCfg), [cartLines, promo, shippingCfg]);
   const progress = Math.min(100, Math.round(((totals.subtotal - totals.discount) / shippingCfg.threshold) * 100));
@@ -574,11 +581,57 @@ export default function ZenoriaShop() {
     setPromoCode("");
     setPromoOpen(false);
   };
+  // Virement : la commande est creee cote serveur (/api/checkout-transfer), qui relit les prix en base.
+  const submitTransferOrder = async () => {
+    if (!user) {
+      setCheckoutError("Un compte est nécessaire pour payer par virement. Connectez-vous ou créez votre compte.");
+      return;
+    }
+    const name = transferShipping.fullName.trim();
+    const line1 = transferShipping.line1.trim();
+    const postalCode = transferShipping.postalCode.trim();
+    const city = transferShipping.city.trim();
+    if (!name || !line1 || !city || !/^[0-9]{5}$/.test(postalCode)) {
+      setCheckoutError("Merci de compléter votre adresse de livraison (code postal à 5 chiffres).");
+      return;
+    }
+    setCheckoutLoading(true);
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const token = sessionData && sessionData.session ? sessionData.session.access_token : null;
+      if (sessionError || !token) throw new Error("Session indisponible");
+      const res = await fetch("/api/checkout-transfer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          items: cartItems.map((it) => ({ id: it.id, qty: it.qty })),
+          promoCode: promoCode || null,
+          shipping: { fullName: name, line1, line2: transferShipping.line2.trim() || null, postalCode, city, phone: transferShipping.phone.trim() || null },
+        }),
+      });
+      const data = await res.json();
+      if (data && data.ok) {
+        clearCart();
+        setCartOpen(false);
+        setCgvAccepted(false);
+        setTransferResult({ orderId: data.orderId, total: data.total, dueAt: data.dueAt });
+      } else {
+        setCheckoutError((data && data.error) || "Impossible d'enregistrer la commande. Merci de réessayer.");
+      }
+    } catch (e) {
+      setCheckoutError("Impossible de contacter le service. Vérifiez votre connexion et réessayez.");
+    }
+    setCheckoutLoading(false);
+  };
   const handleCheckout = async () => {
     setCheckoutNotice(false);
     setCheckoutError("");
     if (!cgvAccepted) {
       setCheckoutError("Merci d'accepter les conditions générales de vente avant de valider votre commande.");
+      return;
+    }
+    if (paymentMethod === "transfer") {
+      await submitTransferOrder();
       return;
     }
     setCheckoutLoading(true);
@@ -1209,7 +1262,7 @@ export default function ZenoriaShop() {
             >
               <div className="flex-none flex justify-between items-center px-5 py-4 border-b border-[#eadfe4]">
                 <div className="min-w-0">
-                  <h3 className="font-serif text-2xl leading-none">Votre panier</h3>
+                  <h3 className="font-serif text-2xl leading-none">{transferStep ? "Livraison" : "Votre panier"}</h3>
                   {cartCount > 0 && (
                     <div className="text-xs text-[#8b737e] mt-1.5">
                       {cartCount} article{cartCount > 1 ? "s" : ""}
@@ -1243,6 +1296,62 @@ export default function ZenoriaShop() {
                     )}
                   </div>
                 </div>
+              ) : transferStep ? (
+                <>
+                  <div data-testid="transfer-shipping-step" className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4">
+                    <button type="button" onClick={() => { setCartStep("cart"); setCheckoutError(""); }} data-testid="transfer-back-to-cart" className="text-sm text-[#8f6075] underline">← Retour au panier</button>
+                    <div data-testid="transfer-recap" className="rounded-xl bg-white border border-[#eee2e5] px-4 py-3 text-sm text-[#54434c] space-y-1">
+                      <div className="flex justify-between"><span>{cartCount} article{cartCount > 1 ? "s" : ""}</span><span>{formatPrice(totals.subtotal)}</span></div>
+                      {totals.discount > 0 && (<div className="flex justify-between text-emerald-700"><span>Remise</span><span>-{formatPrice(totals.discount)}</span></div>)}
+                      <div className="flex justify-between"><span>Livraison (France)</span><span>{totals.shipping === 0 ? "Offerte" : formatPrice(totals.shipping)}</span></div>
+                      <div className="flex justify-between font-serif text-lg text-[#342b32] border-t border-[#eadfe4] pt-2 mt-2"><span>Total à virer</span><span>{formatPrice(totals.total)}</span></div>
+                    </div>
+                    <div data-testid="transfer-shipping-form" className="space-y-2">
+                      <div className="text-[13px] font-medium text-[#412f3b]">Livraison (France)</div>
+                      <input value={transferShipping.fullName} onChange={(e) => setTransferShipping((s) => ({ ...s, fullName: e.target.value }))} placeholder="Nom et prénom" autoComplete="name" data-testid="transfer-ship-name" className="w-full rounded-xl border border-[#d9c5cc] bg-white px-3 h-9 text-sm outline-none focus:border-[#8f6075]" />
+                      <input value={transferShipping.line1} onChange={(e) => setTransferShipping((s) => ({ ...s, line1: e.target.value }))} placeholder="Adresse" autoComplete="address-line1" data-testid="transfer-ship-line1" className="w-full rounded-xl border border-[#d9c5cc] bg-white px-3 h-9 text-sm outline-none focus:border-[#8f6075]" />
+                      <input value={transferShipping.line2} onChange={(e) => setTransferShipping((s) => ({ ...s, line2: e.target.value }))} placeholder="Complément d'adresse (facultatif)" autoComplete="address-line2" data-testid="transfer-ship-line2" className="w-full rounded-xl border border-[#d9c5cc] bg-white px-3 h-9 text-sm outline-none focus:border-[#8f6075]" />
+                      <div className="grid grid-cols-3 gap-2">
+                        <input value={transferShipping.postalCode} onChange={(e) => setTransferShipping((s) => ({ ...s, postalCode: e.target.value }))} placeholder="Code postal" inputMode="numeric" maxLength={5} autoComplete="postal-code" data-testid="transfer-ship-postal" className="w-full rounded-xl border border-[#d9c5cc] bg-white px-3 h-9 text-sm outline-none focus:border-[#8f6075]" />
+                        <input value={transferShipping.city} onChange={(e) => setTransferShipping((s) => ({ ...s, city: e.target.value }))} placeholder="Ville" autoComplete="address-level2" data-testid="transfer-ship-city" className="col-span-2 w-full rounded-xl border border-[#d9c5cc] bg-white px-3 h-9 text-sm outline-none focus:border-[#8f6075]" />
+                      </div>
+                      <input value={transferShipping.phone} onChange={(e) => setTransferShipping((s) => ({ ...s, phone: e.target.value }))} placeholder="Téléphone (facultatif)" inputMode="tel" autoComplete="tel" data-testid="transfer-ship-phone" className="w-full rounded-xl border border-[#d9c5cc] bg-white px-3 h-9 text-sm outline-none focus:border-[#8f6075]" />
+                      <p className="text-[11px] text-[#8b737e]">Livraison en France uniquement. L&apos;adresse e-mail de votre compte est utilisée pour cette commande.</p>
+                    </div>
+                  </div>
+                  <div className="flex-none border-t border-[#eadfe4] bg-white/80 px-5 py-4 space-y-3">
+                    <label className="flex items-start gap-2 text-[12px] text-[#54434c] leading-5">
+                      <input
+                        type="checkbox"
+                        checked={cgvAccepted}
+                        onChange={(e) => { setCgvAccepted(e.target.checked); setCheckoutError(""); }}
+                        data-testid="cgv-checkbox"
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-[#8f6075]"
+                      />
+                      <span>
+                        J&apos;ai lu et j&apos;accepte les{" "}
+                        <a href="/cgv" target="_blank" rel="noopener noreferrer" className="underline text-[#8f6075]">
+                          conditions générales de vente
+                        </a>{" "}
+                        et les{" "}
+                        <a href="/mentions-legales" target="_blank" rel="noopener noreferrer" className="underline text-[#8f6075]">
+                          mentions légales
+                        </a>
+                      </span>
+                    </label>
+                    <button
+                      onClick={handleCheckout}
+                      disabled={shopPaused || checkoutLoading || !cgvAccepted}
+                      data-testid="transfer-submit-button"
+                      className="w-full h-12 rounded-full bg-[#82576c] hover:bg-[#6d4659] text-white text-sm font-medium transition disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#82576c]"
+                    >
+                      {shopPaused ? "Commandes temporairement fermées" : checkoutLoading ? "Enregistrement de la commande..." : "Valider la commande avec obligation de paiement"}
+                    </button>
+                    {checkoutError && (
+                      <p role="alert" className="text-[11px] text-center rounded-lg bg-red-50 text-red-600 px-3 py-1.5">{checkoutError}</p>
+                    )}
+                  </div>
+                </>
               ) : (
                 <>
                   <div className="flex-none px-5 pt-3 pb-2">
@@ -1470,6 +1579,7 @@ export default function ZenoriaShop() {
                         {" "}(facultatif, vous pouvez continuer sans)
                       </p>
                     )}
+                    {paymentMethod !== "transfer" && (
                     <label className="flex items-start gap-2 text-[12px] text-[#54434c] leading-5">
                       <input
                         type="checkbox"
@@ -1489,13 +1599,14 @@ export default function ZenoriaShop() {
                         </a>
                       </span>
                     </label>
+                    )}
                     <button
-                      onClick={handleCheckout}
-                      disabled={shopPaused || checkoutLoading || !cgvAccepted}
+                      onClick={paymentMethod === "transfer" ? () => { if (user) { setCheckoutError(""); setCartStep("shipping"); } else { setAuthModalMode("login"); setAuthModalOpen(true); } } : handleCheckout}
+                      disabled={shopPaused || checkoutLoading || (paymentMethod !== "transfer" && !cgvAccepted) || !paymentMethodsLoaded || (!paymentMethodsCfg.stripe_enabled && !paymentMethodsCfg.transfer_enabled)}
                       data-testid="checkout-button"
                       className={`w-full rounded-full bg-[#82576c] hover:bg-[#6d4659] text-white text-sm font-medium transition disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#82576c] ${tightFooter ? "h-11" : "h-12"}`}
                     >
-                      {shopPaused ? "Commandes temporairement fermées" : checkoutLoading ? "Redirection vers le paiement..." : "Commander"}
+                      {shopPaused ? "Commandes temporairement fermées" : checkoutLoading ? (paymentMethod === "transfer" ? "Enregistrement de la commande..." : "Redirection vers le paiement...") : paymentMethod === "transfer" ? "Continuer vers la livraison" : "Commander"}
                     </button>
                     {quizReturn && (
                       <a href={quizReturn} data-testid="cart-back-quiz" className="flex w-full items-center justify-center rounded-full border border-[#8f6075] text-[#8f6075] hover:bg-[#8f6075] hover:text-white text-sm font-medium transition h-11">
@@ -1626,6 +1737,18 @@ export default function ZenoriaShop() {
       />
       {/* AUTHENTIFICATION */}
       <AuthModal open={authModalOpen} onClose={() => { setAuthModalOpen(false); setAuthModalMode("login"); }} initialMode={authModalMode} />
+      {/* CONFIRMATION DE COMMANDE PAR VIREMENT (provisoire : IBAN et reference a l'etape 3e) */}
+      {transferResult && (
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/40 px-4" role="dialog" aria-modal="true" data-testid="transfer-confirmation">
+          <div className="w-full max-w-md rounded-2xl bg-[#fbf8f4] p-6 shadow-2xl">
+            <h3 className="font-serif text-2xl text-[#412f3b]">Commande enregistrée</h3>
+            <p className="mt-3 text-sm text-[#54434c]">Commande n°{transferResult.orderId} · {formatPrice(Number(transferResult.total))}</p>
+            <p className="mt-1 text-sm text-[#54434c]">À régler par virement avant le {new Date(transferResult.dueAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Paris" })}.</p>
+            <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-[12px] text-amber-900">Étape en cours de construction : les coordonnées bancaires et la référence seront affichées ici. Retrouvez cette commande dans Mon compte.</p>
+            <button type="button" onClick={() => setTransferResult(null)} data-testid="transfer-confirmation-close" className="mt-5 w-full rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white h-11 text-sm">Fermer</button>
+          </div>
+        </div>
+      )}
       {/* CONFIRMATION DE PAIEMENT (retour de Stripe Checkout) */}
       <PaymentConfirmationModal open={paymentConfirmationOpen} onClose={() => setPaymentConfirmationOpen(false)} />
     </div>

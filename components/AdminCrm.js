@@ -3,6 +3,7 @@ import AdminBilling from "@/components/AdminBilling"; // ZENORIA_BILLING_STEP2_V
 import AdminPaymentMethods from "@/components/AdminPaymentMethods"; // ZENORIA_PAYMENT_STEP2_V1
 import { RefreshCw, FileDown } from "lucide-react"; // ZENORIA_INVOICE_STEP3B_V1
 import { supabase, getMediaUrl } from "@/lib/supabase";
+import { parseBankTransfer, BANK_TRANSFER_KEY } from "@/lib/paymentSettings"; // ZENORIA_ADMIN_TRANSFER_V1
 
 // ZENORIA_INVOICE_STEP3B_V1 : télécharge la facture PDF d'une commande depuis l'admin (même route que l'espace cliente ;
 // issue_invoice_for_order autorise un compte administrateur à générer la facture de n'importe quelle commande).
@@ -234,6 +235,203 @@ function orderStatusBadge(status) {
   );
 }
 
+// ZENORIA_ADMIN_TRANSFER_V1 : actions de l'administration sur une commande payee par virement.
+// Les trois actions appellent des fonctions SQL atomiques qui verifient elles-memes le droit
+// administrateur (is_admin) et le statut : confirmer l'encaissement, prolonger l'echeance, annuler.
+const TRANSFER_LATE_DAYS = 5; // l'etat passe en rouge ("En retard") a partir de 5 jours apres l'echeance
+const TRANSFER_CANCEL_REASONS = [
+  { value: "not_received", label: "Virement non reçu dans les délais" },
+  { value: "customer_request", label: "Demande de la cliente" },
+  { value: "other", label: "Autre (à préciser)" },
+];
+function parisDay(value) {
+  return new Date(value).toLocaleDateString("sv-SE", { timeZone: TIME_ZONE }); // AAAA-MM-JJ
+}
+function transferErrorMessage(err, kind) {
+  const msg = String((err && err.message) || err || "");
+  if (/FORBIDDEN/.test(msg)) return "Action réservée aux administratrices.";
+  if (/ORDER_NOT_FOUND/.test(msg)) return "Commande introuvable.";
+  if (/ORDER_STATE/.test(msg)) return "Cette commande n'est plus en attente de virement. Actualisez la liste.";
+  if (/INVALID_DATE/.test(msg)) return "La date de réception doit être comprise entre la date de la commande et aujourd'hui.";
+  if (/INVALID_AMOUNT/.test(msg)) return "Montant reçu invalide.";
+  if (/INVALID_NOTE/.test(msg)) return "La note est trop longue (500 caractères maximum).";
+  if (/INVALID_DAYS/.test(msg)) return "Indiquez un nombre de jours entre 1 et 60.";
+  if (/INVALID_REASON/.test(msg)) return "Choisissez un motif.";
+  if (/NOTE_REQUIRED/.test(msg)) return kind === "cancel" ? "Pour le motif « Autre », une note est obligatoire." : "Le montant reçu diffère du total : une note est obligatoire.";
+  if (/PIECE_CONFLICT/.test(msg)) return "Une pièce unique de cette commande est déjà vendue ou réservée par une autre commande : l'encaissement ne peut pas être confirmé. Remboursez le virement ou contactez la cliente.";
+  return "Action impossible pour le moment. Réessayez dans un instant.";
+}
+function transferDueState(order, now) {
+  if (!order.transfer_due_at) return null;
+  const diff = now - new Date(order.transfer_due_at).getTime();
+  if (diff < 0) {
+    const days = Math.ceil(-diff / 86400000);
+    return { level: "ok", label: "En attente", detail: "échéance dans " + days + " jour" + (days > 1 ? "s" : "") };
+  }
+  const late = Math.floor(diff / 86400000);
+  const detail = late === 0 ? "échéance dépassée depuis moins d'un jour" : "échéance dépassée de " + late + " jour" + (late > 1 ? "s" : "");
+  if (late >= TRANSFER_LATE_DAYS) return { level: "late", label: "En retard", detail };
+  return { level: "over", label: "Échéance dépassée", detail };
+}
+function TransferPanel({ order, onDone }) {
+  const [mode, setMode] = useState(null); // null | "confirm" | "extend" | "cancel"
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [amount, setAmount] = useState("");
+  const [received, setReceived] = useState("");
+  const [note, setNote] = useState("");
+  const [days, setDays] = useState("3");
+  const [reason, setReason] = useState("not_received");
+
+  useEffect(() => {
+    if (mode !== "extend") return undefined;
+    let alive = true;
+    supabase.from("site_settings").select("value").eq("key", BANK_TRANSFER_KEY).maybeSingle().then((res) => {
+      if (alive && res && !res.error && res.data) setDays(String(parseBankTransfer(res.data.value).delay_days));
+    });
+    return () => { alive = false; };
+  }, [mode]);
+
+  if (order.payment_method !== "transfer") return null;
+  if (order.status === "cancelled" && order.cancelled_at) {
+    return (
+      <div data-testid="transfer-cancelled-note" className="mb-4 rounded-xl bg-white border border-[#eee2e5] px-4 py-3 text-[13px] text-[#54434c]">
+        <span className="font-medium text-[#412f3b]">Commande annulée</span> le {formatDateTime(order.cancelled_at)}{" "}
+        {order.cancelled_by === "customer" ? "par la cliente" : order.cancelled_by === "admin" ? "par l'administration" : ""}.
+        <span className="block text-[11px] text-[#8b737e] mt-0.5">Le motif figure dans l&apos;historique de la commande.</span>
+      </div>
+    );
+  }
+  if (order.status !== "pending_transfer") return null;
+
+  const state = transferDueState(order, Date.now());
+  const badgeClass = state && state.level === "late" ? "bg-red-50 text-red-700" : state && state.level === "over" ? "bg-amber-50 text-amber-700" : "bg-[#f5edf1] text-[#8f6075]";
+
+  const open = (m) => {
+    setError("");
+    setNote("");
+    if (m === "confirm") {
+      setAmount(String(order.total).replace(".", ","));
+      setReceived(parisDay(new Date()));
+    }
+    if (m === "cancel") setReason("not_received");
+    setMode(m);
+  };
+
+  const run = async (kind) => {
+    setError("");
+    let call;
+    let okMessage;
+    if (kind === "confirm") {
+      const amountNum = Number(String(amount).replace(/\s+/g, "").replace(",", "."));
+      if (!Number.isFinite(amountNum) || amountNum <= 0) { setError("Saisissez le montant reçu."); return; }
+      if (!received) { setError("Indiquez la date de réception du virement."); return; }
+      if (Math.abs(amountNum - Number(order.total)) >= 0.01 && !note.trim()) { setError(transferErrorMessage("NOTE_REQUIRED", "confirm")); return; }
+      call = () => supabase.rpc("admin_confirm_transfer", { p_order_id: order.id, p_amount: amountNum, p_received_on: received, p_note: note.trim() || null });
+      okMessage = "Encaissement confirmé : la commande est payée et la facture est créée.";
+    } else if (kind === "extend") {
+      const n = Number(days);
+      if (!Number.isInteger(n) || n < 1 || n > 60) { setError(transferErrorMessage("INVALID_DAYS", "extend")); return; }
+      call = () => supabase.rpc("admin_extend_transfer", { p_order_id: order.id, p_days: n });
+      okMessage = "Échéance prolongée de " + n + " jour" + (n > 1 ? "s" : "") + ".";
+    } else {
+      if (reason === "other" && !note.trim()) { setError(transferErrorMessage("NOTE_REQUIRED", "cancel")); return; }
+      call = () => supabase.rpc("admin_cancel_transfer_order", { p_order_id: order.id, p_reason: reason, p_note: note.trim() || null });
+      okMessage = "Commande annulée : les pièces sont de nouveau en vente.";
+    }
+    setBusy(true);
+    try {
+      const res = await call();
+      if (res && res.error) throw res.error;
+      setBusy(false);
+      setMode(null);
+      onDone(okMessage);
+    } catch (e) {
+      setBusy(false);
+      setError(transferErrorMessage(e, kind));
+    }
+  };
+
+  const gap = mode === "confirm" && Math.abs(Number(String(amount).replace(/\s+/g, "").replace(",", ".")) - Number(order.total)) >= 0.01;
+  const field = "rounded-full border border-[#eadfe4] bg-white px-3 h-9 text-[13px] outline-none focus:border-[#8f6075]";
+  const primary = "rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white text-xs font-medium px-4 h-9 transition disabled:opacity-50 disabled:cursor-not-allowed";
+  const secondary = "rounded-full border border-[#8f6075] text-[#8f6075] hover:bg-[#f5edf1] text-xs font-medium px-4 h-9 transition disabled:opacity-50 disabled:cursor-not-allowed";
+
+  return (
+    <div data-testid="transfer-panel" className="mb-4 rounded-xl bg-white border border-[#eee2e5] px-4 py-3.5">
+      <div className="flex flex-wrap items-center gap-2 mb-2">
+        <div className="text-xs font-medium text-[#8b737e]">Paiement par virement</div>
+        {state && <span data-testid="transfer-state" data-level={state.level} className={"rounded-full px-2.5 py-0.5 text-[11px] " + badgeClass}>{state.label}</span>}
+      </div>
+      <p className="text-[13px] text-[#54434c] leading-5 mb-3">
+        Référence à indiquer : <strong>{formatOrderReference(order)}</strong> · Montant attendu : <strong>{formatOrderPrice(order.total)}</strong>
+        {order.transfer_due_at && (
+          <>
+            <br />Échéance : {formatDateTime(order.transfer_due_at)}{state ? " (" + state.detail + ")" : ""}
+          </>
+        )}
+      </p>
+      {mode === null && (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => open("confirm")} data-testid="transfer-confirm-open" className={primary}>Confirmer l&apos;encaissement</button>
+          <button type="button" onClick={() => open("extend")} data-testid="transfer-extend-open" className={secondary}>Prolonger</button>
+          <button type="button" onClick={() => open("cancel")} data-testid="transfer-cancel-open" className="rounded-full border border-red-300 text-red-700 hover:bg-red-50 text-xs font-medium px-4 h-9 transition">Annuler la commande</button>
+        </div>
+      )}
+      {mode === "confirm" && (
+        <div data-testid="transfer-confirm-form" className="rounded-xl bg-[#faf6f8] border border-[#eee2e5] px-3 py-3 space-y-2.5">
+          <div className="text-[13px] font-medium text-[#412f3b]">Confirmer l&apos;encaissement</div>
+          <div className="flex flex-wrap gap-2">
+            <label className="text-[12px] text-[#54434c]">Montant reçu (€)<br /><input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" data-testid="transfer-amount" className={field + " w-32"} /></label>
+            <label className="text-[12px] text-[#54434c]">Date de réception<br /><input type="date" value={received} min={parisDay(order.created_at)} max={parisDay(new Date())} onChange={(e) => setReceived(e.target.value)} data-testid="transfer-received" className={field} /></label>
+          </div>
+          <label className="block text-[12px] text-[#54434c]">{gap ? "Note (obligatoire : le montant diffère du total)" : "Note (facultative)"}<br /><input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} data-testid="transfer-note" className={field + " w-full"} /></label>
+          <p className="text-[11px] text-[#8b737e]">La commande passe en « Payée », la pièce est vendue et la facture est créée. Cette action ne peut pas être annulée.</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={busy} onClick={() => run("confirm")} data-testid="transfer-confirm-submit" className={primary}>{busy ? "Enregistrement…" : "Confirmer"}</button>
+            <button type="button" disabled={busy} onClick={() => setMode(null)} className={secondary}>Retour</button>
+          </div>
+        </div>
+      )}
+      {mode === "extend" && (
+        <div data-testid="transfer-extend-form" className="rounded-xl bg-[#faf6f8] border border-[#eee2e5] px-3 py-3 space-y-2.5">
+          <div className="text-[13px] font-medium text-[#412f3b]">Prolonger l&apos;échéance</div>
+          <label className="text-[12px] text-[#54434c]">Nombre de jours (1 à 60)<br /><input type="number" min={1} max={60} value={days} onChange={(e) => setDays(e.target.value)} data-testid="transfer-days" className={field + " w-28"} /></label>
+          <p className="text-[11px] text-[#8b737e]">Le délai repart de l&apos;échéance actuelle, ou d&apos;aujourd&apos;hui si elle est dépassée.</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={busy} onClick={() => run("extend")} data-testid="transfer-extend-submit" className={primary}>{busy ? "Enregistrement…" : "Prolonger"}</button>
+            <button type="button" disabled={busy} onClick={() => setMode(null)} className={secondary}>Retour</button>
+          </div>
+        </div>
+      )}
+      {error && mode !== "cancel" && <div role="alert" data-testid="transfer-error" className="mt-2 rounded-xl bg-red-50 text-red-600 px-3 py-2 text-xs">{error}</div>}
+      {mode === "cancel" && (
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/40 px-4" role="dialog" aria-modal="true" aria-labelledby="transfer-cancel-title" data-testid="transfer-cancel-dialog">
+          <div className="w-full max-w-md rounded-2xl bg-[#fbf8f4] p-6 shadow-2xl">
+            <h3 id="transfer-cancel-title" className="font-serif text-xl text-[#412f3b]">Annuler cette commande ?</h3>
+            <p className="mt-1 text-[13px] text-[#54434c]">{formatOrderReference(order)} · {formatOrderPrice(order.total)}</p>
+            <div className="mt-4 space-y-2">
+              {TRANSFER_CANCEL_REASONS.map((r) => (
+                <label key={r.value} className="flex items-center gap-2 text-[13px] text-[#54434c]">
+                  <input type="radio" name={"transfer-cancel-reason-" + order.id} value={r.value} checked={reason === r.value} onChange={() => setReason(r.value)} data-testid={"transfer-reason-" + r.value} className="h-4 w-4 accent-[#8f6075]" />
+                  {r.label}
+                </label>
+              ))}
+            </div>
+            <label className="mt-3 block text-[12px] text-[#54434c]">{reason === "other" ? "Note (obligatoire)" : "Note (facultative)"}<br /><textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} rows={3} data-testid="transfer-cancel-note" className="mt-1 w-full rounded-xl border border-[#eadfe4] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#8f6075]" /></label>
+            <p className="mt-3 rounded-lg bg-amber-50 text-amber-800 text-[12px] px-3 py-2">Les pièces sont remises en vente tout de suite. Si le virement est arrivé, confirmez l&apos;encaissement au lieu d&apos;annuler. Cette action ne peut pas être annulée.</p>
+            {error && <div role="alert" className="mt-3 rounded-xl bg-red-50 text-red-600 px-3 py-2 text-xs">{error}</div>}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button type="button" disabled={busy} onClick={() => run("cancel")} data-testid="transfer-cancel-submit" className="rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-medium px-4 h-10 transition disabled:opacity-50">{busy ? "Annulation…" : "Annuler la commande"}</button>
+              <button type="button" disabled={busy} onClick={() => setMode(null)} data-testid="transfer-cancel-back" className="rounded-full border border-[#d9c5cc] text-[#54434c] hover:bg-[#f5edf1] text-xs font-medium px-4 h-10 transition">Retour</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Petite vignette d'un article de commande : reprend la meme logique que
 // CartThumb (pages/index.js) -- photo si disponible, degrade couleur/pierre
 // sinon, cadre neutre si le produit a ete supprime depuis (product_id est
@@ -271,6 +469,12 @@ export function AdminOrders() {
   const [invoiceBusyId, setInvoiceBusyId] = useState(null); // ZENORIA_INVOICE_STEP3B_V1
   const [invoiceErrorId, setInvoiceErrorId] = useState(null); // ZENORIA_INVOICE_STEP3B_V1
   const [invoiceErrorMsg, setInvoiceErrorMsg] = useState(""); // ZENORIA_INVOICE_STEP3B_V1
+  const [adminNotice, setAdminNotice] = useState(""); // ZENORIA_ADMIN_TRANSFER_V1 : message de succes apres une action
+  useEffect(() => {
+    if (!adminNotice) return undefined;
+    const t = setTimeout(() => setAdminNotice(""), 8000);
+    return () => clearTimeout(t);
+  }, [adminNotice]);
   const CARRIERS = ["Colissimo", "Mondial Relay", "Chronopost", "DPD", "Colis Privé"];
 
   const updateOrderStatus = async (orderId, action, extra) => {
@@ -427,6 +631,9 @@ export function AdminOrders() {
         </button>
       </div>
 
+      {adminNotice && (
+        <div role="status" data-testid="admin-notice" className="mb-5 rounded-xl bg-emerald-50 text-emerald-700 px-4 py-3 text-sm">{adminNotice}</div>
+      )}
       {error && (
         <div className="mb-5 rounded-xl bg-red-50 text-red-600 px-4 py-3 text-sm" role="alert">
           {error}
@@ -577,9 +784,13 @@ export function AdminOrders() {
                         })()}
                       </div>
 
+                      <TransferPanel order={o} onDone={(msg) => { setAdminNotice(msg); load(); }} />
                       {/* ShippingPanel : transporteur, numéro de suivi, actions d'expédition */}
                       <div className="mb-4 rounded-xl bg-white border border-[#eee2e5] px-4 py-3.5">
                         <div className="text-xs font-medium text-[#8b737e] mb-2.5">Expédition</div>
+                        {!["paid", "shipped", "delivered"].includes(o.status) && (
+                          <p data-testid="shipping-locked" className="text-[12px] text-[#8b737e] mb-2">L&apos;expédition sera possible une fois la commande payée.</p>
+                        )}
                         {o.tracking_number ? (
                           <p className="text-[13px] text-[#54434c] leading-5 mb-2">
                             {o.carrier} · Suivi : <strong>{o.tracking_number}</strong>
@@ -610,7 +821,7 @@ export function AdminOrders() {
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
-                            disabled={shippingBusyId === o.id || Boolean(o.tracking_number)}
+                            disabled={shippingBusyId === o.id || Boolean(o.tracking_number) || !["paid", "shipped"].includes(o.status)}
                             onClick={() => {
                               const draft = shippingDraft[o.id] || {};
                               updateOrderStatus(o.id, "ship", {
@@ -625,7 +836,7 @@ export function AdminOrders() {
                           </button>
                           <button
                             type="button"
-                            disabled={shippingBusyId === o.id || o.status === "delivered"}
+                            disabled={shippingBusyId === o.id || !["paid", "shipped"].includes(o.status)}
                             onClick={() => updateOrderStatus(o.id, "deliver")}
                             data-testid="mark-delivered"
                             className="rounded-full border border-[#8f6075] text-[#8f6075] hover:bg-[#8f6075] hover:text-white text-xs font-medium px-4 h-9 transition disabled:opacity-50 disabled:cursor-not-allowed"
@@ -700,7 +911,7 @@ export function AdminOrders() {
       </div>
 
       <p className="text-[11px] leading-4 text-[#8b737e]">
-        Les commandes sont créées automatiquement par le webhook de paiement Stripe : aucune écriture manuelle n&apos;est possible depuis cet écran.
+        Les commandes par carte sont créées automatiquement par le webhook de paiement Stripe. Pour un virement, l&apos;encaissement, la prolongation et l&apos;annulation se font depuis le détail de la commande.
       </p>
     </>
   );

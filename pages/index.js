@@ -237,19 +237,21 @@ export default function ZenoriaShop() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
   const [cgvAccepted, setCgvAccepted] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState("card");
+  const [paymentMethod, setPaymentMethod] = useState(null);
   const [paymentMethodsCfg, setPaymentMethodsCfg] = useState(DEFAULT_PAYMENT_METHODS);
   const [paymentMethodsLoaded, setPaymentMethodsLoaded] = useState(false);
   useEffect(() => {
+    if (!paymentMethodsLoaded) return; // quand les deux modes sont proposes, la cliente choisit elle-meme
     if (paymentMethodsCfg.stripe_enabled && !paymentMethodsCfg.transfer_enabled) setPaymentMethod("card");
     else if (!paymentMethodsCfg.stripe_enabled && paymentMethodsCfg.transfer_enabled) setPaymentMethod("transfer");
-  }, [paymentMethodsCfg.stripe_enabled, paymentMethodsCfg.transfer_enabled]);
+  }, [paymentMethodsLoaded, paymentMethodsCfg.stripe_enabled, paymentMethodsCfg.transfer_enabled]);
   const [paymentConfirmationOpen, setPaymentConfirmationOpen] = useState(false);
   const [transferShipping, setTransferShipping] = useState({ fullName: "", line1: "", line2: "", postalCode: "", city: "", phone: "" });
   const [transferResult, setTransferResult] = useState(null); // { orderId, total, dueAt } apres une commande par virement
   const [cartStep, setCartStep] = useState("cart"); // "cart" | "shipping" (virement : ecran Livraison dedie)
   const [logoutAsk, setLogoutAsk] = useState(false); // fenetre "garder le panier ?" a la deconnexion
   const [logoutNotice, setLogoutNotice] = useState(""); // message affiche apres la deconnexion
+  const [transferDelayDays, setTransferDelayDays] = useState(null); // duree de reservation (jours), lue en base
   const [viewportH, setViewportH] = useState(800);
   // Favoris : identifiants des bagues aimées. En mode invité, stockés dans le navigateur (lib/favorites.js) ;
   // une fois connectée, stockés dans Supabase (table customer_favorites), avec fusion additive à la connexion.
@@ -499,7 +501,7 @@ export default function ZenoriaShop() {
     setPromoInput("");
     setPromoError("");
     setPromoOpen(false);
-    setPaymentMethod(paymentMethodsCfg.stripe_enabled ? "card" : "transfer");
+    setPaymentMethod((paymentMethodsCfg.stripe_enabled && paymentMethodsCfg.transfer_enabled) ? null : (paymentMethodsCfg.stripe_enabled ? "card" : "transfer"));
   };
   const finishLogout = async (mode) => {
     setLogoutAsk(false);
@@ -541,6 +543,8 @@ export default function ZenoriaShop() {
   );
   const cartCount = cartLines.reduce((s, l) => s + l.qty, 0);
   const transferStep = paymentMethod === "transfer" && Boolean(user) && cartStep === "shipping";
+  const recapStep = paymentMethod === "transfer" && Boolean(user) && cartStep === "recap";
+  const showShipHeader = !transferStep && !recapStep && cartLines.length > 0 && shippingCfg.enabled; // livraison offerte dans l'en-tete
   useEffect(() => {
     if (!cartOpen || paymentMethod !== "transfer" || !user || cartLines.length === 0) setCartStep("cart");
   }, [cartOpen, paymentMethod, user, cartLines.length]);
@@ -552,6 +556,15 @@ export default function ZenoriaShop() {
     const t = setTimeout(() => setLogoutNotice(""), 5000);
     return () => clearTimeout(t);
   }, [logoutNotice]);
+  useEffect(() => {
+    if (!recapStep || transferDelayDays !== null) return undefined;
+    let alive = true;
+    fetch("/api/transfer-terms")
+      .then((r) => r.json())
+      .then((d) => { if (alive && d && d.ok && Number.isInteger(d.delayDays)) setTransferDelayDays(d.delayDays); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [recapStep, transferDelayDays]);
   const promo = promoCode ? promoCodes[promoCode] : null;
   const totals = useMemo(() => computeTotals(cartLines, promo, shippingCfg), [cartLines, promo, shippingCfg]);
   const progress = Math.min(100, Math.round(((totals.subtotal - totals.discount) / shippingCfg.threshold) * 100));
@@ -620,6 +633,16 @@ export default function ZenoriaShop() {
     setCartItems([]);
     setPromoCode("");
     setPromoOpen(false);
+  };
+  // Ecran Livraison -> Recapitulatif : l'adresse doit etre complete avant de continuer.
+  const goToTransferRecap = () => {
+    const okAddress = transferShipping.fullName.trim() && transferShipping.line1.trim() && transferShipping.city.trim() && /^[0-9]{5}$/.test(transferShipping.postalCode.trim());
+    if (!okAddress) {
+      setCheckoutError("Merci de compléter votre adresse de livraison (code postal à 5 chiffres).");
+      return;
+    }
+    setCheckoutError("");
+    setCartStep("recap");
   };
   // Virement : la commande est creee cote serveur (/api/checkout-transfer), qui relit les prix en base.
   const submitTransferOrder = async () => {
@@ -1300,9 +1323,9 @@ export default function ZenoriaShop() {
               style={{ height: "100dvh" }}
               className="fixed right-0 top-0 h-full w-full max-w-md bg-[#fbf8f4] z-50 shadow-2xl flex flex-col"
             >
-              <div className="flex-none flex justify-between items-center px-5 py-4 border-b border-[#eadfe4]">
+              <div className="relative flex-none flex justify-between items-center gap-3 px-5 py-4 border-b border-[#eadfe4]">
                 <div className="min-w-0">
-                  <h3 className="font-serif text-2xl leading-none">{transferStep ? "Livraison" : "Votre panier"}</h3>
+                  <h3 className="font-serif text-2xl leading-none">{transferStep ? "Livraison" : recapStep ? "Récapitulatif" : "Votre panier"}</h3>
                   {cartCount > 0 && (
                     <div className="text-xs text-[#8b737e] mt-1.5">
                       {cartCount} article{cartCount > 1 ? "s" : ""}
@@ -1310,10 +1333,37 @@ export default function ZenoriaShop() {
                       <button onClick={clearCart} className="underline">Vider le panier</button>
                     </div>
                   )}
+                  {showShipHeader && (
+                    <div data-testid="ship-progress-line" className="mt-2 flex items-center gap-1.5 text-xs text-[#54434c] min-[430px]:hidden">
+                      <Truck size={14} className="text-[#8f6075] shrink-0" />
+                      {totals.freeShipping ? (
+                        <span className="font-semibold">Livraison offerte 🎉</span>
+                      ) : (
+                        <span>Plus que <strong>{formatPrice(totals.remaining)}</strong> pour la livraison offerte</span>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <button onClick={() => setCartOpen(false)} className="h-10 w-10 rounded-full grid place-items-center hover:bg-[#f0e6ea]" aria-label="Fermer le panier">
-                  <X />
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  {showShipHeader && (
+                    <div data-testid="ship-progress-right" className="hidden min-[430px]:flex items-center gap-1.5 text-[11px] leading-tight text-right text-[#54434c]">
+                      <Truck size={14} className="text-[#8f6075] shrink-0" />
+                      {totals.freeShipping ? (
+                        <strong className="text-[12px] text-[#412f3b]">Livraison offerte 🎉</strong>
+                      ) : (
+                        <div><strong className="block text-[12px] text-[#412f3b]">Plus que {formatPrice(totals.remaining)}</strong>pour la livraison offerte</div>
+                      )}
+                    </div>
+                  )}
+                  <button onClick={() => setCartOpen(false)} className="h-10 w-10 rounded-full grid place-items-center hover:bg-[#f0e6ea]" aria-label="Fermer le panier">
+                    <X />
+                  </button>
+                </div>
+                {showShipHeader && (
+                  <div className="absolute left-0 right-0 -bottom-px h-[3px] bg-[#f0e6ea]" aria-hidden="true">
+                    <div className="h-full bg-[#8f6075] transition-all" style={{ width: `${totals.freeShipping ? 100 : progress}%` }} />
+                  </div>
+                )}
               </div>
               {cartLines.length === 0 ? (
                 <div className="flex-1 grid place-items-center p-8 text-center">
@@ -1336,16 +1386,64 @@ export default function ZenoriaShop() {
                     )}
                   </div>
                 </div>
+              ) : recapStep ? (
+                <>
+                  <div data-testid="transfer-recap-step" className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-3">
+                    <button type="button" onClick={() => { setCartStep("shipping"); setCheckoutError(""); }} data-testid="transfer-recap-back" className="text-sm font-bold text-[#8f6075] underline">← Retour à la livraison</button>
+                    <div className="rounded-xl bg-white border border-[#eee2e5] px-3 py-2">
+                      {cartLines.map(({ product: p, qty }) => (
+                        <div key={p.id} className="flex items-center gap-2 py-1.5 text-sm">
+                          <CartThumb product={p} size="h-9 w-9" />
+                          <div className="flex-1 min-w-0 truncate">{p.name}<span className="text-[#8b737e]"> × {qty}</span></div>
+                          <div className="font-medium">{formatPrice(effectivePrice(p) * qty)}</div>
+                        </div>
+                      ))}
+                      <div className="border-t border-[#f0e6ea] mt-1 pt-2 text-[13px] text-[#54434c] space-y-0.5">
+                        <div className="flex justify-between"><span>Sous-total</span><span>{formatPrice(totals.subtotal)}</span></div>
+                        {totals.discount > 0 && (
+                          <div className="flex justify-between text-emerald-700"><span>{"Remise" + (promoCode ? " (" + promoCode + ")" : "")}</span><span>-{formatPrice(totals.discount)}</span></div>
+                        )}
+                        <div className="flex justify-between"><span>Livraison (France)</span><span>{totals.shipping === 0 ? "Offerte" : formatPrice(totals.shipping)}</span></div>
+                        <div className="text-[11px] text-[#8b737e]">TVA non applicable, art. 293 B du CGI</div>
+                      </div>
+                    </div>
+                    <div data-testid="transfer-recap-address" className="rounded-xl bg-white border border-[#eee2e5] px-3 py-2 text-[13px] text-[#54434c] flex items-start gap-2">
+                      <div className="flex-1 min-w-0"><span className="font-medium text-[#412f3b]">Livraison</span> · {transferShipping.fullName.trim()}, {transferShipping.line1.trim()}{transferShipping.line2.trim() ? " (" + transferShipping.line2.trim() + ")" : ""}, {transferShipping.postalCode.trim()} {transferShipping.city.trim()}</div>
+                      <button type="button" onClick={() => { setCartStep("shipping"); setCheckoutError(""); }} className="shrink-0 underline text-[#8f6075]">Modifier</button>
+                    </div>
+                    <div data-testid="transfer-recap-payment" className="rounded-xl bg-[#fbf7f9] border border-[#eee2e5] px-3 py-3 text-[12px] leading-5 text-[#54434c]">
+                      <div className="text-[13px] font-medium text-[#412f3b]">Paiement par virement bancaire</div>
+                      <p className="mt-1">Une fois la commande validée, nous vous donnons l&apos;IBAN, le BIC et la référence à indiquer dans votre virement.</p>
+                      <p className="mt-1.5">Nous réservons vos pièces pour vous pendant <strong>{transferDelayDays ? transferDelayDays + " jour" + (transferDelayDays > 1 ? "s" : "") : "le délai indiqué à la confirmation"}</strong> après validation. Passé ce délai sans virement reçu, la commande est annulée automatiquement et les pièces sont remises en vente. La date et l&apos;heure exactes vous sont données à la confirmation.</p>
+                    </div>
+                  </div>
+                  <div className="flex-none border-t border-[#eadfe4] bg-white/80 px-5 py-4 space-y-3">
+                    <label className="flex items-start gap-2 text-[12px] text-[#54434c] leading-5">
+                      <input type="checkbox" checked={cgvAccepted} onChange={(e) => { setCgvAccepted(e.target.checked); setCheckoutError(""); }} data-testid="cgv-checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-[#8f6075]" />
+                      <span>J&apos;ai lu et j&apos;accepte les{" "}<a href="/cgv" target="_blank" rel="noopener noreferrer" className="underline text-[#8f6075]">conditions générales de vente</a>{" "}et les{" "}<a href="/mentions-legales" target="_blank" rel="noopener noreferrer" className="underline text-[#8f6075]">mentions légales</a></span>
+                    </label>
+                    <div className="flex justify-between font-bold text-base text-[#342b32]"><span>Total TTC</span><span>{formatPrice(totals.total)}</span></div>
+                    <button onClick={handleCheckout} disabled={shopPaused || checkoutLoading || !cgvAccepted} data-testid="transfer-submit-button" className="w-full h-14 rounded-full bg-[#82576c] hover:bg-[#6d4659] text-white transition disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#82576c]">
+                      {shopPaused ? (
+                        <span className="text-sm font-medium">Commandes temporairement fermées</span>
+                      ) : checkoutLoading ? (
+                        <span className="text-sm font-medium">Enregistrement de la commande...</span>
+                      ) : (
+                        <>
+                          <span className="block text-sm font-medium">Je commande et je règle par virement</span>
+                          <span className="block text-[11px] font-normal opacity-90">commande avec obligation de paiement</span>
+                        </>
+                      )}
+                    </button>
+                    {checkoutError && (
+                      <p role="alert" className="text-[11px] text-center rounded-lg bg-red-50 text-red-600 px-3 py-1.5">{checkoutError}</p>
+                    )}
+                  </div>
+                </>
               ) : transferStep ? (
                 <>
                   <div data-testid="transfer-shipping-step" className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4">
-                    <button type="button" onClick={() => { setCartStep("cart"); setCheckoutError(""); }} data-testid="transfer-back-to-cart" className="text-sm text-[#8f6075] underline">← Retour au panier</button>
-                    <div data-testid="transfer-recap" className="rounded-xl bg-white border border-[#eee2e5] px-4 py-3 text-sm text-[#54434c] space-y-1">
-                      <div className="flex justify-between"><span>{cartCount} article{cartCount > 1 ? "s" : ""}</span><span>{formatPrice(totals.subtotal)}</span></div>
-                      {totals.discount > 0 && (<div className="flex justify-between text-emerald-700"><span>Remise</span><span>-{formatPrice(totals.discount)}</span></div>)}
-                      <div className="flex justify-between"><span>Livraison (France)</span><span>{totals.shipping === 0 ? "Offerte" : formatPrice(totals.shipping)}</span></div>
-                      <div className="flex justify-between font-bold text-base text-[#342b32] border-t border-[#eadfe4] pt-2 mt-2"><span>Total à virer</span><span>{formatPrice(totals.total)}</span></div>
-                    </div>
+                    <button type="button" onClick={() => { setCartStep("cart"); setCheckoutError(""); }} data-testid="transfer-back-to-cart" className="text-sm font-bold text-[#8f6075] underline">← Retour au mode de paiement</button>
                     <div data-testid="transfer-shipping-form" className="space-y-2">
                       <div className="text-[13px] font-medium text-[#412f3b]">Livraison (France)</div>
                       <input value={transferShipping.fullName} onChange={(e) => setTransferShipping((s) => ({ ...s, fullName: e.target.value }))} placeholder="Nom et prénom" autoComplete="name" data-testid="transfer-ship-name" className="w-full rounded-xl border border-[#d9c5cc] bg-white px-3 h-9 text-sm outline-none focus:border-[#8f6075]" />
@@ -1360,33 +1458,7 @@ export default function ZenoriaShop() {
                     </div>
                   </div>
                   <div className="flex-none border-t border-[#eadfe4] bg-white/80 px-5 py-4 space-y-3">
-                    <label className="flex items-start gap-2 text-[12px] text-[#54434c] leading-5">
-                      <input
-                        type="checkbox"
-                        checked={cgvAccepted}
-                        onChange={(e) => { setCgvAccepted(e.target.checked); setCheckoutError(""); }}
-                        data-testid="cgv-checkbox"
-                        className="mt-0.5 h-4 w-4 shrink-0 accent-[#8f6075]"
-                      />
-                      <span>
-                        J&apos;ai lu et j&apos;accepte les{" "}
-                        <a href="/cgv" target="_blank" rel="noopener noreferrer" className="underline text-[#8f6075]">
-                          conditions générales de vente
-                        </a>{" "}
-                        et les{" "}
-                        <a href="/mentions-legales" target="_blank" rel="noopener noreferrer" className="underline text-[#8f6075]">
-                          mentions légales
-                        </a>
-                      </span>
-                    </label>
-                    <button
-                      onClick={handleCheckout}
-                      disabled={shopPaused || checkoutLoading || !cgvAccepted}
-                      data-testid="transfer-submit-button"
-                      className="w-full h-12 rounded-full bg-[#82576c] hover:bg-[#6d4659] text-white text-sm font-medium transition disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#82576c]"
-                    >
-                      {shopPaused ? "Commandes temporairement fermées" : checkoutLoading ? "Enregistrement de la commande..." : "Valider la commande avec obligation de paiement"}
-                    </button>
+                    <button type="button" onClick={goToTransferRecap} disabled={shopPaused} data-testid="transfer-continue-button" className="w-full h-12 rounded-full bg-[#82576c] hover:bg-[#6d4659] text-white text-sm font-medium transition disabled:opacity-60 disabled:cursor-not-allowed">Continuer vers le récapitulatif</button>
                     {checkoutError && (
                       <p role="alert" className="text-[11px] text-center rounded-lg bg-red-50 text-red-600 px-3 py-1.5">{checkoutError}</p>
                     )}
@@ -1394,29 +1466,11 @@ export default function ZenoriaShop() {
                 </>
               ) : (
                 <>
-                  <div className="flex-none px-5 pt-3 pb-2">
-                    {shippingCfg.enabled && (
-                      <>
-                    <div className="flex items-center gap-2 text-xs text-[#54434c]">
-                      <Truck size={14} className="text-[#8f6075] shrink-0" />
-                      {totals.freeShipping ? (
-                        <span>Livraison offerte 🎉</span>
-                      ) : (
-                        <span>Plus que <strong>{formatPrice(totals.remaining)}</strong> pour la livraison offerte</span>
-                      )}
+                  {cartNotice && (
+                    <div className="flex-none px-5 pt-3">
+                      <div className="text-xs rounded-lg bg-amber-50 text-amber-700 px-3 py-2">{cartNotice}</div>
                     </div>
-                    <div className="h-1.5 rounded-full bg-[#f0e6ea] mt-2 overflow-hidden">
-                      <div className="h-full rounded-full bg-[#8f6075] transition-all" style={{ width: `${totals.freeShipping ? 100 : progress}%` }} />
-                    </div>
-                    <div className="text-[11px] text-[#8b737e] mt-1.5">
-                      Livraison offerte dès {shippingCfg.threshold} € en France
-                    </div>
-                      </>
-                    )}
-                    {cartNotice && (
-                      <div className="text-xs rounded-lg bg-amber-50 text-amber-700 px-3 py-2 mt-2">{cartNotice}</div>
-                    )}
-                  </div>
+                  )}
                   <div className={`flex-1 min-h-0 overflow-y-auto px-5 py-2 ${cartDensity === "dense" ? "space-y-2" : "space-y-3"}`}>
                     {cartLines.map(({ product: p, qty }) => {
                       const avail = getAvailability(p, qty);
@@ -1478,8 +1532,6 @@ export default function ZenoriaShop() {
                         </div>
                       );
                     })}
-                  </div>
-                  <div className={`flex-none border-t border-[#eadfe4] bg-white/80 px-5 ${tightFooter ? "py-3 space-y-2" : "py-4 space-y-3"}`}>
                     {promo ? (
                       <div className="flex items-center justify-between rounded-xl bg-emerald-50 text-emerald-700 px-3 py-2 text-sm">
                         <span className="flex items-center gap-2 min-w-0">
@@ -1539,57 +1591,50 @@ export default function ZenoriaShop() {
                         <span>Livraison (France)</span>
                         <span>{totals.shipping === 0 ? "Offerte" : formatPrice(totals.shipping)}</span>
                       </div>
-                      <div className={`flex justify-between font-bold text-[#342b32] border-t border-[#eadfe4] ${tightFooter ? "text-base pt-1.5" : "text-base pt-2"}`}>
-                        <span>Total TTC</span>
-                        <span>{formatPrice(totals.total)}</span>
-                      </div>
+                    </div>
+                    {shippingCfg.enabled && !totals.freeShipping && (
+                      <div className="text-[11px] text-[#8b737e]">Livraison offerte dès {shippingCfg.threshold} € en France</div>
+                    )}
+                  </div>
+                  <div className={`flex-none border-t border-[#eadfe4] bg-white/80 px-5 ${tightFooter ? "py-3 space-y-2" : "py-4 space-y-3"}`}>
+                    <div data-testid="cart-total" className="flex justify-between font-bold text-base text-[#342b32]">
+                      <span>Total TTC</span>
+                      <span>{formatPrice(totals.total)}</span>
                     </div>
                     {paymentMethodsLoaded && paymentMethodsCfg.transfer_enabled && (
                       <div data-testid="payment-method-choice" className="space-y-2">
-                        {paymentMethodsCfg.stripe_enabled ? (
+                        {paymentMethodsCfg.stripe_enabled && (
                           <>
-                            <div className="text-[13px] font-medium text-[#412f3b]">Moyen de paiement</div>
+                            <div className="sr-only">Moyen de paiement</div>
                             <div className="grid grid-cols-2 gap-2">
-                            <button
-                              type="button"
-                              onClick={() => { setPaymentMethod("card"); setCheckoutError(""); }}
-                              data-testid="payment-method-card"
-                              className={`rounded-xl border px-3 py-2 text-sm text-left transition ${paymentMethod === "card" ? "border-[#8f6075] bg-[#f5edf1] text-[#412f3b]" : "border-[#d9c5cc] text-[#70656a] hover:bg-[#fbf7f9]"}`}
-                            >
-                              Carte bancaire
-                              <div className="text-[11px] text-[#8b737e] mt-0.5">Paiement immédiat et sécurisé</div>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => { setPaymentMethod("transfer"); setCheckoutError(""); }}
-                              data-testid="payment-method-transfer"
-                              className={`rounded-xl border px-3 py-2 text-sm text-left transition ${paymentMethod === "transfer" ? "border-[#8f6075] bg-[#f5edf1] text-[#412f3b]" : "border-[#d9c5cc] text-[#70656a] hover:bg-[#fbf7f9]"}`}
-                            >
-                              Virement bancaire
-                              <div className="text-[11px] text-[#8b737e] mt-0.5">Commande réservée, à régler après validation</div>
-                            </button>
+                              <button
+                                type="button"
+                                onClick={() => { setPaymentMethod("card"); setCheckoutError(""); }}
+                                data-testid="payment-method-card"
+                                className={`rounded-xl border px-3 py-2 text-sm text-left transition ${paymentMethod === "card" ? "border-[#8f6075] bg-[#f5edf1] text-[#412f3b]" : "border-[#d9c5cc] text-[#70656a] hover:bg-[#fbf7f9]"}`}
+                              >
+                                Carte bancaire
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setPaymentMethod("transfer"); setCheckoutError(""); }}
+                                data-testid="payment-method-transfer"
+                                className={`rounded-xl border px-3 py-2 text-sm text-left transition ${paymentMethod === "transfer" ? "border-[#8f6075] bg-[#f5edf1] text-[#412f3b]" : "border-[#d9c5cc] text-[#70656a] hover:bg-[#fbf7f9]"}`}
+                              >
+                                Virement bancaire
+                              </button>
                             </div>
                           </>
-                        ) : (
-                          <div data-testid="transfer-only-notice" className="rounded-xl bg-[#fbf7f9] border border-[#eee2e5] px-3 py-2.5">
-                            <div className="text-[13px] font-medium text-[#412f3b]">Paiement par virement bancaire</div>
-                            <p className="mt-1 text-[12px] leading-5 text-[#54434c]">Vous validez votre commande, puis vous recevez les coordonnées bancaires et votre référence. Votre commande est réservée dans l&apos;attente de votre virement.</p>
-                          </div>
                         )}
-                        {paymentMethod === "transfer" && !user && (
-                          <div data-testid="transfer-auth-required" className="rounded-xl bg-[#fbf7f9] border border-[#eee2e5] px-3 py-2.5 text-[12px] text-[#54434c] leading-5">
-                            Un compte Zenoria est nécessaire pour le virement. Il vous permet de retrouver les coordonnées bancaires, votre référence et le suivi de votre commande.
-                            <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                              <button type="button" onClick={() => { setAuthModalMode("login"); setAuthModalOpen(true); }} data-testid="transfer-auth-login" className="underline text-[#8f6075]">Me connecter</button>
-                              <span>·</span>
-                              <button type="button" onClick={() => { setAuthModalMode("signup"); setAuthModalOpen(true); }} data-testid="transfer-auth-signup" className="underline text-[#8f6075]">Créer mon compte</button>
-                              {paymentMethodsCfg.stripe_enabled && (
-                                <>
-                                  <span>·</span>
-                                  <button type="button" onClick={() => setPaymentMethod("card")} data-testid="transfer-auth-back-card" className="underline text-[#8f6075]">Choisir la carte</button>
-                                </>
-                              )}
-                            </div>
+                        {(paymentMethod === "transfer" || !paymentMethodsCfg.stripe_enabled) && (
+                          <div data-testid="transfer-info" className="rounded-xl bg-[#fbf7f9] border border-[#eee2e5] px-3 py-3 text-[12px] text-[#54434c] leading-5 space-y-1.5">
+                            {!paymentMethodsCfg.stripe_enabled && (
+                              <div data-testid="transfer-only-notice" className="text-[13px] font-medium text-[#412f3b]">Paiement par virement bancaire</div>
+                            )}
+                            {!user && (
+                              <p data-testid="transfer-auth-required">Un compte Zenoria est nécessaire. Il se crée en quelques secondes, sans quitter votre panier, et vous donne accès à vos commandes, vos factures et au suivi de votre livraison.</p>
+                            )}
+                            <p>Après la validation de votre commande, vous recevez les coordonnées bancaires pour effectuer le virement.</p>
                           </div>
                         )}
                       </div>
@@ -1623,7 +1668,7 @@ export default function ZenoriaShop() {
                         {" "}(facultatif, vous pouvez continuer sans)
                       </p>
                     )}
-                    {paymentMethod !== "transfer" && (
+                    {paymentMethod === "card" && (
                     <label className="flex items-start gap-2 text-[12px] text-[#54434c] leading-5">
                       <input
                         type="checkbox"
@@ -1644,14 +1689,24 @@ export default function ZenoriaShop() {
                       </span>
                     </label>
                     )}
-                    <button
-                      onClick={paymentMethod === "transfer" ? () => { if (user) { setCheckoutError(""); setCartStep("shipping"); } else { setAuthModalMode("login"); setAuthModalOpen(true); } } : handleCheckout}
-                      disabled={shopPaused || checkoutLoading || (paymentMethod !== "transfer" && !cgvAccepted) || !paymentMethodsLoaded || (!paymentMethodsCfg.stripe_enabled && !paymentMethodsCfg.transfer_enabled)}
-                      data-testid="checkout-button"
-                      className={`w-full rounded-full bg-[#82576c] hover:bg-[#6d4659] text-white text-sm font-medium transition disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#82576c] ${tightFooter ? "h-11" : "h-12"}`}
-                    >
-                      {shopPaused ? "Commandes temporairement fermées" : checkoutLoading ? (paymentMethod === "transfer" ? "Enregistrement de la commande..." : "Redirection vers le paiement...") : paymentMethod === "transfer" ? "Continuer vers la livraison" : "Commander"}
-                    </button>
+                    {paymentMethod === "transfer" && !user ? (
+                      <>
+                        <button type="button" onClick={() => { setAuthModalMode("signup"); setAuthModalOpen(true); }} data-testid="transfer-auth-signup" className={`w-full rounded-full bg-[#82576c] hover:bg-[#6d4659] text-white text-sm font-medium transition ${tightFooter ? "h-11" : "h-12"}`}>Créer mon compte</button>
+                        <div className="text-[12px] text-center text-[#54434c]">
+                          J&apos;ai déjà un compte · {" "}
+                          <button type="button" onClick={() => { setAuthModalMode("login"); setAuthModalOpen(true); }} data-testid="transfer-auth-login" className="underline text-[#8f6075]">Me connecter</button>
+                        </div>
+                      </>
+                    ) : (
+                      <button
+                        onClick={paymentMethod === "transfer" ? () => { if (user) { setCheckoutError(""); setCartStep("shipping"); } else { setAuthModalMode("login"); setAuthModalOpen(true); } } : handleCheckout}
+                        disabled={shopPaused || checkoutLoading || !paymentMethod || (paymentMethod === "card" && !cgvAccepted) || !paymentMethodsLoaded || (!paymentMethodsCfg.stripe_enabled && !paymentMethodsCfg.transfer_enabled)}
+                        data-testid="checkout-button"
+                        className={`w-full rounded-full bg-[#82576c] hover:bg-[#6d4659] text-white text-sm font-medium transition disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#82576c] ${tightFooter ? "h-11" : "h-12"}`}
+                      >
+                        {shopPaused ? "Commandes temporairement fermées" : checkoutLoading ? (paymentMethod === "transfer" ? "Enregistrement de la commande..." : "Redirection vers le paiement...") : paymentMethod === "transfer" ? "Continuer vers la livraison" : !paymentMethod ? "Choisissez un mode de paiement" : "Commander"}
+                      </button>
+                    )}
                     {quizReturn && (
                       <a href={quizReturn} data-testid="cart-back-quiz" className="flex w-full items-center justify-center rounded-full border border-[#8f6075] text-[#8f6075] hover:bg-[#8f6075] hover:text-white text-sm font-medium transition h-11">
                         Retour au quiz

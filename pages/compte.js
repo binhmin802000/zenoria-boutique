@@ -301,6 +301,14 @@ export default function Compte() {
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [contactCfg, setContactCfg] = useState(DEFAULT_CONTACT);
   const [questionOpenId, setQuestionOpenId] = useState(null);
+  const [logoutAsk, setLogoutAsk] = useState(false); // fenetre "garder le panier ?" a la deconnexion
+  const [logoutCartCount, setLogoutCartCount] = useState(0);
+  useEffect(() => {
+    if (!logoutAsk) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") setLogoutAsk(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [logoutAsk]);
 
   // --- Mes avis (étape 1.4) ---
   const [reviewItems, setReviewItems] = useState([]);
@@ -578,9 +586,38 @@ export default function Compte() {
     // ZENORIA_ACCOUNT_FIX1_V1 : plus de retour forcé en haut de page (le menu reste visible, sticky)
   };
 
-  const logout = async () => {
+  // Le panier est enregistre dans le navigateur (meme cle que pages/index.js).
+  const CART_KEY = "zenoria_cart_v2";
+  const readCartCount = () => {
+    try {
+      const raw = window.localStorage.getItem(CART_KEY);
+      const saved = raw ? JSON.parse(raw) : null;
+      return saved && Array.isArray(saved.items) ? saved.items.reduce((n, it) => n + (Number(it && it.qty) || 0), 0) : 0;
+    } catch (e) {
+      return 0;
+    }
+  };
+  const finishLogout = async (mode) => {
+    setLogoutAsk(false);
+    try {
+      const raw = window.localStorage.getItem(CART_KEY);
+      const saved = raw ? JSON.parse(raw) : null;
+      const items = mode === "clear" ? [] : saved && Array.isArray(saved.items) ? saved.items : [];
+      window.localStorage.setItem(CART_KEY, JSON.stringify({ items, promo: "" })); // le code promo ne suit jamais
+    } catch (e) {
+      // stockage illisible : on se deconnecte quand meme
+    }
     await supabase.auth.signOut();
     window.location.replace("/");
+  };
+  const logout = async () => {
+    const n = readCartCount();
+    if (n > 0) {
+      setLogoutCartCount(n);
+      setLogoutAsk(true);
+      return;
+    }
+    await finishLogout("empty");
   };
 
 
@@ -975,6 +1012,17 @@ export default function Compte() {
                 </>
               )}
 
+              {logoutAsk && (
+                <div className="fixed inset-0 z-[70] grid place-items-center bg-black/40 px-4" role="dialog" aria-modal="true" aria-labelledby="logout-cart-title" data-testid="logout-cart-dialog">
+                  <div className="w-full max-w-sm rounded-2xl bg-[#fbf8f4] p-6 shadow-2xl">
+                    <h3 id="logout-cart-title" className="font-serif text-xl text-[#412f3b]">Voulez-vous garder votre panier ?</h3>
+                    <p className="mt-2 text-sm text-[#54434c]">Vous avez {logoutCartCount} article{logoutCartCount > 1 ? "s" : ""} dans votre panier.</p>
+                    <button type="button" onClick={() => finishLogout("keep")} data-testid="logout-keep" className="mt-5 w-full rounded-full bg-[#82576c] hover:bg-[#6d4659] text-white h-11 text-sm font-medium transition">Oui, garder mes articles</button>
+                    <button type="button" onClick={() => finishLogout("clear")} data-testid="logout-clear" className="mt-2 w-full rounded-full border border-[#82576c] text-[#82576c] hover:bg-[#f5edf1] h-11 text-sm font-medium transition">Non, vider le panier</button>
+                    <button type="button" onClick={() => setLogoutAsk(false)} data-testid="logout-cancel" className="mt-3 block mx-auto text-sm text-[#8f6075] underline">Rester connectée</button>
+                  </div>
+                </div>
+              )}
               <button type="button" onClick={logout} className="lg:hidden mt-8 inline-flex items-center gap-2 text-sm text-[#8b737e] underline">
                 <LogOut size={15} /> Se déconnecter
               </button>

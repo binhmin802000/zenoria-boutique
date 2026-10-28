@@ -248,6 +248,8 @@ export default function ZenoriaShop() {
   const [transferShipping, setTransferShipping] = useState({ fullName: "", line1: "", line2: "", postalCode: "", city: "", phone: "" });
   const [transferResult, setTransferResult] = useState(null); // { orderId, total, dueAt } apres une commande par virement
   const [cartStep, setCartStep] = useState("cart"); // "cart" | "shipping" (virement : ecran Livraison dedie)
+  const [logoutAsk, setLogoutAsk] = useState(false); // fenetre "garder le panier ?" a la deconnexion
+  const [logoutNotice, setLogoutNotice] = useState(""); // message affiche apres la deconnexion
   const [viewportH, setViewportH] = useState(800);
   // Favoris : identifiants des bagues aimées. En mode invité, stockés dans le navigateur (lib/favorites.js) ;
   // une fois connectée, stockés dans Supabase (table customer_favorites), avec fusion additive à la connexion.
@@ -470,6 +472,7 @@ export default function ZenoriaShop() {
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") {
+        setLogoutAsk(false);
         setCartOpen(false);
         setSelected(null);
       }
@@ -484,9 +487,38 @@ export default function ZenoriaShop() {
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, []);
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
+  // Deconnexion : avec des articles dans le panier, une fenetre demande s ils sont gardes.
+  // Une session expiree ne passe pas par ici : rien n est efface dans ce cas.
+  const resetCartPersonalState = () => {
+    setTransferShipping({ fullName: "", line1: "", line2: "", postalCode: "", city: "", phone: "" });
+    setCgvAccepted(false);
+    setCheckoutError("");
+    setCartStep("cart");
+    setCartNotice("");
+    setPromoCode("");
+    setPromoInput("");
+    setPromoError("");
+    setPromoOpen(false);
+    setPaymentMethod(paymentMethodsCfg.stripe_enabled ? "card" : "transfer");
+  };
+  const finishLogout = async (mode) => {
+    setLogoutAsk(false);
     setAccountMenuOpen(false);
+    setMenu(false);
+    resetCartPersonalState();
+    if (mode === "clear") setCartItems([]);
+    await supabase.auth.signOut();
+    if (mode === "keep") setLogoutNotice("Vous êtes déconnectée. Votre panier est conservé sur cet appareil.");
+    else if (mode === "clear") setLogoutNotice("Vous êtes déconnectée. Votre panier a été vidé.");
+    else setLogoutNotice("Vous êtes déconnectée.");
+  };
+  const handleLogout = async () => {
+    setAccountMenuOpen(false);
+    if (cartItems.length > 0) {
+      setLogoutAsk(true);
+      return;
+    }
+    await finishLogout("empty");
   };
   // Active/désactive un favori : écrit dans Supabase si connectée, sinon dans le navigateur (mode invité).
   const toggleFavorite = (productId) => {
@@ -512,6 +544,14 @@ export default function ZenoriaShop() {
   useEffect(() => {
     if (!cartOpen || paymentMethod !== "transfer" || !user || cartLines.length === 0) setCartStep("cart");
   }, [cartOpen, paymentMethod, user, cartLines.length]);
+  useEffect(() => {
+    if (!cartOpen) setCheckoutError(""); // un message d erreur ne survit pas a la fermeture du panier
+  }, [cartOpen]);
+  useEffect(() => {
+    if (!logoutNotice) return undefined;
+    const t = setTimeout(() => setLogoutNotice(""), 5000);
+    return () => clearTimeout(t);
+  }, [logoutNotice]);
   const promo = promoCode ? promoCodes[promoCode] : null;
   const totals = useMemo(() => computeTotals(cartLines, promo, shippingCfg), [cartLines, promo, shippingCfg]);
   const progress = Math.min(100, Math.round(((totals.subtotal - totals.discount) / shippingCfg.threshold) * 100));
@@ -1304,7 +1344,7 @@ export default function ZenoriaShop() {
                       <div className="flex justify-between"><span>{cartCount} article{cartCount > 1 ? "s" : ""}</span><span>{formatPrice(totals.subtotal)}</span></div>
                       {totals.discount > 0 && (<div className="flex justify-between text-emerald-700"><span>Remise</span><span>-{formatPrice(totals.discount)}</span></div>)}
                       <div className="flex justify-between"><span>Livraison (France)</span><span>{totals.shipping === 0 ? "Offerte" : formatPrice(totals.shipping)}</span></div>
-                      <div className="flex justify-between font-serif text-lg text-[#342b32] border-t border-[#eadfe4] pt-2 mt-2"><span>Total à virer</span><span>{formatPrice(totals.total)}</span></div>
+                      <div className="flex justify-between font-bold text-base text-[#342b32] border-t border-[#eadfe4] pt-2 mt-2"><span>Total à virer</span><span>{formatPrice(totals.total)}</span></div>
                     </div>
                     <div data-testid="transfer-shipping-form" className="space-y-2">
                       <div className="text-[13px] font-medium text-[#412f3b]">Livraison (France)</div>
@@ -1389,13 +1429,15 @@ export default function ZenoriaShop() {
                                 <div className={`font-serif leading-tight truncate ${dens.name}`}>{p.name}</div>
                                 <div className="text-xs text-[#8b737e] mt-0.5 truncate">{p.collection}</div>
                               </div>
-                              <button
-                                onClick={() => removeLine(p)}
-                                className="h-7 w-7 shrink-0 rounded-full grid place-items-center text-[#9a7384] hover:bg-[#f0e6ea]"
-                                aria-label={`Retirer ${p.name} du panier`}
-                              >
-                                <Trash2 size={15} />
-                              </button>
+                              {p.isUnique === true && (
+                                <button
+                                  onClick={() => removeLine(p)}
+                                  className="h-7 w-7 shrink-0 rounded-full grid place-items-center text-[#9a7384] hover:bg-[#f0e6ea]"
+                                  aria-label={`Retirer ${p.name} du panier`}
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              )}
                             </div>
                             {cartDensity === "comfort" && (
                               <div className="mt-1.5">
@@ -1409,28 +1451,30 @@ export default function ZenoriaShop() {
                               {p.isUnique === true ? (
                                 <span className="text-xs text-[#8b737e]">Pièce unique · 1 exemplaire</span>
                               ) : (
-                              <div className="flex items-center rounded-full border border-[#d9c5cc]">
-                                <button
-                                  onClick={() => changeQty(p, -1)}
-                                  disabled={qty <= 1}
-                                  className={`${dens.btn} grid place-items-center rounded-full hover:bg-[#f5edf1] disabled:opacity-30 disabled:hover:bg-transparent`}
-                                  aria-label="Diminuer la quantité"
-                                >
-                                  <Minus size={13} />
-                                </button>
-                                <span className="w-7 text-center text-sm">{qty}</span>
-                                <button
-                                  onClick={() => changeQty(p, 1)}
-                                  className={`${dens.btn} grid place-items-center rounded-full hover:bg-[#f5edf1]`}
-                                  aria-label="Augmenter la quantité"
-                                >
-                                  <Plus size={13} />
-                                </button>
-                              </div>
+                                <span />
                               )}
                               <div className="font-medium text-sm">{formatPrice(effectivePrice(p) * qty)}</div>
                             </div>
                           </div>
+                          {p.isUnique !== true && (
+                            <div data-testid={"cart-qty-" + p.id} className="flex flex-col items-center justify-between self-stretch shrink-0 w-8 rounded-full border border-[#d9c5cc] py-0.5">
+                              <button
+                                onClick={() => changeQty(p, 1)}
+                                className="h-6 w-6 grid place-items-center rounded-full hover:bg-[#f5edf1]"
+                                aria-label="Augmenter la quantité"
+                              >
+                                <Plus size={13} />
+                              </button>
+                              <span className="text-sm leading-none">{qty}</span>
+                              <button
+                                onClick={() => (qty <= 1 ? removeLine(p) : changeQty(p, -1))}
+                                className="h-6 w-6 grid place-items-center rounded-full hover:bg-[#f5edf1]"
+                                aria-label={qty <= 1 ? "Retirer " + p.name + " du panier" : "Diminuer la quantité"}
+                              >
+                                {qty <= 1 ? <Trash2 size={13} /> : <Minus size={13} />}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -1495,7 +1539,7 @@ export default function ZenoriaShop() {
                         <span>Livraison (France)</span>
                         <span>{totals.shipping === 0 ? "Offerte" : formatPrice(totals.shipping)}</span>
                       </div>
-                      <div className={`flex justify-between font-serif text-[#342b32] border-t border-[#eadfe4] ${tightFooter ? "text-lg pt-1.5" : "text-xl pt-2"}`}>
+                      <div className={`flex justify-between font-bold text-[#342b32] border-t border-[#eadfe4] ${tightFooter ? "text-base pt-1.5" : "text-base pt-2"}`}>
                         <span>Total TTC</span>
                         <span>{formatPrice(totals.total)}</span>
                       </div>
@@ -1737,6 +1781,21 @@ export default function ZenoriaShop() {
       />
       {/* AUTHENTIFICATION */}
       <AuthModal open={authModalOpen} onClose={() => { setAuthModalOpen(false); setAuthModalMode("login"); }} initialMode={authModalMode} />
+      {/* DECONNEXION : garder ou vider le panier ? */}
+      {logoutAsk && (
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-black/40 px-4" role="dialog" aria-modal="true" aria-labelledby="logout-cart-title" data-testid="logout-cart-dialog">
+          <div className="w-full max-w-sm rounded-2xl bg-[#fbf8f4] p-6 shadow-2xl">
+            <h3 id="logout-cart-title" className="font-serif text-xl text-[#412f3b]">Voulez-vous garder votre panier ?</h3>
+            <p className="mt-2 text-sm text-[#54434c]">Vous avez {cartCount} article{cartCount > 1 ? "s" : ""} dans votre panier.</p>
+            <button type="button" onClick={() => finishLogout("keep")} data-testid="logout-keep" className="mt-5 w-full rounded-full bg-[#82576c] hover:bg-[#6d4659] text-white h-11 text-sm font-medium transition">Oui, garder mes articles</button>
+            <button type="button" onClick={() => finishLogout("clear")} data-testid="logout-clear" className="mt-2 w-full rounded-full border border-[#82576c] text-[#82576c] hover:bg-[#f5edf1] h-11 text-sm font-medium transition">Non, vider le panier</button>
+            <button type="button" onClick={() => setLogoutAsk(false)} data-testid="logout-cancel" className="mt-3 block mx-auto text-sm text-[#8f6075] underline">Rester connectée</button>
+          </div>
+        </div>
+      )}
+      {logoutNotice && (
+        <div role="status" data-testid="logout-notice" className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[70] max-w-[90vw] rounded-full bg-[#412f3b] text-white text-sm px-5 py-2.5 shadow-lg text-center">{logoutNotice}</div>
+      )}
       {/* CONFIRMATION DE COMMANDE PAR VIREMENT (provisoire : IBAN et reference a l'etape 3e) */}
       {transferResult && (
         <div className="fixed inset-0 z-[60] grid place-items-center bg-black/40 px-4" role="dialog" aria-modal="true" data-testid="transfer-confirmation">

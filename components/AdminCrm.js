@@ -45,6 +45,7 @@ import { orderStatusInfo, formatOrderPrice, formatOrderReference } from "@/lib/o
 //  - CrmRoadmap  : ce qui viendra, avec ce dont chaque élément dépend. Rien n'y est enregistré.
 // ============================================================
 
+import { parisDay, parisDayDiff, addDaysToParisDay } from "@/lib/dates"; // ZENORIA_ORDER_DATES_V1
 const TIME_ZONE = "Europe/Paris";
 
 function formatDateTime(value) {
@@ -249,9 +250,7 @@ const TRANSFER_CANCEL_REASONS = [
   { value: "customer_request", label: "Demande de la cliente" },
   { value: "other", label: "Autre (à préciser)" },
 ];
-function parisDay(value) {
-  return new Date(value).toLocaleDateString("sv-SE", { timeZone: TIME_ZONE }); // AAAA-MM-JJ
-}
+// ZENORIA_ORDER_DATES_V1 : parisDay vient de lib/dates.js (jour calendaire de Paris, AAAA-MM-JJ)
 function transferErrorMessage(err, kind) {
   const msg = String((err && err.message) || err || "");
   if (/FORBIDDEN/.test(msg)) return "Action réservée aux administratrices.";
@@ -266,15 +265,16 @@ function transferErrorMessage(err, kind) {
   if (/PIECE_CONFLICT/.test(msg)) return "Une pièce unique de cette commande est déjà vendue ou réservée par une autre commande : l'encaissement ne peut pas être confirmé. Remboursez le virement ou contactez la cliente.";
   return "Action impossible pour le moment. Réessayez dans un instant.";
 }
+// ZENORIA_ORDER_DATES_V1 : l'échéance s'apprécie en JOURS CALENDAIRES de Paris (et non en blocs de 24 h).
+// Jusqu'à la fin du jour d'échéance la commande est « en attente » ; ensuite chaque jour écoulé compte pour un jour de retard.
 function transferDueState(order, now) {
   if (!order.transfer_due_at) return null;
-  const diff = now - new Date(order.transfer_due_at).getTime();
-  if (diff < 0) {
-    const days = Math.ceil(-diff / 86400000);
-    return { level: "ok", label: "En attente", detail: "échéance dans " + days + " jour" + (days > 1 ? "s" : "") };
+  const left = parisDayDiff(parisDay(now), parisDay(order.transfer_due_at)); // jours restants jusqu'au jour d'échéance
+  if (left >= 0) {
+    return { level: "ok", label: "En attente", detail: left === 0 ? "échéance aujourd'hui" : "échéance dans " + left + " jour" + (left > 1 ? "s" : "") };
   }
-  const late = Math.floor(diff / 86400000);
-  const detail = late === 0 ? "échéance dépassée depuis moins d'un jour" : "échéance dépassée de " + late + " jour" + (late > 1 ? "s" : "");
+  const late = -left;
+  const detail = "échéance dépassée de " + late + " jour" + (late > 1 ? "s" : "");
   if (late >= TRANSFER_LATE_DAYS) return { level: "late", label: "En retard", detail };
   return { level: "over", label: "Échéance dépassée", detail };
 }
@@ -380,7 +380,7 @@ function TransferPanel({ order, history, onDone }) {
         Référence à indiquer : <strong>{formatOrderReference(order)}</strong> · Montant attendu : <strong>{formatOrderPrice(order.total)}</strong>
         {order.transfer_due_at && (
           <>
-            <br />Échéance : {formatDateTime(order.transfer_due_at)}{state ? " (" + state.detail + ")" : ""}
+            <br />Échéance : {formatDateOnly(order.transfer_due_at)}{state ? " (" + state.detail + ")" : ""}
           </>
         )}
       </p>
@@ -629,20 +629,17 @@ export function AdminOrders() {
 
   const setPreset = (preset) => {
     setDatePreset(preset);
-    const toIso = (d) => d.toISOString().slice(0, 10);
-    const now = new Date();
+    // ZENORIA_ORDER_DATES_V1 : les bornes sont des jours calendaires de Paris (l'ancien calcul en UTC donnait la veille entre minuit et 1 h/2 h)
+    const today = parisDay(new Date());
     if (preset === "today") {
-      const today = toIso(now);
       setDateFrom(today);
       setDateTo(today);
     } else if (preset === "7d") {
-      const from = new Date(now.getTime() - 6 * 24 * 3600 * 1000);
-      setDateFrom(toIso(from));
-      setDateTo(toIso(now));
+      setDateFrom(addDaysToParisDay(today, -6));
+      setDateTo(today);
     } else if (preset === "30d") {
-      const from = new Date(now.getTime() - 29 * 24 * 3600 * 1000);
-      setDateFrom(toIso(from));
-      setDateTo(toIso(now));
+      setDateFrom(addDaysToParisDay(today, -29));
+      setDateTo(today);
     } else {
       setDateFrom("");
       setDateTo("");

@@ -52,6 +52,11 @@ function formatDateTime(value) {
   return new Date(value).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short", timeZone: TIME_ZONE });
 }
 
+// ZENORIA_ORDER_JOURNAL_V1 : date seule (sans heure), en heure de Paris
+function formatDateOnly(value) {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString("fr-FR", { timeZone: TIME_ZONE });
+}
 function friendlyError(err) {
   const msg = (err && err.message) || String(err || "");
   if (/could not find the function|schema cache|does not exist/i.test(msg)) {
@@ -273,7 +278,7 @@ function transferDueState(order, now) {
   if (late >= TRANSFER_LATE_DAYS) return { level: "late", label: "En retard", detail };
   return { level: "over", label: "Échéance dépassée", detail };
 }
-function TransferPanel({ order, onDone }) {
+function TransferPanel({ order, history, onDone }) {
   const [mode, setMode] = useState(null); // null | "confirm" | "extend" | "cancel"
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -291,14 +296,22 @@ function TransferPanel({ order, onDone }) {
     });
     return () => { alive = false; };
   }, [mode]);
-
+  // ZENORIA_ORDER_JOURNAL_V1 : le message d'erreur disparait des qu'on change de formulaire (Retour inclus) ou de saisie
+  useEffect(() => {
+    setError("");
+  }, [mode, amount, received, note, days, reason]);
   if (order.payment_method !== "transfer") return null;
   if (order.status === "cancelled" && order.cancelled_at) {
+    // ZENORIA_ORDER_JOURNAL_V1 : le motif est lu dans la derniere ligne d'annulation du journal de la commande
+    const cancelEntry = [...(history || [])].reverse().find((h) => h.status === "cancelled" && h.note);
+    const cancelReason = cancelEntry ? String(cancelEntry.note).replace(/^Annulée par l.administration\s*:\s*/i, "Motif : ") : "";
     return (
       <div data-testid="transfer-cancelled-note" className="mb-4 rounded-xl bg-white border border-[#eee2e5] px-4 py-3 text-[13px] text-[#54434c]">
         <span className="font-medium text-[#412f3b]">Commande annulée</span> le {formatDateTime(order.cancelled_at)}{" "}
         {order.cancelled_by === "customer" ? "par la cliente" : order.cancelled_by === "admin" ? "par l'administration" : ""}.
-        <span className="block text-[11px] text-[#8b737e] mt-0.5">Le motif figure dans l&apos;historique de la commande.</span>
+        {cancelReason && (
+          <span data-testid="transfer-cancel-reason" className="block text-[12px] text-[#54434c] mt-1">{cancelReason}</span>
+        )}
       </div>
     );
   }
@@ -457,6 +470,38 @@ function OrderItemThumb({ product }) {
   );
 }
 
+// ZENORIA_ORDER_JOURNAL_V1 : historique complet d'une commande (order_status_history), date et heure de Paris.
+// Affiche pour toutes les commandes (carte comme virement) : le statut, la note enregistree et l'auteur de l'action.
+function OrderHistoryLog({ history }) {
+  const rows = [...(history || [])].sort((a, b) => {
+    const diff = new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime();
+    return diff !== 0 && !Number.isNaN(diff) ? diff : Number(a.id) - Number(b.id);
+  });
+  return (
+    <div data-testid="order-history" className="mt-4 rounded-xl bg-white border border-[#eee2e5] px-4 py-3.5">
+      <div className="text-xs font-medium text-[#8b737e] mb-2.5">Historique de la commande</div>
+      {rows.length === 0 ? (
+        <p data-testid="order-history-empty" className="text-[12px] text-[#8b737e]">Aucun événement enregistré.</p>
+      ) : (
+        <ol className="space-y-2.5">
+          {rows.map((h) => {
+            const info = orderStatusInfo(h.status);
+            return (
+              <li key={h.id} data-testid="order-history-row" className="flex gap-3 text-[13px] text-[#54434c]">
+                <span className="w-28 shrink-0 text-[11px] leading-5 text-[#8b737e]">{formatDateTime(h.changed_at)}</span>
+                <span className="min-w-0">
+                  <span className={"rounded-full px-2.5 py-0.5 text-[11px] whitespace-nowrap " + info.className}>{info.label}</span>
+                  {h.note && <span className="block mt-1 leading-5">{h.note}</span>}
+                  {h.actor_email && <span className="block text-[11px] text-[#8b737e]">{h.actor_email}</span>}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </div>
+  );
+}
 export function AdminOrders() {
   const [orders, setOrders] = useState([]);
   const [itemsByOrder, setItemsByOrder] = useState({});
@@ -759,20 +804,29 @@ export function AdminOrders() {
                       <div className="mb-4">
                         <div className="text-xs font-medium text-[#8b737e] mb-3">Parcours de la commande</div>
                         {(() => {
-                          const steps = [
+                          const baseSteps = [
                             { label: "Panier validé", done: true, date: o.created_at },
-                            { label: "Paiement confirmé", done: Boolean(o.paid_at), date: o.paid_at },
+                            { label: "Paiement confirmé", done: Boolean(o.paid_at), date: o.paid_at, dateOnly: o.payment_method === "transfer" },
                             { label: "Expédiée", done: Boolean((statusHistoryByOrder[o.id] || []).find((h) => h.status === "shipped")), date: (statusHistoryByOrder[o.id] || []).find((h) => h.status === "shipped")?.changed_at },
                             { label: "Livrée", done: Boolean((statusHistoryByOrder[o.id] || []).find((h) => h.status === "delivered")), date: (statusHistoryByOrder[o.id] || []).find((h) => h.status === "delivered")?.changed_at },
                           ];
+                          // ZENORIA_ORDER_JOURNAL_V1 : commande annulee -> Panier valide, (Paiement confirme), puis Annulée en rouge
+                          const cancelledEntry = (statusHistoryByOrder[o.id] || []).filter((h) => h.status === "cancelled").slice(-1)[0];
+                          const steps = o.status === "cancelled"
+                            ? [
+                                baseSteps[0],
+                                ...(o.paid_at ? [baseSteps[1]] : []),
+                                { label: "Annulée", done: true, danger: true, date: o.cancelled_at || (cancelledEntry ? cancelledEntry.changed_at : null) },
+                              ]
+                            : baseSteps;
                           return (
                             <div className="flex items-start">
                               {steps.map((step, i) => (
                                 <React.Fragment key={step.label}>
                                   <div className="flex flex-col items-center text-center" style={{ minWidth: 92 }}>
-                                    <span className={`h-3 w-3 rounded-full shrink-0 ${step.done ? "bg-[#8f6075]" : "bg-[#eadfe4]"}`} />
-                                    <span className={`mt-1.5 text-[12px] leading-4 ${step.done ? "text-[#412f3b] font-medium" : "text-[#a79aa1]"}`}>{step.label}</span>
-                                    <span className="text-[10px] text-[#8b737e] leading-4">{step.done && step.date ? formatDateTime(step.date) : step.done ? "" : "En attente"}</span>
+                                    <span className={`h-3 w-3 rounded-full shrink-0 ${step.danger ? "bg-red-500" : step.done ? "bg-[#8f6075]" : "bg-[#eadfe4]"}`} />
+                                    <span className={`mt-1.5 text-[12px] leading-4 ${step.danger ? "text-red-700 font-medium" : step.done ? "text-[#412f3b] font-medium" : "text-[#a79aa1]"}`}>{step.label}</span>
+                                    <span className="text-[10px] text-[#8b737e] leading-4">{step.done && step.date ? (step.dateOnly ? formatDateOnly(step.date) : formatDateTime(step.date)) : step.done ? "" : "En attente"}</span>
                                   </div>
                                   {i < steps.length - 1 && (
                                     <div className={`h-[2px] flex-1 mt-1.5 ${steps[i + 1].done ? "bg-[#8f6075]" : "bg-[#eadfe4]"}`} />
@@ -784,8 +838,10 @@ export function AdminOrders() {
                         })()}
                       </div>
 
-                      <TransferPanel order={o} onDone={(msg) => { setAdminNotice(msg); load(); }} />
+                      <TransferPanel order={o} history={statusHistoryByOrder[o.id]} onDone={(msg) => { setAdminNotice(msg); load(); }} />
                       {/* ShippingPanel : transporteur, numéro de suivi, actions d'expédition */}
+                      {/* ZENORIA_ORDER_JOURNAL_V1 : le bloc Expédition n'a pas de sens sur une commande annulée */}
+                      {o.status !== "cancelled" && (
                       <div className="mb-4 rounded-xl bg-white border border-[#eee2e5] px-4 py-3.5">
                         <div className="text-xs font-medium text-[#8b737e] mb-2.5">Expédition</div>
                         {!["paid", "shipped", "delivered"].includes(o.status) && (
@@ -865,7 +921,7 @@ export function AdminOrders() {
                           <div role="alert" className="mt-2 rounded-xl bg-red-50 text-red-600 px-3 py-2 text-xs">{invoiceErrorMsg}</div>
                         )}
                       </div>
-
+                      )}
                       <div className="grid md:grid-cols-2 gap-4">
                         <div>
                           <div className="text-xs font-medium text-[#8b737e] mb-1.5">Articles</div>
@@ -901,6 +957,7 @@ export function AdminOrders() {
                           </p>
                         </div>
                       </div>
+                      <OrderHistoryLog history={statusHistoryByOrder[o.id]} />
                     </td>
                   </tr>
                 )}

@@ -41,7 +41,8 @@ import {
 } from "@/lib/seasons";
 import { pickPublicBanner, bannerKey, readClosedKeys, writeClosedKeys, getSessionStorage } from "@/lib/publicBanner";
 import { SITE_SETTINGS_TABLE, SEASON_FX_KEY, parseSeasonFxSetting, pickFxSeason } from "@/lib/siteSettings";
-import { SHIPPING_KEY, DEFAULT_SHIPPING, parseShippingSetting, qualifiesForFreeShipping, shippingStripText } from "@/lib/shippingSettings";
+import { SHIPPING_KEY, DEFAULT_SHIPPING, parseShippingSetting, shippingStripText } from "@/lib/shippingSettings";
+import { round2, effectivePrice, computeTotals } from "@/lib/cartTotals"; // ZENORIA_SHIPPING_RULE_V1 : calcul du panier = source unique
 import { PAYMENT_METHODS_KEY, DEFAULT_PAYMENT_METHODS, parsePaymentMethods } from "@/lib/paymentSettings";
 import { SITE_TEXTS_KEY, DEFAULT_TEXTS, resolveSiteTexts } from "@/lib/siteTexts";
 // ZENORIA_STORY_REVIEWS_V1
@@ -55,7 +56,7 @@ import TextLines from "@/components/TextLines";
 // ============================================================
 // RÉGLAGES DE LA BOUTIQUE (à adapter facilement)
 // ============================================================
-const SHIPPING_FEE = 4.9;               // frais de livraison sous le seuil (France)
+// ZENORIA_SHIPPING_RULE_V1 : les frais de livraison, les arrondis, le prix effectif et le calcul du panier viennent de lib/cartTotals.js
 // Le seuil de livraison offerte et son interrupteur se règlent dans l'admin (Contenu du site) : voir lib/shippingSettings.js
 const MAX_QTY_PER_PRODUCT = 10;         // quantité max par bague (stock + fabrication sur commande)
 // Le délai de fabrication une fois le stock épuisé (BACKORDER_LEAD_TIME) se règle dans lib/shopUtils.js
@@ -71,9 +72,7 @@ const CART_STORAGE_KEY = "zenoria_cart_v2";
 // ============================================================
 // Requête dont l'échec ne doit jamais empêcher le site de s'afficher (table pas encore créée, réseau coupé...).
 const optionalQuery = (query) => Promise.resolve(query).then((res) => res, () => ({ data: null, error: true }));
-const round2 = (n) => Math.round(n * 100) / 100;
-// Prix réellement appliqué : le prix promotionnel s'il est défini et inférieur au prix normal.
-const effectivePrice = (p) => (p.promoPrice != null && p.promoPrice < p.price ? p.promoPrice : p.price);
+// (round2 et effectivePrice : voir lib/cartTotals.js)
 // Convertit une ligne de la table "products" (Supabase) vers le format utilisé par l'interface.
 function mapDbProduct(row) {
   const photos = Array.isArray(row.photos) ? row.photos : [];
@@ -100,20 +99,7 @@ function mapDbProduct(row) {
     videoCount: row.video ? 1 : 0,
   };
 }
-// Calcul des montants du panier (sous-total, remise, livraison, total)
-function computeTotals(lines, promo, shippingCfg = DEFAULT_SHIPPING) {
-  const subtotal = round2(lines.reduce((s, l) => s + effectivePrice(l.product) * l.qty, 0));
-  let discount = 0;
-  if (promo && promo.type === "percent") discount = round2((subtotal * promo.value) / 100);
-  if (promo && promo.type === "fixed") discount = Math.min(promo.value, subtotal);
-  const discounted = round2(subtotal - discount);
-  const freeByPromo = Boolean(promo && promo.type === "shipping");
-  const qualifies = qualifiesForFreeShipping(shippingCfg, discounted);
-  const shipping = lines.length === 0 ? 0 : freeByPromo || qualifies ? 0 : SHIPPING_FEE;
-  const total = round2(discounted + shipping);
-  const remaining = shippingCfg.enabled ? round2(Math.max(0, shippingCfg.threshold - discounted)) : 0;
-  return { subtotal, discount, shipping, total, remaining, freeShipping: lines.length > 0 && shipping === 0 };
-}
+// Calcul des montants du panier : computeTotals vient de lib/cartTotals.js (règle unique de la livraison offerte).
 // ============================================================
 // AFFICHAGE ADAPTATIF DU PANIER
 // ============================================================
@@ -567,7 +553,7 @@ export default function ZenoriaShop() {
   }, [recapStep, transferDelayDays]);
   const promo = promoCode ? promoCodes[promoCode] : null;
   const totals = useMemo(() => computeTotals(cartLines, promo, shippingCfg), [cartLines, promo, shippingCfg]);
-  const progress = Math.min(100, Math.round(((totals.subtotal - totals.discount) / shippingCfg.threshold) * 100));
+  const progress = Math.min(100, Math.round((totals.subtotal / shippingCfg.threshold) * 100)); // ZENORIA_SHIPPING_RULE_V1 : montant du panier avant code promo
   const cartDensity = pickCartDensity(
     cartLines.length,
     viewportH,

@@ -25,6 +25,7 @@ import {
 // Le bandeau du haut de page (accueil et quiz), la barre de progression du panier et le calcul de la livraison lisent
 // ce même réglage : ils ne peuvent jamais afficher deux montants différents. Les codes promo restent indépendants.
 // Tant que rien n'est enregistré, le site utilise la valeur par défaut (activée, 75 €). Voir supabase_shipping.sql.
+// ZENORIA_SHIPPING_RULE_V1 : le montant se compare au panier AVANT code promo ; les codes promo ne changent pas ce droit.
 // ============================================================
 
 const TIME_ZONE = "Europe/Paris";
@@ -195,7 +196,7 @@ export default function AdminShipping() {
         </span>
         <span id="shipping-amount-help" className={`block text-[11px] mt-1 leading-4 ${input.ok ? "text-[#8b737e]" : "text-red-600"}`} data-testid="shipping-amount-help">
           {input.ok
-            ? "Nombre entier d'euros, de 1 à 1 000. Comparé au panier après remise : le montant exact est atteint, la livraison est offerte."
+            ? "Nombre entier d'euros, de 1 à 1 000. Comparé au montant du panier avant code promo : dès que ce montant est atteint, la livraison est offerte."
             : input.error}
         </span>
         {!enabled && <span className="block text-[11px] text-[#8b737e] mt-1 leading-4">Livraison désactivée : ce montant est conservé et reprendra effet à la réactivation.</span>}
@@ -210,14 +211,14 @@ export default function AdminShipping() {
           {shown.enabled ? (
             examples.map((e) => (
               <li key={e.amount}>
-                Panier de <strong className="font-medium">{e.amount} €</strong> (après remise) : livraison {e.free ? "offerte" : "facturée"}.
+                Panier de <strong className="font-medium">{e.amount} €</strong> (avant code promo) : livraison {e.free ? "offerte" : "facturée"}.
               </li>
             ))
           ) : (
             <li>Tous les paniers paient la livraison.</li>
           )}
           <li>
-            Un code promo « Livraison offerte » (comme LIVRAISONZEN) met toujours la livraison à 0 €, que l&apos;interrupteur soit activé ou non. Les codes promo se gèrent séparément.
+            Un code promo se déduit du montant du panier mais ne change jamais le droit à la livraison offerte : seul le montant du panier, avant code promo, compte. Les codes promo se gèrent séparément.
           </li>
         </ul>
       </div>
@@ -248,7 +249,7 @@ export default function AdminShipping() {
       </div>
 
       <p className="text-[11px] text-[#8b737e] mt-3 leading-4">
-        Les frais de livraison sous le seuil restent réglés dans le code du site. Tant que le paiement en ligne n&apos;est pas actif, le calcul se fait dans la page ; à l&apos;ouverture du paiement, il devra être refait côté serveur avec ce même réglage.
+        Les frais de livraison sous le seuil restent réglés dans le code du site. Le calcul de la livraison suit une règle unique, partagée par le site, le paiement par carte et le paiement par virement.
       </p>
     </section>
   );

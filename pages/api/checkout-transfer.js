@@ -27,6 +27,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { SITE_SETTINGS_TABLE } from "@/lib/siteSettings";
 import { SHIPPING_KEY, DEFAULT_SHIPPING, parseShippingSetting } from "@/lib/shippingSettings";
 import { computeTotals, effectivePrice } from "@/lib/cartTotals";
+import { isTestOrderMode } from "@/lib/testMode"; // ZENORIA_TEST_MODE_V1 : règle unique « commande de test » (carte et virement)
 
 function errorForCode(code) {
   const map = {
@@ -168,7 +169,7 @@ export default async function handler(req, res) {
       unit_price: effectivePrice(l.product).toFixed(2),
     }));
 
-    const isTest = (process.env.VERCEL_ENV || process.env.NODE_ENV || "development") !== "production";
+    const isTest = isTestOrderMode(); // ZENORIA_TEST_MODE_V1 : commande de test tant que la clé Stripe n'est pas en mode réel (comme la carte), et non d'après l'environnement de déploiement
 
     // 8) Appelle la fonction SQL atomique (service_role, verifie tout en interne :
     //    prix, plafond, reservation des pieces uniques, historique)

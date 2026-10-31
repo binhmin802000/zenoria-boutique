@@ -23,6 +23,7 @@ import { SITE_SETTINGS_TABLE } from "@/lib/siteSettings";
 import { SHIPPING_KEY, DEFAULT_SHIPPING, parseShippingSetting } from "@/lib/shippingSettings";
 import { PAYMENT_METHODS_KEY, parsePaymentMethods } from "@/lib/paymentSettings"; // ZENORIA_PAYMENT_STEP2_V1
 import { computeTotals, effectivePrice } from "@/lib/cartTotals";
+import { isTestOrderMode } from "@/lib/testMode"; // ZENORIA_TEST_MODE_V1 : règle unique « commande de test » (carte et virement)
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -163,7 +164,7 @@ export default async function handler(req, res) {
           user_id: checkoutUser ? checkoutUser.id : null,
           guest_email: "en_attente@zenoria.local", // temporaire : remplace par le vrai e-mail une fois le webhook confirme
           status: "pending",
-          is_test: !String(process.env.STRIPE_SECRET_KEY || "").startsWith("sk_live_"),
+          is_test: isTestOrderMode(), // ZENORIA_TEST_MODE_V1 : règle unique avec le virement (lib/testMode.js)
           subtotal: totals.subtotal,
           discount: totals.discount,
           shipping: totals.shipping,

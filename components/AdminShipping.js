@@ -10,6 +10,8 @@ import {
   buildShippingValue,
   sameShippingSetting,
   parseThresholdInput,
+  parseFeeInput,
+  formatFee,
   qualifiesForFreeShipping,
   shippingStripText,
   describeShipping,
@@ -28,6 +30,7 @@ import {
 // ZENORIA_SHIPPING_RULE_V1 : le montant se compare au panier AVANT code promo ; les codes promo ne changent pas ce droit.
 // ============================================================
 
+// ZENORIA_SHIPPING_FEE_V1 : les frais de livraison (champ « fee » du réglage) se règlent ici, entre 0,50 et 50,00 €.
 const TIME_ZONE = "Europe/Paris";
 
 function formatDateTime(value) {
@@ -38,7 +41,7 @@ function formatDateTime(value) {
 function friendlyError(err) {
   const msg = (err && err.message) || String(err || "");
   if (/site_settings_shipping_valid|violates check constraint/i.test(msg)) {
-    return "La valeur est refusée par la base. Exécutez le script supabase_shipping.sql dans Supabase (SQL Editor), puis réessayez.";
+    return "La valeur est refusée par la base. Vérifiez le montant et les frais de livraison, puis réessayez.";
   }
   if (/relation|does not exist|schema cache|could not find the table/i.test(msg)) {
     return "La table des réglages n'est pas installée. Exécutez le script supabase_shipping.sql dans Supabase (SQL Editor).";
@@ -53,6 +56,7 @@ export default function AdminShipping() {
   const [row, setRow] = useState(null); // ligne enregistrée (ou null : rien d'enregistré, donc valeur par défaut)
   const [enabled, setEnabled] = useState(DEFAULT_SHIPPING.enabled);
   const [text, setText] = useState(String(DEFAULT_SHIPPING.threshold));
+  const [feeText, setFeeText] = useState(formatFee(DEFAULT_SHIPPING.fee));
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -72,6 +76,7 @@ export default function AdminShipping() {
         const parsed = parseShippingSetting(saved ? saved.value : null);
         setEnabled(parsed.enabled);
         setText(String(parsed.threshold));
+        setFeeText(formatFee(parsed.fee));
       }
     } catch (err) {
       setLoadError(friendlyError(err));
@@ -91,15 +96,16 @@ export default function AdminShipping() {
 
   const saved = useMemo(() => parseShippingSetting(row ? row.value : null), [row]);
   const input = useMemo(() => parseThresholdInput(text), [text]);
-  const draft = input.ok ? { enabled, threshold: input.value } : null;
+  const feeInput = useMemo(() => parseFeeInput(feeText), [feeText]);
+  const draft = input.ok && feeInput.ok ? { enabled, threshold: input.value, fee: feeInput.value } : null;
   const dirty = draft !== null && (!row || !sameShippingSetting(draft, saved));
   const disabled = loading || Boolean(loadError) || saving;
-  const shown = draft || { enabled, threshold: saved.threshold }; // aperçu : si la saisie est invalide, on garde le dernier montant valide
+  const shown = { enabled, threshold: input.ok ? input.value : saved.threshold, fee: feeInput.ok ? feeInput.value : saved.fee }; // aperçu : si la saisie est invalide, on garde le dernier montant valide
 
   const save = async () => {
     setError("");
     if (!draft) {
-      setError(input.error);
+      setError(input.ok ? feeInput.error : input.error);
       return;
     }
     setSaving(true);
@@ -201,7 +207,31 @@ export default function AdminShipping() {
         </span>
         {!enabled && <span className="block text-[11px] text-[#8b737e] mt-1 leading-4">Livraison désactivée : ce montant est conservé et reprendra effet à la réactivation.</span>}
       </label>
-
+      <label className="block mt-4 text-sm">
+        <span className="block text-xs text-[#8b737e]">Frais de livraison (facturés quand la livraison n&apos;est pas offerte)</span>
+        <span className="mt-1 flex items-center gap-2">
+          <input
+            type="text"
+            inputMode="decimal"
+            value={feeText}
+            disabled={disabled}
+            onChange={(e) => {
+              setFeeText(e.target.value);
+              setError("");
+            }}
+            aria-invalid={!feeInput.ok}
+            aria-describedby="shipping-fee-help"
+            data-testid="shipping-fee"
+            className="w-32 rounded-xl border border-[#eadfe4] px-3 h-10 outline-none focus:border-[#8f6075] bg-white disabled:opacity-60"
+          />
+          <span className="text-sm text-[#54434c]">€</span>
+        </span>
+        <span id="shipping-fee-help" className={`block text-[11px] mt-1 leading-4 ${feeInput.ok ? "text-[#8b737e]" : "text-red-600"}`} data-testid="shipping-fee-help">
+          {feeInput.ok
+            ? "De 0,50 à 50,00 €, centimes autorisés. Ce montant est facturé sous le seuil (ou toujours si la livraison offerte est désactivée) et s'applique aux prochaines commandes, par carte comme par virement."
+            : feeInput.error}
+        </span>
+      </label>
       <div className="mt-5 rounded-xl bg-[#faf6f8] border border-[#eee2e5] px-4 py-3">
         <div className="text-xs text-[#8b737e] mb-1.5">Aperçu du bandeau</div>
         <div data-testid="shipping-preview" className="rounded-lg bg-[#342434] text-white/85 text-[11px] py-2 px-3 text-center tracking-wide">
@@ -211,11 +241,11 @@ export default function AdminShipping() {
           {shown.enabled ? (
             examples.map((e) => (
               <li key={e.amount}>
-                Panier de <strong className="font-medium">{e.amount} €</strong> (avant code promo) : livraison {e.free ? "offerte" : "facturée"}.
+                Panier de <strong className="font-medium">{e.amount} €</strong> (avant code promo) : livraison {e.free ? "offerte" : "facturée " + formatFee(shown.fee) + " €"}.
               </li>
             ))
           ) : (
-            <li>Tous les paniers paient la livraison.</li>
+            <li>Tous les paniers paient la livraison ({formatFee(shown.fee)} €).</li>
           )}
           <li>
             Un code promo se déduit du montant du panier mais ne change jamais le droit à la livraison offerte : seul le montant du panier, avant code promo, compte. Les codes promo se gèrent séparément.
@@ -249,7 +279,7 @@ export default function AdminShipping() {
       </div>
 
       <p className="text-[11px] text-[#8b737e] mt-3 leading-4">
-        Les frais de livraison sous le seuil restent réglés dans le code du site. Le calcul de la livraison suit une règle unique, partagée par le site, le paiement par carte et le paiement par virement.
+        Les frais de livraison se règlent ci-dessus et s&apos;appliquent aux prochaines commandes. Le calcul de la livraison suit une règle unique, partagée par le site, le paiement par carte et le paiement par virement.
       </p>
     </section>
   );

@@ -1,6 +1,7 @@
 // ZENORIA_ACCOUNT_STEP11_V1 · ZENORIA_ACCOUNT_STEP12_V1 · ZENORIA_ACCOUNT_HERO_B_V1 · ZENORIA_ACCOUNT_STEP13_V1 · ZENORIA_ACCOUNT_STEP14_V1
 import React, { useCallback, useEffect, useState } from "react";
 import AccountDataSection from "@/components/AccountDataSection";
+import TransferInstructions from "@/components/TransferInstructions"; // ZENORIA_STEP3C2_V1
 import AccountProfileSection from "@/components/AccountProfileSection";
 import Head from "next/head";
 import { Home, Package, Star, Heart, UserCog, ShieldCheck, LogOut, Truck, ChevronLeft, FileDown } from "lucide-react"; // ZENORIA_INVOICE_STEP3_V1
@@ -79,6 +80,13 @@ function effectivePrice(p) {
 }
 function formatEUR(n) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(Number(n) || 0);
+}
+// ZENORIA_STEP3C2_V1 : une commande par carte non finalisee (pending, expiree, annulee) n'affiche pas son statut technique
+function customerOrderBadge(o) {
+  if (o.payment_method !== "transfer" && !CUSTOMER_VISIBLE_STATUSES.includes(o.status)) {
+    return { label: "Paiement non finalisé", className: "bg-[#f3f1f5] text-[#8b737e]" };
+  }
+  return orderStatusInfo(o.status);
 }
 
 function ProductThumb({ item }) {
@@ -207,11 +215,41 @@ async function downloadInvoice(orderId, onError) {
     onError("Impossible de générer la facture pour le moment.");
   }
 }
-function OrderDetail({ order, contactCfg, questionOpen, setQuestionOpen, onBack }) {
+function OrderDetail({ order, contactCfg, questionOpen, setQuestionOpen, onBack, onOrderChanged }) { // ZENORIA_STEP3C2_V1
   const [invoiceBusy, setInvoiceBusy] = useState(false); // ZENORIA_INVOICE_STEP3_V1
   const [invoiceError, setInvoiceError] = useState(""); // ZENORIA_INVOICE_STEP3_V1
-  const info = orderStatusInfo(order.status);
+  const isTransfer = order.payment_method === "transfer"; // ZENORIA_STEP3C2_V1
+  const isFinished = CUSTOMER_VISIBLE_STATUSES.includes(order.status);
+  const isCancelled = order.status === "cancelled";
+  const badge = isTransfer || isFinished ? orderStatusInfo(order.status) : { label: "Paiement non finalisé", className: "bg-[#f3f1f5] text-[#8b737e]" };
   const total = Number(order.total) || 0;
+  const [events, setEvents] = useState([]);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelNote, setCancelNote] = useState("");
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState("");
+  useEffect(() => {
+    if (!isTransfer) { setEvents([]); return undefined; }
+    let alive = true;
+    supabase.rpc("customer_order_events", { p_order_id: order.id }).then((res) => {
+      if (alive) setEvents(res && !res.error && res.data ? res.data : []);
+    });
+    return () => { alive = false; };
+  }, [order.id, isTransfer]);
+  const cancelEvent = [...events].reverse().find((e) => e.event_status === "cancelled" && e.message);
+  const cancelOrder = async () => {
+    setCancelBusy(true);
+    setCancelError("");
+    try {
+      const { error: err } = await supabase.rpc("customer_cancel_transfer_order", { p_order_id: order.id, p_note: cancelNote.trim() || null });
+      if (err) throw err;
+      setCancelOpen(false);
+      if (onOrderChanged) onOrderChanged();
+    } catch (err) {
+      setCancelError("Impossible d'annuler la commande pour le moment. Réessayez, ou contactez-nous.");
+    }
+    setCancelBusy(false);
+  };
   return (
     <div data-testid={`order-detail-${order.id}`}>
       <button type="button" onClick={onBack} className="flex items-center gap-1 text-sm text-[#8f6075] mb-3">
@@ -219,11 +257,23 @@ function OrderDetail({ order, contactCfg, questionOpen, setQuestionOpen, onBack 
       </button>
       <div className="flex flex-wrap justify-between items-center gap-2">
         <h2 className="font-serif text-2xl text-[#412f3b]">Commande {order.reference}</h2>
-        <span className={`rounded-full px-3 py-1 text-xs whitespace-nowrap ${info.className}`}>{info.label}</span>
+        <span className={`rounded-full px-3 py-1 text-xs whitespace-nowrap ${badge.className}`}>{badge.label}</span>
       </div>
       <p className="text-xs text-[#8b737e] mt-1">Passée le {formatDate(order.created_at)}</p>
 
-      <div className="mt-5"><Timeline order={order} /></div>
+      {isTransfer && order.status === "pending_transfer" ? (
+        <div className="mt-5 space-y-3">
+          <TransferInstructions orderId={order.id} contactCfg={contactCfg} />
+          <button type="button" onClick={() => setCancelOpen(true)} data-testid="account-cancel-transfer" className="rounded-full border border-[#d9c5cc] px-4 h-10 text-sm hover:bg-[#f5edf1]">Annuler ma commande</button>
+        </div>
+      ) : isCancelled ? (
+        <div className="mt-5 rounded-xl bg-white border border-[#eee2e5] px-4 py-3 text-sm text-[#54434c]" data-testid="order-cancelled-note">
+          <div className="font-medium text-[#412f3b]">Commande annulée</div>
+          {cancelEvent && <div className="mt-1">{cancelEvent.message}</div>}
+        </div>
+      ) : isFinished ? (
+        <div className="mt-5"><Timeline order={order} /></div>
+      ) : null}
 
       {order.carrier && (
         <div className="mt-4 rounded-xl bg-[#fbf7f9] px-4 py-3 flex items-center gap-2 text-sm text-[#54434c]">
@@ -263,7 +313,7 @@ function OrderDetail({ order, contactCfg, questionOpen, setQuestionOpen, onBack 
           <div className="flex justify-between py-0.5"><span className="text-[#8b737e]">Sous-total</span><span>{formatOrderPrice(order.subtotal)}</span></div>
           {Number(order.discount) > 0 && <div className="flex justify-between py-0.5"><span className="text-[#8b737e]">Remise</span><span>- {formatOrderPrice(order.discount)}</span></div>}
           <div className="flex justify-between py-0.5"><span className="text-[#8b737e]">Livraison</span><span>{Number(order.shipping) > 0 ? formatOrderPrice(order.shipping) : "Offerte"}</span></div>
-          <div className="flex justify-between pt-1.5 mt-1 border-t border-[#eadfe4] font-medium text-[#412f3b]"><span>Total payé</span><span>{formatOrderPrice(total)}</span></div>
+          <div className="flex justify-between pt-1.5 mt-1 border-t border-[#eadfe4] font-medium text-[#412f3b]"><span>Total</span><span>{formatOrderPrice(total)}</span></div>
         </div>
       </div>
 
@@ -273,18 +323,48 @@ function OrderDetail({ order, contactCfg, questionOpen, setQuestionOpen, onBack 
           Une question sur cette commande ?
         </button>
         {/* ZENORIA_INVOICE_STEP3_V1 : facture PDF, générée à la demande (recomposée depuis des données figées) */}
-        <button
-          type="button"
-          onClick={async () => { setInvoiceBusy(true); setInvoiceError(""); await downloadInvoice(order.id, setInvoiceError); setInvoiceBusy(false); }}
-          disabled={invoiceBusy}
-          data-testid="invoice-download-btn"
-          className="flex items-center gap-2 rounded-full border border-[#d9c5cc] px-4 h-10 text-sm hover:bg-[#f5edf1] disabled:opacity-50"
-        >
-          <FileDown size={15} /> {invoiceBusy ? "Génération…" : "Télécharger la facture"}
-        </button>
+        {isFinished && (
+          <button
+            type="button"
+            onClick={async () => { setInvoiceBusy(true); setInvoiceError(""); await downloadInvoice(order.id, setInvoiceError); setInvoiceBusy(false); }}
+            disabled={invoiceBusy}
+            data-testid="invoice-download-btn"
+            className="flex items-center gap-2 rounded-full border border-[#d9c5cc] px-4 h-10 text-sm hover:bg-[#f5edf1] disabled:opacity-50"
+          >
+            <FileDown size={15} /> {invoiceBusy ? "Génération…" : "Télécharger la facture"}
+          </button>
+        )}
       </div>
+      {/* ZENORIA_STEP3C2_V1 : mises a jour du vendeur (prolongation, confirmation, annulation), note facultative visible */}
+      {isTransfer && events.filter((e) => e.message).length > 0 && (
+        <div className="mt-4 rounded-xl bg-white border border-[#eee2e5] px-4 py-3" data-testid="order-updates">
+          <div className="text-xs font-medium text-[#8b737e] mb-2">Mises à jour</div>
+          <ul className="space-y-1.5">
+            {events.filter((e) => e.message).map((e, i) => (
+              <li key={i} className="text-[13px] text-[#54434c]"><span className="text-[11px] text-[#8b737e]">{formatDate(e.event_at)}</span> — {e.message}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {invoiceError && <div role="alert" className="mt-3 rounded-xl bg-red-50 text-red-600 px-4 py-3 text-sm">{invoiceError}</div>}
       {questionOpen === order.id && <QuestionPanel order={order} contactCfg={contactCfg} onClose={() => setQuestionOpen(null)} />}
+      {cancelOpen && (
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/40 px-4" role="dialog" aria-modal="true" data-testid="account-cancel-dialog">
+          <div className="w-full max-w-md rounded-2xl bg-[#fbf8f4] p-6 shadow-2xl">
+            <h3 className="font-serif text-xl text-[#412f3b]">Annuler cette commande ?</h3>
+            <p className="mt-2 text-sm text-[#54434c]">Votre bijou sera remis en vente. Cette action est définitive.</p>
+            <label className="mt-3 block text-[12px] text-[#54434c]">
+              Pouvez-vous nous dire pourquoi ? (facultatif)
+              <textarea value={cancelNote} onChange={(e) => setCancelNote(e.target.value)} maxLength={500} rows={3} data-testid="account-cancel-note" className="mt-1 w-full rounded-xl border border-[#eadfe4] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#8f6075]" />
+            </label>
+            {cancelError && <p role="alert" className="mt-2 text-[12px] text-red-600">{cancelError}</p>}
+            <div className="flex gap-2 mt-4">
+              <button type="button" onClick={cancelOrder} disabled={cancelBusy} data-testid="account-cancel-confirm" className="rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-5 h-10 text-sm disabled:opacity-60">{cancelBusy ? "Annulation…" : "Oui, annuler"}</button>
+              <button type="button" onClick={() => setCancelOpen(false)} className="rounded-full border border-[#d9c5cc] px-5 h-10 text-sm hover:bg-[#f5edf1]">Retour</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -301,6 +381,7 @@ export default function Compte() {
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [contactCfg, setContactCfg] = useState(DEFAULT_CONTACT);
   const [questionOpenId, setQuestionOpenId] = useState(null);
+  const [ordersVersion, setOrdersVersion] = useState(0); // ZENORIA_STEP3C2_V1 : recharge apres annulation
   const [logoutAsk, setLogoutAsk] = useState(false); // fenetre "garder le panier ?" a la deconnexion
   const [logoutCartCount, setLogoutCartCount] = useState(0);
   useEffect(() => {
@@ -385,7 +466,7 @@ export default function Compte() {
     (async () => {
       setOrdersLoading(true);
       const [ordersRes, contactRes, reviewRes] = await Promise.all([
-        supabase.from("orders").select("*").eq("user_id", user.id).in("status", CUSTOMER_VISIBLE_STATUSES).order("created_at", { ascending: false }), // ZENORIA_ACCOUNT_FIX1_V1 : filtre explicite (ne pas dépendre de la RLS, qui laisse un compte admin tout voir)
+        supabase.from("orders").select("*").eq("user_id", user.id).order("created_at", { ascending: false }), // ZENORIA_ACCOUNT_FIX1_V1 : filtre explicite (ne pas dépendre de la RLS, qui laisse un compte admin tout voir) ; ZENORIA_STEP3C2_V1 : plus de filtre de statut ici (tri effectue ensuite, voir plus bas)
         supabase.from(SITE_SETTINGS_TABLE).select("value").eq("key", CONTACT_KEY).maybeSingle(),
         supabase.rpc("list_reviewable_items"),
       ]);
@@ -420,11 +501,15 @@ export default function Compte() {
         history.filter((h) => h.order_id === o.id).forEach((h) => { steps[h.status] = h.changed_at; });
         return { ...o, reference: formatOrderReference(o), items: oItems, steps };
       });
-      setOrders(enriched);
+      // ZENORIA_STEP3C2_V1 : virement (tout statut) + commandes carte abouties + 5 dernieres commandes carte non abouties
+      const transferOrders = enriched.filter((o) => o.payment_method === "transfer");
+      const cardFinished = enriched.filter((o) => o.payment_method !== "transfer" && CUSTOMER_VISIBLE_STATUSES.includes(o.status));
+      const cardUnfinished = enriched.filter((o) => o.payment_method !== "transfer" && !CUSTOMER_VISIBLE_STATUSES.includes(o.status)).slice(0, 5);
+      setOrders([...transferOrders, ...cardFinished, ...cardUnfinished]);
       setOrdersLoading(false);
     })();
     return () => { alive = false; };
-  }, [user]);
+  }, [user, ordersVersion]); // ZENORIA_STEP3C2_V1 : recharge apres annulation
 
   const showReviews = Boolean(reviewsCfg.enabled || isAdmin);
   const canUseReviews = Boolean(user) && showReviews;
@@ -622,7 +707,9 @@ export default function Compte() {
 
 
   const selectedOrder = orders.find((o) => o.id === selectedOrderId) || null;
-  const lastOrder = orders[0] || null;
+  const finishedOrders = orders.filter((o) => CUSTOMER_VISIBLE_STATUSES.includes(o.status)); // ZENORIA_STEP3C2_V1
+  const pendingTransferOrders = orders.filter((o) => o.status === "pending_transfer"); // ZENORIA_STEP3C2_V1
+  const lastOrder = finishedOrders[0] || null;
   const maxChars = REVIEWS_RULES.maxCommentLength;
 
   return (
@@ -720,8 +807,8 @@ export default function Compte() {
                   <h2 className="font-serif text-2xl text-[#412f3b] mb-4">Accueil</h2>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
                     <button type="button" onClick={() => go("commandes")} className="text-left rounded-2xl border border-[#eee2e5] p-4 hover:border-[#d9c5cc]">
-                      <div className="font-serif text-2xl text-[#412f3b]">{ordersLoading ? "…" : orders.length}</div>
-                      <div className="text-xs text-[#8b737e]">commande{orders.length > 1 ? "s" : ""}</div>
+                      <div className="font-serif text-2xl text-[#412f3b]">{ordersLoading ? "…" : finishedOrders.length}</div>
+                      <div className="text-xs text-[#8b737e]">commande{finishedOrders.length > 1 ? "s" : ""}</div>
                     </button>
                     {showReviews && (
                       <button type="button" onClick={() => go("avis")} className="text-left rounded-2xl border border-[#eee2e5] p-4 hover:border-[#d9c5cc]">
@@ -759,9 +846,17 @@ export default function Compte() {
                       <a href="/" className="inline-block rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-5 h-10 leading-10 text-sm">Découvrir les créations</a>
                     </div>
                   )}
+                  {pendingTransferOrders.map((o) => (
+                    <div key={o.id} className="mt-4 rounded-2xl border border-[#eee2e5] p-4" data-testid={`home-pending-transfer-${o.id}`}>
+                      <div className="flex justify-between items-center mb-1">
+                        <h3 className="font-serif text-lg text-[#412f3b]">Commande en attente de virement</h3>
+                        <button type="button" onClick={() => { setSelectedOrderId(o.id); go("commandes"); }} className="text-xs text-[#8f6075] underline">Voir les instructions</button>
+                      </div>
+                      <div className="text-sm text-[#54434c]">Commande {o.reference} · {formatOrderPrice(o.total)}{o.transfer_due_at ? <> · à régler avant le {formatDate(o.transfer_due_at)}</> : null}</div>
+                    </div>
+                  ))}
                 </div>
               )}
-
               {current && current.id === "commandes" && (
                 <div data-testid="section-commandes">
                   {selectedOrder ? (
@@ -771,11 +866,12 @@ export default function Compte() {
                       questionOpen={questionOpenId}
                       setQuestionOpen={setQuestionOpenId}
                       onBack={() => setSelectedOrderId(null)}
+                      onOrderChanged={() => { setSelectedOrderId(null); setOrdersVersion((v) => v + 1); }} // ZENORIA_STEP3C2_V1
                     />
                   ) : (
                     <>
                       <h2 className="font-serif text-2xl text-[#412f3b] mb-1">Mes commandes</h2>
-                      <p className="text-xs text-[#8b737e] mb-4">Les commandes payées, expédiées ou livrées apparaissent ici.</p>
+                      <p className="text-xs text-[#8b737e] mb-4">Vos commandes abouties, vos commandes en attente de virement et vos 5 derniers paiements par carte non finalisés apparaissent ici.</p>
                       {ordersLoading ? (
                         <p className="text-sm text-[#8b737e]">Chargement…</p>
                       ) : orders.length === 0 ? (
@@ -795,7 +891,7 @@ export default function Compte() {
                                 <div className="text-sm font-medium truncate">Commande {o.reference}</div>
                                 <div className="text-xs text-[#8b737e]">Passée le {formatDate(o.created_at)} · {o.items.length} bijou{o.items.length > 1 ? "x" : ""} · {formatOrderPrice(o.total)}</div>
                               </div>
-                              <span className={`rounded-full px-3 py-1 text-xs whitespace-nowrap ${orderStatusInfo(o.status).className}`}>{orderStatusInfo(o.status).label}</span>
+                              <span className={`rounded-full px-3 py-1 text-xs whitespace-nowrap ${customerOrderBadge(o).className}`}>{customerOrderBadge(o).label}</span>
                             </button>
                           ))}
                         </div>

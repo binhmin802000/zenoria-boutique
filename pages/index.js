@@ -22,6 +22,7 @@ import SeasonIcon from "@/components/SeasonIcon";
 import Mannequin from "@/components/Mannequin";
 import { RingVisual, AvailabilityBadge, PriceTag } from "@/components/ProductParts";
 import ProductSheet from "@/components/ProductSheet";
+import TransferInstructions from "@/components/TransferInstructions"; // ZENORIA_STEP3C_V1
 import FavoriteButton from "@/components/FavoriteButton";
 import CrystalLogo from "@/components/CrystalLogo";
 import Footer from "@/components/Footer";
@@ -197,6 +198,34 @@ function UniqueNotice({ product, contactSettings }) {
   );
 }
 
+function PieceUnavailableNotice({ contactSettings, names }) {
+  const hasEmail = Boolean(contactSettings.email.enabled && contactSettings.email.value.trim());
+  const hasWhatsapp = Boolean(contactSettings.whatsapp.enabled && contactSettings.whatsapp.value.trim());
+  const label = names.length ? names.join(", ") : "cette création";
+  const subject = `À propos de « ${label} »`;
+  const body = `Bonjour,\n\nLa bague « ${label} » m'intéresse. Est-elle disponible, ou pouvez-vous me proposer une création qui s'en inspire ?\n`;
+  const waText = `Bonjour, la bague « ${label} » m'intéresse. Est-elle disponible ?`;
+  const href = hasEmail
+    ? buildMailtoLink(contactSettings.email.value.trim(), subject, body)
+    : hasWhatsapp
+    ? buildWhatsAppLink(contactSettings.whatsapp.value.trim(), waText)
+    : null;
+  return (
+    <p role="alert" data-testid="transfer-piece-unavailable" className="text-[11px] text-center rounded-lg bg-red-50 text-red-700 px-3 py-1.5 leading-4">
+      {names.length > 0 ? (
+        <>La pièce unique « {names.join(" », « ")} » vient d&apos;être réservée ou vendue. Retirez-la de votre panier pour continuer.</>
+      ) : (
+        <>Une pièce unique de votre panier vient d&apos;être réservée ou vendue. Retirez-la de votre panier pour continuer.</>
+      )}
+      {href && (
+        <>
+          {" "}
+          <a href={href} target={hasEmail ? undefined : "_blank"} rel="noopener noreferrer" className="underline">Si cette bague vous intéresse, écrivez-nous</a>.
+        </>
+      )}
+    </p>
+  );
+}
 export default function ZenoriaShop() {
   // --- Catalogue et codes promo, chargés depuis Supabase ---
   const [products, setProducts] = useState([]);
@@ -234,6 +263,7 @@ export default function ZenoriaShop() {
   const [paymentConfirmationOpen, setPaymentConfirmationOpen] = useState(false);
   const [transferShipping, setTransferShipping] = useState({ fullName: "", line1: "", line2: "", postalCode: "", city: "", phone: "" });
   const [transferResult, setTransferResult] = useState(null); // { orderId, total, dueAt } apres une commande par virement
+  const [pieceUnavailableIds, setPieceUnavailableIds] = useState([]); // ZENORIA_STEP3C_V1 : identifiants des pieces uniques refusees (PIECE_UNAVAILABLE)
   const [cartStep, setCartStep] = useState("cart"); // "cart" | "shipping" (virement : ecran Livraison dedie)
   const [logoutAsk, setLogoutAsk] = useState(false); // fenetre "garder le panier ?" a la deconnexion
   const [logoutNotice, setLogoutNotice] = useState(""); // message affiche apres la deconnexion
@@ -528,6 +558,7 @@ export default function ZenoriaShop() {
     [cartItems, products]
   );
   const cartCount = cartLines.reduce((s, l) => s + l.qty, 0);
+  const pieceUnavailableNames = pieceUnavailableIds.map((id) => { const p = products.find((x) => x.id === id); return p ? p.name : null; }).filter(Boolean); // ZENORIA_STEP3C_V1
   const transferStep = paymentMethod === "transfer" && Boolean(user) && cartStep === "shipping";
   const recapStep = paymentMethod === "transfer" && Boolean(user) && cartStep === "recap";
   const showShipHeader = !transferStep && !recapStep && cartLines.length > 0 && shippingCfg.enabled; // livraison offerte dans l'en-tete
@@ -535,7 +566,7 @@ export default function ZenoriaShop() {
     if (!cartOpen || paymentMethod !== "transfer" || !user || cartLines.length === 0) setCartStep("cart");
   }, [cartOpen, paymentMethod, user, cartLines.length]);
   useEffect(() => {
-    if (!cartOpen) setCheckoutError(""); // un message d erreur ne survit pas a la fermeture du panier
+    if (!cartOpen) { setCheckoutError(""); setPieceUnavailableIds([]); } // ZENORIA_STEP3C_V1 : un message d'erreur ou une piece indisponible ne survit pas a la fermeture du panier
   }, [cartOpen]);
   useEffect(() => {
     if (!logoutNotice) return undefined;
@@ -663,8 +694,11 @@ export default function ZenoriaShop() {
         clearCart();
         setCartOpen(false);
         setCgvAccepted(false);
+        setPieceUnavailableIds([]);
         setTransferResult({ orderId: data.orderId, total: data.total, dueAt: data.dueAt });
       } else {
+        // ZENORIA_STEP3C_V1 : une piece unique du panier vient d'etre reservee/vendue -> message avec le nom de la bague et un lien de contact
+        setPieceUnavailableIds(data && data.code === "PIECE_UNAVAILABLE" && Array.isArray(data.productIds) ? data.productIds : []);
         setCheckoutError((data && data.error) || "Impossible d'enregistrer la commande. Merci de réessayer.");
       }
     } catch (e) {
@@ -1399,8 +1433,8 @@ export default function ZenoriaShop() {
                     </div>
                     <div data-testid="transfer-recap-payment" className="rounded-xl bg-[#fbf7f9] border border-[#eee2e5] px-3 py-3 text-[12px] leading-5 text-[#54434c]">
                       <div className="text-[13px] font-medium text-[#412f3b]">Paiement par virement bancaire</div>
-                      <p className="mt-1">Une fois la commande validée, nous vous donnons l&apos;IBAN, le BIC et la référence à indiquer dans votre virement.</p>
-                      <p className="mt-1.5">Nous réservons vos pièces pour vous pendant <strong>{transferDelayDays ? transferDelayDays + " jour" + (transferDelayDays > 1 ? "s" : "") : "le délai indiqué à la confirmation"}</strong> après validation. Passé ce délai sans virement reçu, la commande est annulée automatiquement et les pièces sont remises en vente. La date et l&apos;heure exactes vous sont données à la confirmation.</p>
+                      <p className="mt-1">Une fois la commande validée, nous vous donnons l&apos;IBAN et la référence à indiquer dans votre virement.</p>
+                      <p className="mt-1.5">Nous réservons vos pièces pour vous pendant <strong>{transferDelayDays ? transferDelayDays + " jour" + (transferDelayDays > 1 ? "s" : "") : "le délai indiqué à la confirmation"}</strong> après validation. Passé ce délai sans virement reçu, la commande pourra être annulée et les pièces remises en vente. La date limite exacte vous est donnée à la confirmation.</p>
                     </div>
                   </div>
                   <div className="flex-none border-t border-[#eadfe4] bg-white/80 px-5 py-4 space-y-3">
@@ -1421,9 +1455,11 @@ export default function ZenoriaShop() {
                         </>
                       )}
                     </button>
-                    {checkoutError && (
+                    {pieceUnavailableIds.length > 0 ? (
+                      <PieceUnavailableNotice contactSettings={contactSettings} names={pieceUnavailableNames} />
+                    ) : checkoutError ? (
                       <p role="alert" className="text-[11px] text-center rounded-lg bg-red-50 text-red-600 px-3 py-1.5">{checkoutError}</p>
-                    )}
+                    ) : null}
                   </div>
                 </>
               ) : transferStep ? (
@@ -1837,15 +1873,17 @@ export default function ZenoriaShop() {
       {logoutNotice && (
         <div role="status" data-testid="logout-notice" className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[70] max-w-[90vw] rounded-full bg-[#412f3b] text-white text-sm px-5 py-2.5 shadow-lg text-center">{logoutNotice}</div>
       )}
-      {/* CONFIRMATION DE COMMANDE PAR VIREMENT (provisoire : IBAN et reference a l'etape 3e) */}
+      {/* CONFIRMATION DE COMMANDE PAR VIREMENT — ZENORIA_STEP3C_V1 */}
       {transferResult && (
         <div className="fixed inset-0 z-[60] grid place-items-center bg-black/40 px-4" role="dialog" aria-modal="true" data-testid="transfer-confirmation">
-          <div className="w-full max-w-md rounded-2xl bg-[#fbf8f4] p-6 shadow-2xl">
+          <div className="w-full max-w-md rounded-2xl bg-[#fbf8f4] p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <h3 className="font-serif text-2xl text-[#412f3b]">Commande enregistrée</h3>
-            <p className="mt-3 text-sm text-[#54434c]">Commande n°{transferResult.orderId} · {formatPrice(Number(transferResult.total))}</p>
-            <p className="mt-1 text-sm text-[#54434c]">À régler par virement avant le {new Date(transferResult.dueAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Paris" })}.</p>
-            <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-[12px] text-amber-900">Étape en cours de construction : les coordonnées bancaires et la référence seront affichées ici. Retrouvez cette commande dans Mon compte.</p>
-            <button type="button" onClick={() => setTransferResult(null)} data-testid="transfer-confirmation-close" className="mt-5 w-full rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white h-11 text-sm">Fermer</button>
+            <p className="mt-1 text-sm text-[#54434c]">Statut : en attente de virement.</p>
+            <div className="mt-3">
+              <TransferInstructions orderId={transferResult.orderId} contactCfg={contactSettings} />
+            </div>
+            <a href="/compte#commandes" data-testid="transfer-confirmation-account" className="mt-4 block text-center rounded-full border border-[#8f6075] text-[#8f6075] hover:bg-[#8f6075] hover:text-white h-11 leading-[2.75rem] text-sm font-medium transition">Voir ma commande</a>
+            <button type="button" onClick={() => setTransferResult(null)} data-testid="transfer-confirmation-close" className="mt-2 w-full rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white h-11 text-sm">Fermer</button>
           </div>
         </div>
       )}

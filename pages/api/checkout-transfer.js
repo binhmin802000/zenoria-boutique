@@ -27,6 +27,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { SITE_SETTINGS_TABLE } from "@/lib/siteSettings";
 import { SHIPPING_KEY, DEFAULT_SHIPPING, parseShippingSetting } from "@/lib/shippingSettings";
 import { computeTotals, effectivePrice } from "@/lib/cartTotals";
+import { BANK_TRANSFER_KEY, parseBankTransfer, isTransferReady } from "@/lib/paymentSettings"; // ZENORIA_STEP3B_V1 : coordonnées bancaires complètes avant toute commande
 import { isTestOrderMode } from "@/lib/testMode"; // ZENORIA_TEST_MODE_V1 : règle unique « commande de test » (carte et virement)
 
 function errorForCode(code) {
@@ -40,6 +41,7 @@ function errorForCode(code) {
     INVALID_QTY: { status: 400, message: "Quantité invalide pour un article." },
     UNIQUE_QTY: { status: 409, message: "Cette pièce unique est limitée à un seul exemplaire." },
     PRODUCT_UNAVAILABLE: { status: 409, message: "Un article de votre panier n'est plus disponible." },
+    PIECE_UNAVAILABLE: { status: 409, message: "Une pièce unique de votre panier vient d'être réservée ou vendue. Retirez-la de votre panier pour continuer. Si cette bague vous intéresse, écrivez-nous." },
     PRICE_MISMATCH: { status: 409, message: "Le prix d'un article a changé. Merci de recharger votre panier." },
     SUBTOTAL_MISMATCH: { status: 409, message: "Le total a changé. Merci de recharger votre panier." },
     TRANSFER_CAP: { status: 409, message: "Vous avez déjà 2 bagues en attente de virement. Finalisez ou annulez une commande pour en passer une nouvelle." },
@@ -169,6 +171,18 @@ export default async function handler(req, res) {
       unit_price: effectivePrice(l.product).toFixed(2),
     }));
 
+    // ZENORIA_STEP3B_V1 : les coordonnées bancaires doivent être complètes AVANT de créer la commande (et de réserver une pièce).
+    // L'administration bloque déjà l'activation sans IBAN valide ; ce contrôle protège d'un réglage modifié autrement (SQL) ou vidé après coup.
+    let bankReady = false;
+    try {
+      const { data: bankRow, error: bankErr } = await supabaseAdmin.from(SITE_SETTINGS_TABLE).select("value").eq("key", BANK_TRANSFER_KEY).maybeSingle();
+      if (!bankErr && bankRow) bankReady = isTransferReady(parseBankTransfer(bankRow.value));
+    } catch (bankCatchErr) {
+      console.error("[checkout-transfer] lecture des coordonnées bancaires :", bankCatchErr && bankCatchErr.message ? bankCatchErr.message : "erreur");
+    }
+    if (!bankReady) {
+      return res.status(503).json({ ok: false, error: "Le paiement par virement n'est pas disponible pour le moment. Vous pouvez payer par carte." });
+    }
     const isTest = isTestOrderMode(); // ZENORIA_TEST_MODE_V1 : commande de test tant que la clé Stripe n'est pas en mode réel (comme la carte), et non d'après l'environnement de déploiement
 
     // 8) Appelle la fonction SQL atomique (service_role, verifie tout en interne :
@@ -192,8 +206,19 @@ export default async function handler(req, res) {
     });
 
     if (rpcError) {
-      const { status, message } = errorForCode(rpcError.message);
-      return res.status(status).json({ ok: false, error: message });
+      // ZENORIA_STEP3B_V1 : code d'erreur de la fonction SQL (ex. « PIECE_UNAVAILABLE:18,21 ») ; les codes inconnus sont journalisés (code seulement, sans donnée personnelle)
+      const rawMessage = String(rpcError.message || "");
+      const { status, message } = errorForCode(rawMessage);
+      const errorCode = rawMessage.split(":")[0].trim();
+      const body = { ok: false, error: message };
+      if (errorCode === "PIECE_UNAVAILABLE") {
+        body.code = errorCode;
+        body.productIds = (rawMessage.split(":")[1] || "").split(",").map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0);
+      }
+      if (status >= 500) {
+        console.error("[checkout-transfer] erreur non traduite de create_transfer_order :", errorCode.slice(0, 80) || "(sans code)", rpcError.code || "");
+      }
+      return res.status(status).json(body);
     }
 
     return res.status(200).json({

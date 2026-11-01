@@ -304,7 +304,7 @@ function TransferPanel({ order, history, onDone }) {
   if (order.status === "cancelled" && order.cancelled_at) {
     // ZENORIA_ORDER_JOURNAL_V1 : le motif est lu dans la derniere ligne d'annulation du journal de la commande
     const cancelEntry = [...(history || [])].reverse().find((h) => h.status === "cancelled" && h.note);
-    const cancelReason = cancelEntry ? String(cancelEntry.note).replace(/^Annulée par l.administration\s*:\s*/i, "Motif : ") : "";
+    const cancelReason = cancelEntry ? String(cancelEntry.note).replace(/^Annulée par l.administration\s*:\s*/i, "Motif : ").replace(/^Annulée par la cliente depuis Mes commandes\.\s*/i, "") : "";
     return (
       <div data-testid="transfer-cancelled-note" className="mb-4 rounded-xl bg-white border border-[#eee2e5] px-4 py-3 text-[13px] text-[#54434c]">
         <span className="font-medium text-[#412f3b]">Commande annulée</span> le {formatDateTime(order.cancelled_at)}{" "}
@@ -345,7 +345,7 @@ function TransferPanel({ order, history, onDone }) {
     } else if (kind === "extend") {
       const n = Number(days);
       if (!Number.isInteger(n) || n < 1 || n > 60) { setError(transferErrorMessage("INVALID_DAYS", "extend")); return; }
-      call = () => supabase.rpc("admin_extend_transfer", { p_order_id: order.id, p_days: n });
+      call = () => supabase.rpc("admin_extend_transfer", { p_order_id: order.id, p_days: n, p_note: note.trim() || null }); // ZENORIA_STEP3B_V1 : note facultative, visible par la cliente
       okMessage = "Échéance prolongée de " + n + " jour" + (n > 1 ? "s" : "") + ".";
     } else {
       if (reason === "other" && !note.trim()) { setError(transferErrorMessage("NOTE_REQUIRED", "cancel")); return; }
@@ -398,7 +398,7 @@ function TransferPanel({ order, history, onDone }) {
             <label className="text-[12px] text-[#54434c]">Montant reçu (€)<br /><input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" data-testid="transfer-amount" className={field + " w-32"} /></label>
             <label className="text-[12px] text-[#54434c]">Date de réception<br /><input type="date" value={received} min={parisDay(order.created_at)} max={parisDay(new Date())} onChange={(e) => setReceived(e.target.value)} data-testid="transfer-received" className={field} /></label>
           </div>
-          <label className="block text-[12px] text-[#54434c]">{gap ? "Note (obligatoire : le montant diffère du total)" : "Note (facultative)"}<br /><input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} data-testid="transfer-note" className={field + " w-full"} /></label>
+          <label className="block text-[12px] text-[#54434c]">{gap ? "Note visible par la cliente (obligatoire : le montant diffère du total)" : "Note visible par la cliente (facultative)"}<br /><input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} data-testid="transfer-note" className={field + " w-full"} /></label>
           <p className="text-[11px] text-[#8b737e]">La commande passe en « Payée », la pièce est vendue et la facture est créée. Cette action ne peut pas être annulée.</p>
           <div className="flex flex-wrap gap-2">
             <button type="button" disabled={busy} onClick={() => run("confirm")} data-testid="transfer-confirm-submit" className={primary}>{busy ? "Enregistrement…" : "Confirmer"}</button>
@@ -410,6 +410,8 @@ function TransferPanel({ order, history, onDone }) {
         <div data-testid="transfer-extend-form" className="rounded-xl bg-[#faf6f8] border border-[#eee2e5] px-3 py-3 space-y-2.5">
           <div className="text-[13px] font-medium text-[#412f3b]">Prolonger l&apos;échéance</div>
           <label className="text-[12px] text-[#54434c]">Nombre de jours (1 à 60)<br /><input type="number" min={1} max={60} value={days} onChange={(e) => setDays(e.target.value)} data-testid="transfer-days" className={field + " w-28"} /></label>
+          <label className="block text-[12px] text-[#54434c]">Note pour la cliente (facultative)<br /><input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} data-testid="transfer-extend-note" className={field + " w-full"} /></label>
+          <p className="text-[11px] text-[#8b737e]">Cette note sera visible par la cliente.</p>
           <p className="text-[11px] text-[#8b737e]">Le délai repart de l&apos;échéance actuelle, ou d&apos;aujourd&apos;hui si elle est dépassée.</p>
           <div className="flex flex-wrap gap-2">
             <button type="button" disabled={busy} onClick={() => run("extend")} data-testid="transfer-extend-submit" className={primary}>{busy ? "Enregistrement…" : "Prolonger"}</button>
@@ -431,7 +433,7 @@ function TransferPanel({ order, history, onDone }) {
                 </label>
               ))}
             </div>
-            <label className="mt-3 block text-[12px] text-[#54434c]">{reason === "other" ? "Note (obligatoire)" : "Note (facultative)"}<br /><textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} rows={3} data-testid="transfer-cancel-note" className="mt-1 w-full rounded-xl border border-[#eadfe4] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#8f6075]" /></label>
+            <label className="mt-3 block text-[12px] text-[#54434c]">{reason === "other" ? "Note visible par la cliente (obligatoire)" : "Note visible par la cliente (facultative)"}<br /><textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} rows={3} data-testid="transfer-cancel-note" className="mt-1 w-full rounded-xl border border-[#eadfe4] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#8f6075]" /></label>
             <p className="mt-3 rounded-lg bg-amber-50 text-amber-800 text-[12px] px-3 py-2">Les pièces sont remises en vente tout de suite. Si le virement est arrivé, confirmez l&apos;encaissement au lieu d&apos;annuler. Cette action ne peut pas être annulée.</p>
             {error && <div role="alert" className="mt-3 rounded-xl bg-red-50 text-red-600 px-3 py-2 text-xs">{error}</div>}
             <div className="mt-4 flex flex-wrap gap-2">
@@ -492,6 +494,7 @@ function OrderHistoryLog({ history }) {
                 <span className="min-w-0">
                   <span className={"rounded-full px-2.5 py-0.5 text-[11px] whitespace-nowrap " + info.className}>{info.label}</span>
                   {h.note && <span className="block mt-1 leading-5">{h.note}</span>}
+                  {h.customer_visible && <span data-testid="order-history-visible" className="block text-[11px] text-[#8f6075]">Visible par la cliente</span>}
                   {h.actor_email && <span className="block text-[11px] text-[#8b737e]">{h.actor_email}</span>}
                 </span>
               </li>

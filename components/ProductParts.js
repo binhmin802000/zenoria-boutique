@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { getMediaUrl } from "@/lib/supabase";
 import { formatPrice, getAvailability } from "@/lib/shopUtils";
+import { buildMailtoLink, buildWhatsAppLink } from "@/lib/contactSettings"; // ZENORIA_STOCK_UI_V1
 
 // ============================================================================
 // ÉLÉMENTS DE FICHE BAGUE partagés entre l'accueil et la page du quiz :
@@ -72,17 +73,152 @@ export function RingVisual({ product, large = false, circle = false, video = fal
   );
 }
 
-// Pastille de disponibilité
+// ZENORIA_STOCK_UI_V1 : pastille de disponibilité (plus de fabrication sur commande, aucun chiffre affiché)
 export function AvailabilityBadge({ product, qty = 0, showDetail = false }) {
   const a = getAvailability(product, qty);
-  const color = a.state === "in-stock" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700";
-  const dot = a.state === "in-stock" ? "bg-emerald-500" : "bg-amber-500";
+  const tone =
+    a.state === "in-stock"
+      ? { color: "bg-emerald-50 text-emerald-700", dot: "bg-emerald-500" }
+      : a.state === "out-of-stock" || a.state === "sold"
+      ? { color: "bg-[#eeeaec] text-[#6b5f66]", dot: "bg-[#9d9197]" }
+      : { color: "bg-amber-50 text-amber-700", dot: "bg-amber-500" };
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs ${color}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs ${tone.color}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${tone.dot}`} />
       {a.label}
       {showDetail && a.detail ? ` · ${a.detail}` : ""}
     </span>
+  );
+}
+// Lien « Écrivez-nous » : e-mail en priorité, sinon WhatsApp ; null si aucun canal n'est actif ou si la page n'a pas fourni les réglages
+export function contactLink(contactSettings, subject, emailBody, waText) {
+  const c = contactSettings || {};
+  const email = c.email && c.email.enabled && typeof c.email.value === "string" ? c.email.value.trim() : "";
+  const wa = c.whatsapp && c.whatsapp.enabled && typeof c.whatsapp.value === "string" ? c.whatsapp.value.trim() : "";
+  if (email) return { href: buildMailtoLink(email, subject, emailBody), external: false };
+  if (wa) return { href: buildWhatsAppLink(wa, waText), external: true };
+  return null;
+}
+// Bijou normal épuisé : remplace le bouton « Ajouter au panier » (texte validé)
+// ZENORIA_STOCK_UI2_V1 : message sous une ligne du panier qui ne peut pas être commandée telle quelle (textes validés)
+export function CartLineNotice({ product, state, contactSettings }) {
+  if (!product) return null;
+  if (state === "insufficient") {
+    const link = contactLink(
+      contactSettings,
+      `À propos de « ${product.name} »`,
+      `Bonjour,\n\nJe souhaiterais davantage d'exemplaires de « ${product.name} ». Est-ce possible ?\n`,
+      `Bonjour, je souhaiterais davantage d'exemplaires de « ${product.name} ». Est-ce possible ?`
+    );
+    return (
+      <div data-testid="cart-line-insufficient" className="text-[11px] leading-4 text-amber-800 mt-1">
+        {`Il ne reste pas assez d'exemplaires de « ${product.name} » : réduisez la quantité pour continuer. Si vous en souhaitez davantage, `}
+        {link ? (
+          <a href={link.href} target={link.external ? "_blank" : undefined} rel="noopener noreferrer" className="underline">écrivez-nous</a>
+        ) : (
+          "écrivez-nous"
+        )}
+        .
+      </div>
+    );
+  }
+  return (
+    <div data-testid="cart-line-unavailable" className="text-[11px] leading-4 text-red-700 mt-1">
+      {`« ${product.name} » n'est plus disponible. Retirez cet article de votre panier pour continuer.`}
+    </div>
+  );
+}
+// Carte du catalogue d'un bijou normal épuisé : « Écrivez-nous » à la place du bouton « Ajouter au panier »
+export function CatalogWriteUs({ product, contactSettings }) {
+  if (!product) return null;
+  const link = contactLink(
+    contactSettings,
+    `À propos de « ${product.name} »`,
+    `Bonjour,\n\nJe souhaite savoir si « ${product.name} » sera de nouveau disponible. Pouvez-vous me prévenir ?\n`,
+    `Bonjour, je souhaite savoir si « ${product.name} » sera de nouveau disponible. Pouvez-vous me prévenir ?`
+  );
+  const cls = "flex w-full mt-5 h-10 items-center justify-center rounded-full border border-[#d9c5cc] text-sm text-[#8f6075] hover:bg-[#f5edf1] transition";
+  return link ? (
+    <a href={link.href} target={link.external ? "_blank" : undefined} rel="noopener noreferrer" data-testid="catalog-write-us" className={cls}>
+      Écrivez-nous
+    </a>
+  ) : (
+    <span data-testid="catalog-write-us" className={cls}>Épuisé</span>
+  );
+}
+// Bijou normal épuisé : remplace le bouton « Ajouter au panier » (texte validé)
+export function UnavailableNotice({ product, contactSettings }) {
+  if (!product) return null;
+  const link = contactLink(
+    contactSettings,
+    `À propos de « ${product.name} »`,
+    `Bonjour,\n\nJe souhaite savoir si « ${product.name} » sera de nouveau disponible. Pouvez-vous me prévenir ?\n`,
+    `Bonjour, je souhaite savoir si « ${product.name} » sera de nouveau disponible. Pouvez-vous me prévenir ?`
+  );
+  return (
+    <p data-testid="product-unavailable" className="mt-7 text-sm leading-6 text-[#54434c] rounded-xl bg-[#f5edf1] px-4 py-3">
+      Cette création est actuellement épuisée.{" "}
+      {link ? (
+        <>
+          <a href={link.href} target={link.external ? "_blank" : undefined} rel="noopener noreferrer" className="underline text-[#8f6075]">Écrivez-nous</a>{" "}
+          pour savoir si elle sera de nouveau disponible.
+        </>
+      ) : (
+        "Écrivez-nous pour savoir si elle sera de nouveau disponible."
+      )}
+    </p>
+  );
+}
+// Encart « pièce unique » à trois états (validé) : disponible, réservée, vendue
+export function PieceUniqueNotice({ product, contactSettings }) {
+  if (!product || product.isUnique !== true) return null;
+  const state = product.pieceState === "sold" ? "sold" : product.pieceState === "reserved" ? "reserved" : "available";
+  const base = "text-sm leading-6 text-[#54434c] mt-4 rounded-xl bg-[#f5edf1] px-4 py-3";
+  if (state === "available") {
+    return (
+      <p data-testid="unique-notice" data-state="available" className={base}>
+        <span className="font-medium">✦ Pièce unique</span> — Façonnée une seule fois, elle ne sera jamais reproduite à l&apos;identique.
+      </p>
+    );
+  }
+  if (state === "reserved") {
+    const link = contactLink(
+      contactSettings,
+      `À propos de « ${product.name} »`,
+      `Bonjour,\n\nLa pièce unique « ${product.name} » m'intéresse, mais elle est actuellement réservée. Pourriez-vous me prévenir si elle redevient disponible ?\n`, // ZENORIA_STOCK_UI2B_V1
+      `Bonjour, la pièce unique « ${product.name} » m'intéresse, mais elle est actuellement réservée. Pourriez-vous me prévenir si elle redevient disponible ?`
+    );
+    return (
+      <p data-testid="unique-notice" data-state="reserved" className={base}>
+        <span className="font-medium">✦ Pièce unique</span> — Cette pièce unique est réservée par une autre cliente, dans l&apos;attente de son paiement. Si cette réservation n&apos;aboutit pas, elle pourra être de nouveau proposée.
+        {link && (
+          <>
+            {" "}
+            <a href={link.href} target={link.external ? "_blank" : undefined} rel="noopener noreferrer" className="underline text-[#8f6075]">Nous écrire</a>
+          </>
+        )}
+      </p>
+    );
+  }
+  const link = contactLink(
+    contactSettings,
+    `À propos de « ${product.name} »`,
+    `Bonjour,\n\nLe modèle « ${product.name} » m'a touchée, et j'aimerais en savoir plus sur une création qui s'en inspire.\n`,
+    `Bonjour, le modèle « ${product.name} » m'a touchée, j'aimerais en savoir plus sur une création qui s'en inspire.`
+  );
+  return (
+    <p data-testid="unique-notice" data-state="sold" className={base}>
+      <span className="font-medium">✦ Pièce unique</span> — Façonnée une seule fois, elle ne sera jamais reproduite à l&apos;identique.{" "}
+      {link ? (
+        <>
+          Elle vous touche ?{" "}
+          <a href={link.href} target={link.external ? "_blank" : undefined} rel="noopener noreferrer" className="underline text-[#8f6075]">Écrivez-nous</a>
+          {" "}: nous pouvons imaginer une création qui s&apos;en inspire.
+        </>
+      ) : (
+        "Contactez-nous pour en savoir plus sur une création qui s'en inspire."
+      )}
+    </p>
   );
 }
 

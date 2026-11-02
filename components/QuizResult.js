@@ -5,6 +5,7 @@ import SeasonIcon from "@/components/SeasonIcon";
 import { getMediaUrl } from "@/lib/supabase";
 import { HAIR, EYES, SKIN, SEASON_WHY, traitLabels, borderlineNote } from "@/lib/colorEngine";
 import { OCCASIONS, AVOID, outfitFor, occasionByKey, flatteringGarment } from "@/lib/quizOutfits";
+import { getAvailability } from "@/lib/shopUtils"; // ZENORIA_STOCK_UI_V1
 
 // ============================================================
 // QUIZ — le résultat : carte « révélation », bagues conseillées, couleurs de vêtements, barre compacte.
@@ -195,11 +196,13 @@ export default function QuizResult({ profile, rec, views, catalog, productsBySlu
                       Voir la bague
                     </a>
                   )}
-                  {prod && (
-                    <button type="button" onClick={() => onAdd(prod)} data-testid="quiz-add" className="rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-4 py-1.5 text-sm">
-                      Ajouter au panier
-                    </button>
-                  )}
+                  {prod && (getAvailability(prod).orderable ? (
+                      <button type="button" onClick={() => onAdd(prod)} data-testid="quiz-add" className="rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-4 py-1.5 text-sm">
+                        Ajouter au panier
+                      </button>
+                    ) : (
+                      <span data-testid="quiz-unavailable" className="self-center text-sm text-[#8b737e]">Actuellement indisponible</span>
+                    ))}
                 </div>
               </div>
             </article>

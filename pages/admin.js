@@ -65,7 +65,7 @@ const emptyProduct = {
   energy: "",
   price: "",
   promo_price: "",
-  stock: 5,
+  stock: 0, // ZENORIA_STOCK_UI_V1 : pas de stock par défaut, c'est l'administration qui le saisit
   pitch: "",
   dominant_colors: [],
   photos: [],

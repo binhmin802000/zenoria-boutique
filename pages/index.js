@@ -20,7 +20,7 @@ import BannerBar from "@/components/BannerBar";
 import SeasonFx from "@/components/SeasonFx";
 import SeasonIcon from "@/components/SeasonIcon";
 import Mannequin from "@/components/Mannequin";
-import { RingVisual, AvailabilityBadge, PriceTag } from "@/components/ProductParts";
+import { RingVisual, AvailabilityBadge, PriceTag, PieceUniqueNotice, CartLineNotice, CatalogWriteUs } from "@/components/ProductParts"; // ZENORIA_STOCK_UI2_V1
 import ProductSheet from "@/components/ProductSheet";
 import TransferInstructions from "@/components/TransferInstructions"; // ZENORIA_STEP3C_V1
 import FavoriteButton from "@/components/FavoriteButton";
@@ -34,7 +34,7 @@ import {
   removeFavorite,
   mergeLocalFavoritesIntoAccount,
 } from "@/lib/favorites";
-import { formatPrice, getAvailability } from "@/lib/shopUtils";
+import { formatPrice, getAvailability, pieceStateMap, maxQtyFor } from "@/lib/shopUtils";
 import { parseCartReturnHash, encodeResultHash } from "@/lib/quizState";
 import {
   visibleFamilies, buildSeasonCards, buildFamilyChips, filterByFamily, productLabel, familyOfProduct,
@@ -59,8 +59,7 @@ import TextLines from "@/components/TextLines";
 // ============================================================
 // ZENORIA_SHIPPING_RULE_V1 : les frais de livraison, les arrondis, le prix effectif et le calcul du panier viennent de lib/cartTotals.js
 // Le seuil de livraison offerte et son interrupteur se règlent dans l'admin (Contenu du site) : voir lib/shippingSettings.js
-const MAX_QTY_PER_PRODUCT = 10;         // quantité max par bague (stock + fabrication sur commande)
-// Le délai de fabrication une fois le stock épuisé (BACKORDER_LEAD_TIME) se règle dans lib/shopUtils.js
+// ZENORIA_STOCK_UI2_V1 : plus de plafond fixe. La quantité maximale est le stock saisi dans l'administration (1 pour une pièce unique) : maxQtyFor (lib/shopUtils.js).
 const CART_STORAGE_KEY = "zenoria_cart_v2";
 // ============================================================
 // Le catalogue (collections) et les codes promo ne sont plus codés
@@ -335,16 +334,18 @@ export default function ZenoriaShop() {
   useEffect(() => {
     let active = true;
     (async () => {
-      const [{ data: prodData, error: prodErr }, { data: promoData }, { data: siteData }, famRes, banRes, fxRes] = await Promise.all([
+      const [{ data: prodData, error: prodErr }, { data: promoData }, { data: siteData }, famRes, banRes, fxRes, pieceRes] = await Promise.all([
         supabase.from("products").select("*").eq("active", true).order("id"),
         supabase.from("promo_codes").select("*").eq("active", true),
         supabase.from("site_media").select("*"),
         optionalQuery(supabase.from("families").select("*").order("sort_order", { ascending: true })),
         optionalQuery(supabase.from("banners").select("*")),
         optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").in("key", [SEASON_FX_KEY, SHIPPING_KEY, SITE_TEXTS_KEY, CONTACT_KEY, REVIEWS_KEY, PAYMENT_METHODS_KEY])),
+        optionalQuery(supabase.rpc("public_piece_states")), // ZENORIA_STOCK_UI2_V1
       ]);
       if (!active) return;
-      const loadedProducts = !prodErr && prodData ? prodData.map(mapDbProduct) : [];
+      const pieceMapAtLoad = pieceStateMap(pieceRes && !pieceRes.error ? pieceRes.data : null);
+      const loadedProducts = !prodErr && prodData ? prodData.map(mapDbProduct).map((p) => ({ ...p, pieceState: pieceMapAtLoad.get(p.id) || null })) : [];
       setProducts(loadedProducts);
       const promoMap = {};
       (promoData || []).forEach((p) => {
@@ -386,7 +387,7 @@ export default function ZenoriaShop() {
           const items = (saved.items || [])
             .map((i) => {
               const p = loadedProducts.find((x) => x.id === i.id);
-              return p ? { id: p.id, qty: Math.min(MAX_QTY_PER_PRODUCT, Math.max(1, Number(i.qty) || 1)) } : null;
+              return p ? { id: p.id, qty: p.isUnique === true ? 1 : Math.max(1, Number(i.qty) || 1) } : null;
             })
             .filter(Boolean);
           setCartItems(items);
@@ -558,6 +559,7 @@ export default function ZenoriaShop() {
     [cartItems, products]
   );
   const cartCount = cartLines.reduce((s, l) => s + l.qty, 0);
+  const cartBlocked = cartLines.some(({ product, qty }) => { const a = getAvailability(product, qty); return !a.orderable || a.state === "insufficient"; }); // ZENORIA_STOCK_UI2_V1
   const pieceUnavailableNames = pieceUnavailableIds.map((id) => { const p = products.find((x) => x.id === id); return p ? p.name : null; }).filter(Boolean); // ZENORIA_STEP3C_V1
   const transferStep = paymentMethod === "transfer" && Boolean(user) && cartStep === "shipping";
   const recapStep = paymentMethod === "transfer" && Boolean(user) && cartStep === "recap";
@@ -567,6 +569,39 @@ export default function ZenoriaShop() {
   }, [cartOpen, paymentMethod, user, cartLines.length]);
   useEffect(() => {
     if (!cartOpen) { setCheckoutError(""); setPieceUnavailableIds([]); } // ZENORIA_STEP3C_V1 : un message d'erreur ou une piece indisponible ne survit pas a la fermeture du panier
+  }, [cartOpen]);
+  // ZENORIA_STOCK_UI2_V1 : à l'ouverture du panier, une seule lecture du stock et de l'état des pièces des articles du panier
+  // (pas d'interrogation régulière : le serveur reste la seule garantie au moment de payer).
+  useEffect(() => {
+    if (!cartOpen || cartItems.length === 0) return undefined;
+    let alive = true;
+    const ids = cartItems.map((i) => i.id);
+    Promise.all([
+      optionalQuery(supabase.from("products").select("id, stock, is_unique, active").in("id", ids)),
+      optionalQuery(supabase.rpc("public_piece_states")),
+    ]).then(([stockRes, pieceRes]) => {
+      if (!alive) return;
+      const rows = stockRes && !stockRes.error && Array.isArray(stockRes.data) ? stockRes.data : null;
+      if (!rows) return;
+      const pieceMap = pieceStateMap(pieceRes && !pieceRes.error ? pieceRes.data : null);
+      const pieceKnown = Boolean(pieceRes && !pieceRes.error && Array.isArray(pieceRes.data));
+      setProducts((prev) =>
+        prev.map((p) => {
+          const r = rows.find((x) => x.id === p.id);
+          if (!r) return p;
+          return {
+            ...p,
+            stock: r.active === false ? 0 : typeof r.stock === "number" ? r.stock : 0,
+            isUnique: r.is_unique === true,
+            pieceState: pieceKnown ? pieceMap.get(p.id) || null : p.pieceState,
+          };
+        })
+      );
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cartOpen]);
   useEffect(() => {
     if (!logoutNotice) return undefined;
@@ -613,8 +648,13 @@ export default function ZenoriaShop() {
   const addToCart = (p) => {
     const current = cartItems.find((i) => i.id === p.id);
     setCheckoutNotice(false);
-    if (current && current.qty >= MAX_QTY_PER_PRODUCT) {
-      setCartNotice(`Quantité maximale atteinte pour « ${p.name} ».`);
+    if (!getAvailability(p).orderable) {
+      setCartNotice(p.isUnique === true ? `« ${p.name} » n'est plus disponible.` : `« ${p.name} » est épuisée pour le moment.`);
+      setCartOpen(true);
+      return;
+    }
+    if (current && current.qty >= maxQtyFor(p)) {
+      setCartNotice(p.isUnique === true ? `« ${p.name} » est une pièce unique : un seul exemplaire possible.` : `Il ne reste pas d'autre exemplaire de « ${p.name} ».`);
       setCartOpen(true);
       return;
     }
@@ -630,13 +670,13 @@ export default function ZenoriaShop() {
     const current = cartItems.find((i) => i.id === p.id);
     if (!current) return;
     setCheckoutNotice(false);
-    if (delta > 0 && current.qty >= MAX_QTY_PER_PRODUCT) {
-      setCartNotice(`Quantité maximale atteinte pour « ${p.name} ».`);
+    if (delta > 0 && current.qty >= maxQtyFor(p)) {
+      setCartNotice(`Il ne reste pas d'autre exemplaire de « ${p.name} ».`);
       return;
     }
     setCartNotice("");
     setCartItems(
-      cartItems.map((i) => (i.id === p.id ? { ...i, qty: Math.min(MAX_QTY_PER_PRODUCT, Math.max(1, i.qty + delta)) } : i))
+      cartItems.map((i) => (i.id === p.id ? { ...i, qty: Math.max(1, i.qty + delta) } : i))
     );
   };
   const removeLine = (p) => {
@@ -1200,9 +1240,13 @@ export default function ZenoriaShop() {
                           {p.videoCount} vidéo
                         </button>
                       </div>
-                      <Button onClick={() => addToCart(p)} variant="outline" className="w-full mt-5 rounded-full border-[#b88d9f] hover:bg-[#8f6075] hover:text-white">
-                        Ajouter au panier
-                      </Button>
+                      {p.isUnique !== true && !getAvailability(p).orderable ? (
+                        <CatalogWriteUs product={p} contactSettings={contactSettings} />
+                      ) : (
+                        <Button onClick={() => addToCart(p)} variant="outline" className="w-full mt-5 rounded-full border-[#b88d9f] hover:bg-[#8f6075] hover:text-white">
+                          Ajouter au panier
+                        </Button>
+                      )}
                     </CardContent>
                   </Card>
                 ))}
@@ -1515,13 +1559,14 @@ export default function ZenoriaShop() {
                                 </button>
                               )}
                             </div>
-                            {cartDensity === "comfort" && (
-                              <div className="mt-1.5">
-                                <AvailabilityBadge product={p} qty={qty} showDetail />
-                              </div>
-                            )}
-                            {cartDensity !== "comfort" && avail.state !== "in-stock" && (
-                              <div className="text-[11px] text-amber-700 mt-1">{avail.detail}</div>
+                            {avail.state === "in-stock" ? (
+                              cartDensity === "comfort" ? (
+                                <div className="mt-1.5">
+                                  <AvailabilityBadge product={p} qty={qty} />
+                                </div>
+                              ) : null
+                            ) : (
+                              <CartLineNotice product={p} state={avail.state} contactSettings={contactSettings} />
                             )}
                             <div className={`flex items-center justify-between ${cartDensity === "dense" ? "mt-1" : "mt-2"}`}>
                               {p.isUnique === true ? (
@@ -1722,7 +1767,7 @@ export default function ZenoriaShop() {
                     ) : (
                       <button
                         onClick={paymentMethod === "transfer" ? () => { if (user) { setCheckoutError(""); setCartStep("shipping"); } else { setAuthModalMode("login"); setAuthModalOpen(true); } } : handleCheckout}
-                        disabled={shopPaused || checkoutLoading || !paymentMethod || (paymentMethod === "card" && !cgvAccepted) || !paymentMethodsLoaded || (!paymentMethodsCfg.stripe_enabled && !paymentMethodsCfg.transfer_enabled)}
+                        disabled={shopPaused || checkoutLoading || cartBlocked || !paymentMethod || (paymentMethod === "card" && !cgvAccepted) || !paymentMethodsLoaded || (!paymentMethodsCfg.stripe_enabled && !paymentMethodsCfg.transfer_enabled)}
                         data-testid="checkout-button"
                         className={`w-full rounded-full bg-[#82576c] hover:bg-[#6d4659] text-white text-sm font-medium transition disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-[#82576c] ${tightFooter ? "h-11" : "h-12"}`}
                       >
@@ -1854,7 +1899,8 @@ export default function ZenoriaShop() {
         onToggleFavorite={() => selected && toggleFavorite(selected.id)}
         ratingSlot={selected && (reviewsCfg.enabled || isAdmin) ? <ReviewRatingLine productId={selected.id} reviewsCfg={reviewsCfg} isAdmin={isAdmin} onSeeAll={() => { const id = selected.id; setSelected(null); openReviewsSection(id); }} /> : null}
         reviewsSlot={selected && (reviewsCfg.enabled || isAdmin) ? <ProductReviewsList productId={selected.id} reviewsCfg={reviewsCfg} isAdmin={isAdmin} onSeeAll={() => { const id = selected.id; setSelected(null); openReviewsSection(id); }} /> : null}
-        uniqueNotice={<UniqueNotice product={selected} contactSettings={contactSettings} />}
+        uniqueNotice={<PieceUniqueNotice product={selected} contactSettings={contactSettings} />}
+        contactSettings={contactSettings}
       />
       {/* AUTHENTIFICATION */}
       <AuthModal open={authModalOpen} onClose={() => { setAuthModalOpen(false); setAuthModalMode("login"); }} initialMode={authModalMode} />

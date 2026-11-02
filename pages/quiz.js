@@ -10,6 +10,10 @@ import Footer from "@/components/Footer";
 import QuizSteps from "@/components/QuizSteps";
 import QuizResult from "@/components/QuizResult";
 import ProductSheet from "@/components/ProductSheet";
+import { PieceUniqueNotice } from "@/components/ProductParts"; // ZENORIA_STOCK_UI2_V1
+import { getAvailability, pieceStateMap, maxQtyFor } from "@/lib/shopUtils";
+import { CONTACT_KEY, DEFAULT_CONTACT, parseContactSetting } from "@/lib/contactSettings";
+import { SITE_SETTINGS_TABLE } from "@/lib/siteSettings";
 import QuizCartDialog from "@/components/QuizCartDialog";
 import { visibleFamilies, buildSeasonCards, gradientFor } from "@/lib/seasons";
 import { pickPublicBanner, bannerKey, readClosedKeys, writeClosedKeys, getSessionStorage } from "@/lib/publicBanner";
@@ -61,6 +65,7 @@ export default function QuizPage() {
   const [toast, setToast] = useState(null);
   const [sheet, setSheet] = useState(null); // { product, why } : la fiche ouverte par « Voir la bague », sans quitter le quiz
   const [cartAsk, setCartAsk] = useState(false); // la question « revenir au quiz après le panier ? »
+  const [contactSettings, setContactSettings] = useState(DEFAULT_CONTACT); // ZENORIA_STOCK_UI2_V1 : lien « Écrivez-nous » de la fiche
   const siteStatus = useSiteStatus();
   const shopPaused = siteStatus.mode === "shop_pause";
   const previewingMaintenance = siteStatus.mode === "full";
@@ -97,16 +102,21 @@ export default function QuizPage() {
   useEffect(() => {
     let active = true;
     (async () => {
-      const [prodRes, famRes, banRes, promoRes] = await Promise.all([
+      const [prodRes, famRes, banRes, promoRes, pieceRes, contactRes] = await Promise.all([
         optionalQuery(supabase.from("products").select("*").eq("active", true).order("id")),
         optionalQuery(supabase.from("families").select("*").order("sort_order", { ascending: true })),
         optionalQuery(supabase.from("banners").select("*")),
         optionalQuery(supabase.from("promo_codes").select("code").eq("active", true)),
+        optionalQuery(supabase.rpc("public_piece_states")),
+        optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("value").eq("key", CONTACT_KEY).maybeSingle()),
       ]);
       if (!active) return;
       const families = visibleFamilies(famRes && famRes.data);
-      const { products, collections } = mapCatalog(prodRes && Array.isArray(prodRes.data) ? prodRes.data : [], families);
+      const { products: rawProducts, collections } = mapCatalog(prodRes && Array.isArray(prodRes.data) ? prodRes.data : [], families);
+      const pieceMap = pieceStateMap(pieceRes && !pieceRes.error ? pieceRes.data : null);
+      const products = rawProducts.map((p) => ({ ...p, pieceState: pieceMap.get(p.id) || null }));
       setCatalog({ loading: false, products, collections, families });
+      setContactSettings(parseContactSetting(contactRes && !contactRes.error && contactRes.data ? contactRes.data.value : null));
       setBannerRows((banRes && Array.isArray(banRes.data) && banRes.data) || []);
       setValidCodes(new Set(((promoRes && promoRes.data) || []).map((r) => r.code)));
     })();
@@ -274,12 +284,16 @@ export default function QuizPage() {
 
   const addToCart = (product) => {
     const storage = getLocalStorage();
-    const r = addToStoredCart(storage, product.id);
+    if (!getAvailability(product).orderable) {
+      setToast({ kind: "warn", text: product.isUnique === true ? `« ${product.name} » n'est plus disponible.` : `« ${product.name} » est épuisée pour le moment.` });
+      return;
+    }
+    const r = addToStoredCart(storage, product.id, maxQtyFor(product));
     if (r.ok) {
       setCartCount(readCartCount(storage));
       setToast({ kind: "ok", text: `« ${product.name} » ajoutée au panier.` });
     } else if (r.reason === "max") {
-      setToast({ kind: "warn", text: `Quantité maximale atteinte pour « ${product.name} ».` });
+      setToast({ kind: "warn", text: product.isUnique === true ? `« ${product.name} » est une pièce unique : un seul exemplaire possible.` : `Il ne reste pas d'autre exemplaire de « ${product.name} ».` }); // ZENORIA_STOCK_UI2B_V1
     } else {
       setToast({ kind: "warn", text: "Impossible d'ajouter au panier : le stockage de ce navigateur est indisponible." });
     }
@@ -350,6 +364,8 @@ export default function QuizPage() {
       {/* Fiche bague : le même composant que sur l'accueil, avec « Pourquoi elle vous va » en plus */}
       <ProductSheet
         product={sheet ? sheet.product : null}
+        contactSettings={contactSettings}
+        uniqueNotice={sheet ? <PieceUniqueNotice product={sheet.product} contactSettings={contactSettings} /> : null}
         initialMode="video"
         label={sheetLabel}
         onClose={closeSheet}

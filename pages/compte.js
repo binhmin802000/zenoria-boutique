@@ -34,7 +34,7 @@ import { CUSTOMER_VISIBLE_STATUSES, TRACKING_STEPS, orderStatusInfo, formatOrder
 //    « Ajouter au panier » suit un principe similaire d'ajout au panier existant (puis
 //    retour à l'accueil avec ?panier=compte qui l'ouvre automatiquement, voir pages/index.js).
 //  - Le cœur de l'en-tête (pages/index.js) garde son propre panneau rapide « Mes favoris », inchangé.
-//  - CART_STORAGE_KEY et MAX_QTY_PER_PRODUCT restent dupliqués depuis pages/index.js (voir étape 1.3) ;
+//  - CART_STORAGE_KEY reste dupliqué depuis pages/index.js (voir étape 1.3) ; plus de plafond fixe de quantité (lot 2c, stock) ;
 //    effectivePrice (prix promo) est également dupliqué ici à l'identique de pages/index.js : à garder
 //    synchronisé si cette règle change un jour (vigilance listes dupliquées, état des lieux).
 // ============================================================
@@ -50,7 +50,7 @@ const SECTIONS = [
 const RETURN_KEY = "zenoria_return_to";
 const DEFAULT_HERO = "/images/compte-fondu-lumineux.jpg";
 const CART_STORAGE_KEY = "zenoria_cart_v2"; // doit rester identique à pages/index.js
-const MAX_QTY_PER_PRODUCT = 10; // doit rester identique à pages/index.js
+// ZENORIA_STOCK_UI2_V1 : plus de plafond fixe ; la quantité est contrôlée par le stock à l'ouverture du panier (pages/index.js)
 const TIME_ZONE = "Europe/Paris";
 const REVIEW_LABELS = ["", "Décevante", "Moyenne", "Bien", "Très bien", "Coup de cœur"];
 const REVIEW_STATUS = {
@@ -604,7 +604,7 @@ export default function Compte() {
       if (ids.length === 0) {
         setFavProducts([]);
       } else {
-        const prodRes = await supabase.from("products").select("id, slug, name, price, promo_price, photos, active").in("id", ids);
+        const prodRes = await supabase.from("products").select("id, slug, name, price, promo_price, photos, active, stock, is_unique").in("id", ids);
         const byId = {};
         (prodRes.data || []).forEach((p) => { byId[p.id] = { ...p, promoPrice: p.promo_price }; });
         setFavProducts(ids.map((id) => byId[id]).filter(Boolean));
@@ -650,7 +650,7 @@ export default function Compte() {
         // panier illisible : on repart d'un panier vide
       }
       const existing = cart.items.find((c) => c.id === p.id);
-      const qty = Math.min(MAX_QTY_PER_PRODUCT, (existing ? existing.qty : 0) + 1);
+      const qty = p.is_unique === true ? 1 : (existing ? existing.qty : 0) + 1;
       if (existing) existing.qty = qty;
       else cart.items.push({ id: p.id, qty });
       window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
@@ -1078,8 +1078,8 @@ export default function Compte() {
                             </div>
                             <div className="flex gap-2 mt-2">
                               <button type="button" onClick={() => removeFromFavorites(p.id)} className="rounded-full border border-[#d9c5cc] px-3 py-1 text-xs hover:bg-[#f5edf1]">Retirer des favoris</button>
-                              <button type="button" onClick={() => addFavoriteToCart(p)} disabled={!p.active} className="rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-3 py-1 text-xs disabled:opacity-50">
-                                {p.active ? "Ajouter au panier" : "Plus en vente"}
+                              <button type="button" onClick={() => addFavoriteToCart(p)} disabled={!p.active || (p.is_unique !== true && !(Number(p.stock) > 0))} className="rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-3 py-1 text-xs disabled:opacity-50">
+                                {!p.active ? "Plus en vente" : p.is_unique !== true && !(Number(p.stock) > 0) ? "Épuisé" : "Ajouter au panier"}
                               </button>
                             </div>
                           </div>

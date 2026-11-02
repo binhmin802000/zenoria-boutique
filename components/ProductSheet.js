@@ -1,7 +1,8 @@
 import React, { useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
-import { ProductMedia, PriceTag, AvailabilityBadge } from "@/components/ProductParts";
+import { ProductMedia, PriceTag, AvailabilityBadge, UnavailableNotice } from "@/components/ProductParts";
+import { getAvailability } from "@/lib/shopUtils"; // ZENORIA_STOCK_UI_V1
 import FavoriteButton from "@/components/FavoriteButton";
 import useModalFocus from "@/lib/useModalFocus";
 
@@ -20,7 +21,7 @@ import useModalFocus from "@/lib/useModalFocus";
 //  ratingSlot       : facultatif, affiché sous le prix (note des avis) — ZENORIA_REVIEWS_STEP3_V1
 //  reviewsSlot      : facultatif, affiché sous « Ajouter au panier » (derniers avis) — ZENORIA_REVIEWS_STEP3_V1
 // ============================================================================
-export default function ProductSheet({ product, initialMode = "video", label = "", onClose, onAdd, extra = null, addLabel = "Ajouter au panier", favoriteActive = false, onToggleFavorite, ratingSlot = null, reviewsSlot = null, uniqueNotice = null }) {
+export default function ProductSheet({ product, initialMode = "video", label = "", onClose, onAdd, extra = null, addLabel = "Ajouter au panier", favoriteActive = false, onToggleFavorite, ratingSlot = null, reviewsSlot = null, uniqueNotice = null, contactSettings = null }) {
   const dialogRef = useRef(null);
   useModalFocus(Boolean(product), dialogRef);
 
@@ -72,13 +73,18 @@ export default function ProductSheet({ product, initialMode = "video", label = "
               {uniqueNotice}
               {extra}
 
-              <button
-                onClick={() => onAdd && onAdd(product)}
-                data-testid="product-sheet-add"
-                className="w-full mt-7 rounded-full h-12 bg-[#855a6f] hover:bg-[#6f4a5c] text-white text-sm font-medium transition"
-              >
-                {addLabel}
-              </button>
+              {/* ZENORIA_STOCK_UI_V1 : bouton seulement si la bague est commandable ; épuisée -> « Écrivez-nous » ; pièce unique réservée/vendue -> l'encart uniqueNotice explique */}
+              {getAvailability(product).orderable ? (
+                <button
+                  onClick={() => onAdd && onAdd(product)}
+                  data-testid="product-sheet-add"
+                  className="w-full mt-7 rounded-full h-12 bg-[#855a6f] hover:bg-[#6f4a5c] text-white text-sm font-medium transition"
+                >
+                  {addLabel}
+                </button>
+              ) : product.isUnique === true ? null : (
+                <UnavailableNotice product={product} contactSettings={contactSettings} />
+              )}
               {reviewsSlot}
             </div>
           </motion.div>

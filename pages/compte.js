@@ -2,6 +2,8 @@
 import React, { useCallback, useEffect, useState } from "react";
 import AccountDataSection from "@/components/AccountDataSection";
 import TransferInstructions from "@/components/TransferInstructions"; // ZENORIA_STEP3C2_V1
+import { CatalogWriteUs } from "@/components/ProductParts"; // ZENORIA_FAV_STOCK_V1
+import { getAvailability, pieceStateMap, stockStateMap } from "@/lib/shopUtils";
 import AccountProfileSection from "@/components/AccountProfileSection";
 import Head from "next/head";
 import { Home, Package, Star, Heart, UserCog, ShieldCheck, LogOut, Truck, ChevronLeft, FileDown } from "lucide-react"; // ZENORIA_INVOICE_STEP3_V1
@@ -604,9 +606,24 @@ export default function Compte() {
       if (ids.length === 0) {
         setFavProducts([]);
       } else {
-        const prodRes = await supabase.from("products").select("id, slug, name, price, promo_price, photos, active, stock, is_unique").in("id", ids);
+                // ZENORIA_FAV_STOCK_V1 : même règle que la vitrine (stock, paiements en cours, pièces uniques réservées ou vendues)
+        const [prodRes, pieceRes, availRes] = await Promise.all([
+          supabase.from("products").select("id, slug, name, price, promo_price, photos, active, stock, is_unique").in("id", ids),
+          supabase.rpc("public_piece_states").then((r) => r, () => ({ data: null, error: true })),
+          supabase.rpc("public_stock_states").then((r) => r, () => ({ data: null, error: true })),
+        ]);
+        const pieceMap = pieceStateMap(pieceRes && !pieceRes.error ? pieceRes.data : null);
+        const availMap = availRes && !availRes.error && Array.isArray(availRes.data) ? stockStateMap(availRes.data) : null;
         const byId = {};
-        (prodRes.data || []).forEach((p) => { byId[p.id] = { ...p, promoPrice: p.promo_price }; });
+        (prodRes.data || []).forEach((p) => {
+          byId[p.id] = {
+            ...p,
+            promoPrice: p.promo_price,
+            isUnique: p.is_unique === true,
+            pieceState: pieceMap.get(p.id) || null,
+            available: availMap && availMap.has(p.id) ? availMap.get(p.id) : null,
+          };
+        });
         setFavProducts(ids.map((id) => byId[id]).filter(Boolean));
       }
     } catch (e) {
@@ -1078,9 +1095,13 @@ export default function Compte() {
                             </div>
                             <div className="flex gap-2 mt-2">
                               <button type="button" onClick={() => removeFromFavorites(p.id)} className="rounded-full border border-[#d9c5cc] px-3 py-1 text-xs hover:bg-[#f5edf1]">Retirer des favoris</button>
-                              <button type="button" onClick={() => addFavoriteToCart(p)} disabled={!p.active || (p.is_unique !== true && !(Number(p.stock) > 0))} className="rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-3 py-1 text-xs disabled:opacity-50">
-                                {!p.active ? "Plus en vente" : p.is_unique !== true && !(Number(p.stock) > 0) ? "Épuisé" : "Ajouter au panier"}
-                              </button>
+                                                            {!p.active ? (
+                                <button type="button" disabled className="rounded-full bg-[#8f6075] text-white px-3 py-1 text-xs opacity-50">Plus en vente</button>
+                              ) : getAvailability(p).orderable ? (
+                                <button type="button" onClick={() => addFavoriteToCart(p)} className="rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-3 py-1 text-xs">Ajouter au panier</button>
+                              ) : (
+                                <CatalogWriteUs product={p} contactSettings={contactCfg} compact /> /* ZENORIA_FAV_STOCK_V1 : épuisé, en cours de commande ou vendue */
+                              )}
                             </div>
                           </div>
                         </div>

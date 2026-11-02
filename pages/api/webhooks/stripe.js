@@ -29,6 +29,32 @@ export const config = {
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 // Lit le corps brut d'une requete Node.js (IncomingMessage) en un seul Buffer.
+// ZENORIA_STOCK_V1 : consomme pieces uniques ET stock ensemble (lot 2a-bis). Ne bloque jamais la confirmation
+// du paiement : si le stock est devenu insuffisant entre la reservation et la confirmation, une alerte est
+// ecrite dans le journal, visible ADMINISTRATION UNIQUEMENT (customer_visible = false).
+async function consumeStockAndPieces(orderId) {
+  try {
+    const { data: res, error } = await supabaseAdmin.rpc("consume_order_items", { p_order_id: orderId });
+    if (error) {
+      console.error("[webhook-stripe] échec consume_order_items :", error.message);
+      return;
+    }
+    const alerts = (res && res.stock && res.stock.alerts) || [];
+    if (alerts.length > 0) {
+      const detail = alerts
+        .map((a) => `produit #${a.product_id} — stock avant confirmation : ${a.stock_avant}, quantité requise : ${a.quantite_requise}`)
+        .join(" ; ");
+      await supabaseAdmin.from("order_status_history").insert({
+        order_id: orderId,
+        status: "paid",
+        note: `Alerte stock (admin) : ${detail}.`,
+        customer_visible: false,
+      });
+    }
+  } catch (err) {
+    console.error("[webhook-stripe] erreur inattendue (consume_order_items) :", err && err.message ? err.message : err);
+  }
+}
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -64,11 +90,39 @@ export default async function handler(req, res) {
   // recevoir (seul "checkout.session.completed" a été sélectionné côté
   // Stripe, mais ce garde-fou reste utile si d'autres événements sont
   // ajoutés un jour sans modifier ce fichier).
-  if (event.type !== "checkout.session.completed") {
+  if (event.type !== "checkout.session.completed" && event.type !== "checkout.session.expired") { // ZENORIA_STOCK_V1
     return res.status(200).json({ ok: true, ignored: event.type });
   }
-
   const session = event.data.object;
+  // ZENORIA_STOCK_V1 : une session abandonnee libere la reservation de stock/pieces sans attendre
+  // l'expiration naturelle (31 minutes) ni le cron quotidien ; la commande passe en "expired".
+  if (event.type === "checkout.session.expired") {
+    try {
+      const { data: pendingOrder } = await supabaseAdmin
+        .from("orders")
+        .select("id, status")
+        .eq("stripe_session_id", session.id)
+        .maybeSingle();
+      if (!pendingOrder || pendingOrder.status !== "pending") {
+        return res.status(200).json({ ok: true, ignored: "expired_no_pending_order" });
+      }
+      await supabaseAdmin.rpc("release_order_items", { p_order_id: pendingOrder.id, p_reason: "expired" });
+      const { error: expireErr } = await supabaseAdmin.from("orders").update({ status: "expired" }).eq("id", pendingOrder.id);
+      if (expireErr) {
+        console.error("[webhook-stripe] échec passage en expired :", expireErr.message);
+        return res.status(500).json({ ok: false, error: "échec mise à jour commande" });
+      }
+      await supabaseAdmin.from("order_status_history").insert({
+        order_id: pendingOrder.id,
+        status: "expired",
+        note: "Session de paiement expirée sans confirmation : commande annulée, article(s) remis en vente.",
+      });
+      return res.status(200).json({ ok: true, orderId: pendingOrder.id, expired: true });
+    } catch (err) {
+      console.error("[webhook-stripe] erreur inattendue (session expiree) :", err && err.message ? err.message : err);
+      return res.status(500).json({ ok: false, error: "erreur serveur" });
+    }
+  }
 
   try {
     // Évite de créer deux fois la même commande si Stripe renvoie le même
@@ -131,6 +185,7 @@ export default async function handler(req, res) {
         return res.status(500).json({ ok: false, error: "échec mise à jour commande" });
       }
       orderId = updatedOrder.id;
+      await consumeStockAndPieces(orderId); // ZENORIA_STOCK_V1
     } else {
       // Filet de sécurité : aucune commande "pending" trouvée (ancien flux,
       // ou échec d'écriture côté checkout.js) : on crée la commande complète
@@ -166,7 +221,7 @@ export default async function handler(req, res) {
         return res.status(500).json({ ok: false, error: "échec enregistrement commande" });
       }
       orderId = orderRow.id;
-
+      await consumeStockAndPieces(orderId); // ZENORIA_STOCK_V1
       if (cartItems.length > 0) {
         const itemsToInsert = cartItems.map((it) => ({
           order_id: orderId,

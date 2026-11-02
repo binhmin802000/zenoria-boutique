@@ -47,11 +47,17 @@ export default async function handler(req, res) {
     }
 
     const ids = (toExpire || []).map((o) => o.id);
-
     if (ids.length === 0) {
       return res.status(200).json({ ok: true, expired: 0 });
     }
-
+    // ZENORIA_STOCK_V1 : filet de securite (le webhook checkout.session.expired libere deja la
+    // reservation immediatement dans le cas normal) : si l'evenement a ete manque, on libere ici.
+    for (const id of ids) {
+      const { error: releaseErr } = await supabaseAdmin.rpc("release_order_items", { p_order_id: id, p_reason: "expired" });
+      if (releaseErr) {
+        console.error("[cron-expire] échec libération stock/pièces pour la commande " + id + " :", releaseErr.message);
+      }
+    }
     const { error: updateErr } = await supabaseAdmin
       .from("orders")
       .update({ status: "expired" })

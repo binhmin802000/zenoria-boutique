@@ -74,7 +74,7 @@ export default async function handler(req, res) {
 
     const { data: productsRows, error: prodErr } = await supabase
       .from("products")
-      .select("id, name, price, promo_price, stock, active")
+      .select("id, name, price, promo_price, stock, is_unique, active")
       .in("id", ids)
       .eq("active", true);
 
@@ -90,14 +90,14 @@ export default async function handler(req, res) {
     for (const it of items) {
       const row = productById.get(Number(it && it.id));
       if (!row) continue; // produit inconnu, desactive ou supprime : ligne ignoree
-      const qty = Math.max(1, Math.min(10, Math.floor(Number(it.qty) || 1))); // meme plafond que le site
+      const qty = Math.max(1, Math.floor(Number(it.qty) || 1)); // ZENORIA_STOCK_V1 : plus de plafond fixe, le stock reel (reserve_order_items) protege desormais la quantite
       lines.push({
         product: {
           id: row.id,
           name: row.name,
           price: Number(row.price),
-          promoPrice:
-            row.promo_price !== null && row.promo_price !== undefined ? Number(row.promo_price) : null,
+          promoPrice: row.promo_price !== null && row.promo_price !== undefined ? Number(row.promo_price) : null,
+          isUnique: row.is_unique === true,
         },
         qty,
       });
@@ -156,41 +156,67 @@ export default async function handler(req, res) {
     // paiement confirme, au lieu d'en creer une nouvelle. Non bloquant : si
     // cette ecriture echoue, le paiement continue normalement (le webhook
     // creera alors la commande complete en filet de securite, comme avant).
+    // ZENORIA_STOCK_V1 : la commande « pending » et sa reservation de stock/pieces deviennent BLOQUANTES.
+    // Si l'une de ces etapes echoue, on arrete tout AVANT la redirection vers Stripe (pas de commande orpheline,
+    // pas de paiement sur un article qui ne serait plus disponible). La reservation dure 31 minutes : la session
+    // Stripe est creee avec la meme duree (voir plus bas), pour que les deux expirent ensemble.
+    const RESERVATION_MINUTES = 31;
     let pendingOrderId = null;
-    try {
-      const { data: pendingOrder, error: pendingErr } = await supabaseAdmin
-        .from("orders")
-        .insert({
-          user_id: checkoutUser ? checkoutUser.id : null,
-          guest_email: "en_attente@zenoria.local", // temporaire : remplace par le vrai e-mail une fois le webhook confirme
-          status: "pending",
-          is_test: isTestOrderMode(), // ZENORIA_TEST_MODE_V1 : règle unique avec le virement (lib/testMode.js)
-          subtotal: totals.subtotal,
-          discount: totals.discount,
-          shipping: totals.shipping,
-          total: totals.total,
-          promo_code: normalizedPromoCode || null,
-        })
-        .select("id")
-        .single();
-      if (pendingErr) {
-        console.error("[checkout] échec création commande pending :", pendingErr.message);
-      } else {
-        pendingOrderId = pendingOrder.id;
-        const pendingItems = lines.map((l) => ({
-          order_id: pendingOrderId,
-          product_id: l.product.id,
-          product_name: l.product.name,
-          product_price: effectivePrice(l.product),
-          qty: l.qty,
-        }));
-        const { error: pendingItemsErr } = await supabaseAdmin.from("order_items").insert(pendingItems);
-        if (pendingItemsErr) {
-          console.error("[checkout] échec création order_items (pending) :", pendingItemsErr.message);
-        }
+    const { data: pendingOrder, error: pendingErr } = await supabaseAdmin
+      .from("orders")
+      .insert({
+        user_id: checkoutUser ? checkoutUser.id : null,
+        guest_email: "en_attente@zenoria.local", // temporaire : remplace par le vrai e-mail une fois le webhook confirme
+        status: "pending",
+        is_test: isTestOrderMode(), // ZENORIA_TEST_MODE_V1 : règle unique avec le virement (lib/testMode.js)
+        subtotal: totals.subtotal,
+        discount: totals.discount,
+        shipping: totals.shipping,
+        total: totals.total,
+        promo_code: normalizedPromoCode || null,
+      })
+      .select("id")
+      .single();
+    if (pendingErr) {
+      console.error("[checkout] échec création commande pending :", pendingErr.message);
+      return res.status(500).json({ ok: false, error: "Impossible de créer la commande pour le moment. Réessayez." });
+    }
+    pendingOrderId = pendingOrder.id;
+    const pendingItems = lines.map((l) => ({
+      order_id: pendingOrderId,
+      product_id: l.product.id,
+      product_name: l.product.name,
+      product_price: effectivePrice(l.product),
+      qty: l.qty,
+    }));
+    const { error: pendingItemsErr } = await supabaseAdmin.from("order_items").insert(pendingItems);
+    if (pendingItemsErr) {
+      console.error("[checkout] échec création order_items (pending) :", pendingItemsErr.message);
+      await supabaseAdmin.from("orders").delete().eq("id", pendingOrderId);
+      return res.status(500).json({ ok: false, error: "Impossible de créer la commande pour le moment. Réessayez." });
+    }
+    const { error: reserveErr } = await supabaseAdmin.rpc("reserve_order_items", {
+      p_order_id: pendingOrderId,
+      p_expires_at: new Date(Date.now() + RESERVATION_MINUTES * 60 * 1000).toISOString(),
+    });
+    if (reserveErr) {
+      await supabaseAdmin.from("orders").delete().eq("id", pendingOrderId);
+      const rawMessage = String(reserveErr.message || "");
+      const errorCode = rawMessage.split(":")[0].trim();
+      if (errorCode === "PIECE_UNAVAILABLE" || errorCode === "STOCK_UNAVAILABLE") {
+        const productIds = (rawMessage.split(":")[1] || "").split(",").map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0);
+        return res.status(409).json({
+          ok: false,
+          error:
+            errorCode === "PIECE_UNAVAILABLE"
+              ? "Une pièce unique de votre panier vient d'être réservée ou vendue. Retirez-la de votre panier pour continuer."
+              : "Un article de votre panier n'est plus disponible en quantité suffisante. Retirez-le ou réduisez la quantité.",
+          code: errorCode,
+          productIds,
+        });
       }
-    } catch (e) {
-      console.error("[checkout] erreur inattendue (commande pending) :", e && e.message ? e.message : e);
+      console.error("[checkout] erreur non traduite de reserve_order_items :", errorCode.slice(0, 80) || "(sans code)", reserveErr.code || "");
+      return res.status(500).json({ ok: false, error: "Impossible de créer la commande pour le moment. Réessayez." });
     }
 
     // 6) Construit les lignes Stripe (prix en centimes, obligatoire pour Stripe)
@@ -223,6 +249,7 @@ export default async function handler(req, res) {
       cancel_url: `${origin}/?paiement=annule`,
       shipping_address_collection: { allowed_countries: ["FR"] },
       phone_number_collection: { enabled: true },
+      expires_at: Math.floor(Date.now() / 1000) + RESERVATION_MINUTES * 60, // ZENORIA_STOCK_V1 : la session Stripe expire en meme temps que la reservation de stock/pieces
       metadata: {
         zenoria_user_id: checkoutUser ? checkoutUser.id : "",
         promo_code: normalizedPromoCode || "",

@@ -141,10 +141,10 @@ export function CatalogWriteUs({ product, contactSettings, compact = false }) {
           `Bonjour,\n\nLe modèle « ${product.name} » m'a touchée, et j'aimerais en savoir plus sur une création qui s'en inspire.\n`,
           `Bonjour, le modèle « ${product.name} » m'a touchée, j'aimerais en savoir plus sur une création qui s'en inspire.`,
         ]
-      : a.state === "reserved"
+            : a.state === "reserved"
       ? [
-          `Bonjour,\n\nLa pièce unique « ${product.name} » m'intéresse, mais elle est actuellement réservée. Pourriez-vous me prévenir si elle redevient disponible ?\n`,
-          `Bonjour, la pièce unique « ${product.name} » m'intéresse, mais elle est actuellement réservée. Pourriez-vous me prévenir si elle redevient disponible ?`,
+          `Bonjour,\n\n« ${product.name} » est en cours de commande par une autre cliente. Pourriez-vous me prévenir si elle redevient disponible ?\n`,
+          `Bonjour, « ${product.name} » est en cours de commande par une autre cliente. Pourriez-vous me prévenir si elle redevient disponible ?`,
         ]
       : [
           `Bonjour,\n\nJe souhaite savoir si « ${product.name} » sera de nouveau disponible. Pouvez-vous me prévenir ?\n`,
@@ -164,8 +164,37 @@ export function CatalogWriteUs({ product, contactSettings, compact = false }) {
   );
 }
 // Bijou normal épuisé : remplace le bouton « Ajouter au panier » (texte validé)
+// ZENORIA_STOCK_UI3_V1 : bague en cours de commande par une autre cliente (bijou normal tout réservé, ou pièce unique réservée).
+// Texte validé, sans durée : il vaut pour un paiement par carte (31 min) comme par virement (jusqu'à l'échéance).
+export function ReservedNotice({ product, contactSettings, unique = false }) {
+  if (!product) return null;
+  const link = contactLink(
+    contactSettings,
+    `À propos de « ${product.name} »`,
+    `Bonjour,\n\n« ${product.name} » est en cours de commande par une autre cliente. Pourriez-vous me prévenir si elle redevient disponible ?\n`,
+    `Bonjour, « ${product.name} » est en cours de commande par une autre cliente. Pourriez-vous me prévenir si elle redevient disponible ?`
+  );
+  const cls = unique
+    ? "text-sm leading-6 text-[#54434c] mt-4 rounded-xl bg-[#f5edf1] px-4 py-3"
+    : "mt-7 text-sm leading-6 text-[#54434c] rounded-xl bg-[#f5edf1] px-4 py-3";
+  return (
+    <p data-testid="reserved-notice" data-state="reserved" className={cls}>
+      {unique && <span className="font-medium">✦ Pièce unique — </span>}
+      {`« ${product.name} » fait déjà battre un autre cœur : une cliente est en train de finaliser sa commande. Si elle ne l'emporte pas, la bague sera de nouveau à vous. `}
+      {link ? (
+        <>
+          <a href={link.href} target={link.external ? "_blank" : undefined} rel="noopener noreferrer" className="underline text-[#8f6075]">Écrivez-nous</a>
+          {" pour être prévenue."}
+        </>
+      ) : (
+        "Écrivez-nous pour être prévenue."
+      )}
+    </p>
+  );
+}
 export function UnavailableNotice({ product, contactSettings }) {
   if (!product) return null;
+  if (getAvailability(product).state === "reserved") return <ReservedNotice product={product} contactSettings={contactSettings} />;
   const link = contactLink(
     contactSettings,
     `À propos de « ${product.name} »`,
@@ -198,24 +227,8 @@ export function PieceUniqueNotice({ product, contactSettings }) {
       </p>
     );
   }
-  if (state === "reserved") {
-    const link = contactLink(
-      contactSettings,
-      `À propos de « ${product.name} »`,
-      `Bonjour,\n\nLa pièce unique « ${product.name} » m'intéresse, mais elle est actuellement réservée. Pourriez-vous me prévenir si elle redevient disponible ?\n`, // ZENORIA_STOCK_UI2B_V1
-      `Bonjour, la pièce unique « ${product.name} » m'intéresse, mais elle est actuellement réservée. Pourriez-vous me prévenir si elle redevient disponible ?`
-    );
-    return (
-      <p data-testid="unique-notice" data-state="reserved" className={base}>
-        <span className="font-medium">✦ Pièce unique</span> — Cette pièce unique est réservée par une autre cliente, dans l&apos;attente de son paiement. Si cette réservation n&apos;aboutit pas, elle pourra être de nouveau proposée.
-        {link && (
-          <>
-            {" "}
-            <a href={link.href} target={link.external ? "_blank" : undefined} rel="noopener noreferrer" className="underline text-[#8f6075]">Nous écrire</a>
-          </>
-        )}
-      </p>
-    );
+    if (state === "reserved") {
+    return <ReservedNotice product={product} contactSettings={contactSettings} unique />; // ZENORIA_STOCK_UI3_V1
   }
   const link = contactLink(
     contactSettings,

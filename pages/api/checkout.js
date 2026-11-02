@@ -290,7 +290,7 @@ export default async function handler(req, res) {
       }
     }
 
-    return res.status(200).json({ ok: true, url: session.url });
+    return res.status(200).json({ ok: true, url: session.url, sessionId: session.id }); // ZENORIA_STOCK_UI3_V1 : le site le garde pour libérer la réservation si la cliente revient sans payer
   } catch (err) {
     console.error("[checkout]", err && err.message ? err.message : err);
     return res.status(500).json({ ok: false, error: "erreur lors de la création du paiement" });

@@ -11,7 +11,7 @@ import QuizSteps from "@/components/QuizSteps";
 import QuizResult from "@/components/QuizResult";
 import ProductSheet from "@/components/ProductSheet";
 import { PieceUniqueNotice } from "@/components/ProductParts"; // ZENORIA_STOCK_UI2_V1
-import { getAvailability, pieceStateMap, maxQtyFor } from "@/lib/shopUtils";
+import { getAvailability, pieceStateMap, maxQtyFor, stockStateMap } from "@/lib/shopUtils"; // ZENORIA_STOCK_UI3_V1
 import { CONTACT_KEY, DEFAULT_CONTACT, parseContactSetting } from "@/lib/contactSettings";
 import { SITE_SETTINGS_TABLE } from "@/lib/siteSettings";
 import QuizCartDialog from "@/components/QuizCartDialog";
@@ -102,19 +102,21 @@ export default function QuizPage() {
   useEffect(() => {
     let active = true;
     (async () => {
-      const [prodRes, famRes, banRes, promoRes, pieceRes, contactRes] = await Promise.all([
+      const [prodRes, famRes, banRes, promoRes, pieceRes, contactRes, availRes] = await Promise.all([
         optionalQuery(supabase.from("products").select("*").eq("active", true).order("id")),
         optionalQuery(supabase.from("families").select("*").order("sort_order", { ascending: true })),
         optionalQuery(supabase.from("banners").select("*")),
         optionalQuery(supabase.from("promo_codes").select("code").eq("active", true)),
         optionalQuery(supabase.rpc("public_piece_states")),
         optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("value").eq("key", CONTACT_KEY).maybeSingle()),
+        optionalQuery(supabase.rpc("public_stock_states")),
       ]);
       if (!active) return;
       const families = visibleFamilies(famRes && famRes.data);
       const { products: rawProducts, collections } = mapCatalog(prodRes && Array.isArray(prodRes.data) ? prodRes.data : [], families);
       const pieceMap = pieceStateMap(pieceRes && !pieceRes.error ? pieceRes.data : null);
-      const products = rawProducts.map((p) => ({ ...p, pieceState: pieceMap.get(p.id) || null }));
+      const availMap = availRes && !availRes.error && Array.isArray(availRes.data) ? stockStateMap(availRes.data) : null;
+      const products = rawProducts.map((p) => ({ ...p, pieceState: pieceMap.get(p.id) || null, available: availMap && availMap.has(p.id) ? availMap.get(p.id) : null }));
       setCatalog({ loading: false, products, collections, families });
       setContactSettings(parseContactSetting(contactRes && !contactRes.error && contactRes.data ? contactRes.data.value : null));
       setBannerRows((banRes && Array.isArray(banRes.data) && banRes.data) || []);
@@ -285,7 +287,7 @@ export default function QuizPage() {
   const addToCart = (product) => {
     const storage = getLocalStorage();
     if (!getAvailability(product).orderable) {
-      setToast({ kind: "warn", text: product.isUnique === true ? `« ${product.name} » n'est plus disponible.` : `« ${product.name} » est épuisée pour le moment.` });
+      setToast({ kind: "warn", text: getAvailability(product).state === "reserved" ? `« ${product.name} » est en cours de commande par une autre cliente.` : product.isUnique === true ? `« ${product.name} » n'est plus disponible.` : `« ${product.name} » est épuisée pour le moment.` });
       return;
     }
     const r = addToStoredCart(storage, product.id, maxQtyFor(product));

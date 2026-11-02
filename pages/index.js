@@ -34,7 +34,7 @@ import {
   removeFavorite,
   mergeLocalFavoritesIntoAccount,
 } from "@/lib/favorites";
-import { formatPrice, getAvailability, pieceStateMap, maxQtyFor } from "@/lib/shopUtils";
+import { formatPrice, getAvailability, pieceStateMap, maxQtyFor, stockStateMap } from "@/lib/shopUtils"; // ZENORIA_STOCK_UI3_V1
 import { parseCartReturnHash, encodeResultHash } from "@/lib/quizState";
 import {
   visibleFamilies, buildSeasonCards, buildFamilyChips, filterByFamily, productLabel, familyOfProduct,
@@ -61,6 +61,7 @@ import TextLines from "@/components/TextLines";
 // Le seuil de livraison offerte et son interrupteur se règlent dans l'admin (Contenu du site) : voir lib/shippingSettings.js
 // ZENORIA_STOCK_UI2_V1 : plus de plafond fixe. La quantité maximale est le stock saisi dans l'administration (1 pour une pièce unique) : maxQtyFor (lib/shopUtils.js).
 const CART_STORAGE_KEY = "zenoria_cart_v2";
+const PENDING_CHECKOUT_KEY = "zenoria_pending_checkout"; // ZENORIA_STOCK_UI3_V1 : session Stripe en cours (cet onglet seulement)
 // ============================================================
 // Le catalogue (collections) et les codes promo ne sont plus codés
 // en dur ici : ils sont lus depuis la base de données Supabase, et
@@ -334,7 +335,7 @@ export default function ZenoriaShop() {
   useEffect(() => {
     let active = true;
     (async () => {
-      const [{ data: prodData, error: prodErr }, { data: promoData }, { data: siteData }, famRes, banRes, fxRes, pieceRes] = await Promise.all([
+      const [{ data: prodData, error: prodErr }, { data: promoData }, { data: siteData }, famRes, banRes, fxRes, pieceRes, availRes] = await Promise.all([
         supabase.from("products").select("*").eq("active", true).order("id"),
         supabase.from("promo_codes").select("*").eq("active", true),
         supabase.from("site_media").select("*"),
@@ -342,10 +343,12 @@ export default function ZenoriaShop() {
         optionalQuery(supabase.from("banners").select("*")),
         optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").in("key", [SEASON_FX_KEY, SHIPPING_KEY, SITE_TEXTS_KEY, CONTACT_KEY, REVIEWS_KEY, PAYMENT_METHODS_KEY])),
         optionalQuery(supabase.rpc("public_piece_states")), // ZENORIA_STOCK_UI2_V1
+        optionalQuery(supabase.rpc("public_stock_states")), // ZENORIA_STOCK_UI3_V1
       ]);
       if (!active) return;
       const pieceMapAtLoad = pieceStateMap(pieceRes && !pieceRes.error ? pieceRes.data : null);
-      const loadedProducts = !prodErr && prodData ? prodData.map(mapDbProduct).map((p) => ({ ...p, pieceState: pieceMapAtLoad.get(p.id) || null })) : [];
+      const availMapAtLoad = availRes && !availRes.error && Array.isArray(availRes.data) ? stockStateMap(availRes.data) : null;
+      const loadedProducts = !prodErr && prodData ? prodData.map(mapDbProduct).map((p) => ({ ...p, pieceState: pieceMapAtLoad.get(p.id) || null, available: availMapAtLoad && availMapAtLoad.has(p.id) ? availMapAtLoad.get(p.id) : null })) : [];
       setProducts(loadedProducts);
       const promoMap = {};
       (promoData || []).forEach((p) => {
@@ -472,11 +475,48 @@ export default function ZenoriaShop() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get("paiement") === "succes") {
+        if (params.get("paiement") === "succes") {
+      try { window.sessionStorage.removeItem(PENDING_CHECKOUT_KEY); } catch (e) { /* stockage indisponible */ } // ZENORIA_STOCK_UI3_V1
       clearCart();
       setPaymentConfirmationOpen(true);
       window.history.replaceState(null, "", window.location.pathname);
     }
+  }, []);
+    // ZENORIA_STOCK_UI3_V1 : la cliente revient de Stripe sans payer (bouton « retour » de Stripe ou du navigateur).
+  // On ferme la session Stripe de CET onglet et on libère sa réservation tout de suite, au lieu d'attendre 31 minutes.
+  // La route serveur ne fait rien si la session est déjà payée.
+  const refreshStockStates = () => {
+    Promise.all([optionalQuery(supabase.rpc("public_stock_states")), optionalQuery(supabase.rpc("public_piece_states"))]).then(([sRes, pRes]) => {
+      const sm = sRes && !sRes.error && Array.isArray(sRes.data) ? stockStateMap(sRes.data) : null;
+      const pm = pRes && !pRes.error && Array.isArray(pRes.data) ? pieceStateMap(pRes.data) : null;
+      if (!sm && !pm) return;
+      setProducts((prev) =>
+        prev.map((p) => ({
+          ...p,
+          ...(sm ? { available: sm.has(p.id) ? sm.get(p.id) : null } : {}),
+          ...(pm ? { pieceState: pm.get(p.id) || null } : {}),
+        }))
+      );
+    });
+  };
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const releasePending = () => {
+      let sid = null;
+      try { sid = window.sessionStorage.getItem(PENDING_CHECKOUT_KEY); } catch (e) { sid = null; }
+      if (!sid) return;
+      try { window.sessionStorage.removeItem(PENDING_CHECKOUT_KEY); } catch (e) { /* stockage indisponible */ }
+      if (new URLSearchParams(window.location.search).get("paiement") === "succes") return;
+      fetch("/api/checkout-cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId: sid }) })
+        .then((r) => r.json())
+        .then((d) => { if (d && d.released) refreshStockStates(); })
+        .catch(() => {});
+    };
+    releasePending();
+    const onShow = (e) => { if (e.persisted) releasePending(); };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // Enregistre le panier à chaque modification
   useEffect(() => {
@@ -578,13 +618,15 @@ export default function ZenoriaShop() {
     const ids = cartItems.map((i) => i.id);
     Promise.all([
       optionalQuery(supabase.from("products").select("id, stock, is_unique, active").in("id", ids)),
-      optionalQuery(supabase.rpc("public_piece_states")),
-    ]).then(([stockRes, pieceRes]) => {
+            optionalQuery(supabase.rpc("public_piece_states")),
+      optionalQuery(supabase.rpc("public_stock_states")), // ZENORIA_STOCK_UI3_V1
+    ]).then(([stockRes, pieceRes, availRes]) => {
       if (!alive) return;
       const rows = stockRes && !stockRes.error && Array.isArray(stockRes.data) ? stockRes.data : null;
       if (!rows) return;
       const pieceMap = pieceStateMap(pieceRes && !pieceRes.error ? pieceRes.data : null);
       const pieceKnown = Boolean(pieceRes && !pieceRes.error && Array.isArray(pieceRes.data));
+      const availMap = availRes && !availRes.error && Array.isArray(availRes.data) ? stockStateMap(availRes.data) : null;
       setProducts((prev) =>
         prev.map((p) => {
           const r = rows.find((x) => x.id === p.id);
@@ -594,6 +636,7 @@ export default function ZenoriaShop() {
             stock: r.active === false ? 0 : typeof r.stock === "number" ? r.stock : 0,
             isUnique: r.is_unique === true,
             pieceState: pieceKnown ? pieceMap.get(p.id) || null : p.pieceState,
+            available: availMap ? (availMap.has(p.id) ? availMap.get(p.id) : null) : p.available,
           };
         })
       );
@@ -649,7 +692,7 @@ export default function ZenoriaShop() {
     const current = cartItems.find((i) => i.id === p.id);
     setCheckoutNotice(false);
     if (!getAvailability(p).orderable) {
-      setCartNotice(p.isUnique === true ? `« ${p.name} » n'est plus disponible.` : `« ${p.name} » est épuisée pour le moment.`);
+      setCartNotice(getAvailability(p).state === "reserved" ? `« ${p.name} » est en cours de commande par une autre cliente.` : p.isUnique === true ? `« ${p.name} » n'est plus disponible.` : `« ${p.name} » est épuisée pour le moment.`);
       setCartOpen(true);
       return;
     }
@@ -775,7 +818,10 @@ export default function ZenoriaShop() {
         }),
       });
       const data = await res.json();
-      if (data && data.ok && data.url) {
+            if (data && data.ok && data.url) {
+        if (data.sessionId) {
+          try { window.sessionStorage.setItem(PENDING_CHECKOUT_KEY, data.sessionId); } catch (e) { /* stockage indisponible */ } // ZENORIA_STOCK_UI3_V1
+        }
         window.location.href = data.url;
       } else {
         setCheckoutError((data && data.error) || "Impossible de lancer le paiement. Merci de réessayer.");

@@ -1205,7 +1205,7 @@ export default function AdminPage() {
                         </option>
                       ))}
                   </select>
-                  <span className="text-[11px] text-[#8b737e]">Le quiz couleurs peut proposer cette collection aux profils voisins de sa saison.</span>
+                  <span className="text-[11px] text-[#8b737e]">Le quiz colorimétrie peut proposer cette collection aux profils voisins de sa saison.</span>
                 </label>
 
                 <label className="text-sm">
@@ -1399,7 +1399,7 @@ export default function AdminPage() {
                     ))}
                   </div>
                   <p className="text-[11px] text-[#8b737e] mt-1.5">
-                    Le quiz couleurs s&apos;en sert pour expliquer pourquoi une bague va à une cliente (par exemple : ce brun chocolat rappelle vos cheveux).
+                    Le quiz colorimétrie s&apos;en sert pour expliquer pourquoi une bague va à une cliente (par exemple : ce brun chocolat rappelle vos cheveux).
                   </p>
                 </div>
               </div>

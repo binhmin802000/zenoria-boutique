@@ -504,7 +504,7 @@ export default function AdminFamilies({ status, products, onProductsChanged }) {
 
       {!form && (
         <div className="mt-6 bg-white rounded-[1.5rem] border border-dashed border-[#e3d3da] p-6 text-sm text-[#8b737e] leading-6" data-testid="family-hint">
-          Choisissez une famille dans la liste pour la modifier, voir ses collections ou en déplacer une. Les saisons alimentent le quiz couleurs : elles se renomment et se décrivent librement, mais ne se suppriment pas.
+          Choisissez une famille dans la liste pour la modifier, voir ses collections ou en déplacer une. Les saisons alimentent le quiz colorimétrie : elles se renomment et se décrivent librement, mais ne se suppriment pas.
         </div>
       )}
     </div>

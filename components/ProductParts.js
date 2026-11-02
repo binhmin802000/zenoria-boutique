@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { getMediaUrl } from "@/lib/supabase";
 import { formatPrice, getAvailability } from "@/lib/shopUtils";
 import { buildMailtoLink, buildWhatsAppLink } from "@/lib/contactSettings"; // ZENORIA_STOCK_UI_V1
+import { Pencil } from "lucide-react"; // ZENORIA_2C4_V1
 
 // ============================================================================
 // ÉLÉMENTS DE FICHE BAGUE partagés entre l'accueil et la page du quiz :
@@ -129,21 +130,37 @@ export function CartLineNotice({ product, state, contactSettings }) {
   );
 }
 // Carte du catalogue d'un bijou normal épuisé : « Écrivez-nous » à la place du bouton « Ajouter au panier »
-export function CatalogWriteUs({ product, contactSettings }) {
+// ZENORIA_2C4_V1 : « Écrivez-nous » (icône stylo) pour TOUTE bague non commandable : bijou épuisé, pièce unique réservée ou vendue.
+// Le message prérempli dépend de l'état (textes validés). compact : version réduite (panneau « Mes favoris »).
+export function CatalogWriteUs({ product, contactSettings, compact = false }) {
   if (!product) return null;
-  const link = contactLink(
-    contactSettings,
-    `À propos de « ${product.name} »`,
-    `Bonjour,\n\nJe souhaite savoir si « ${product.name} » sera de nouveau disponible. Pouvez-vous me prévenir ?\n`,
-    `Bonjour, je souhaite savoir si « ${product.name} » sera de nouveau disponible. Pouvez-vous me prévenir ?`
-  );
-  const cls = "flex w-full mt-5 h-10 items-center justify-center rounded-full border border-[#d9c5cc] text-sm text-[#8f6075] hover:bg-[#f5edf1] transition";
+  const a = getAvailability(product);
+  const [emailBody, waText] =
+    a.state === "sold"
+      ? [
+          `Bonjour,\n\nLe modèle « ${product.name} » m'a touchée, et j'aimerais en savoir plus sur une création qui s'en inspire.\n`,
+          `Bonjour, le modèle « ${product.name} » m'a touchée, j'aimerais en savoir plus sur une création qui s'en inspire.`,
+        ]
+      : a.state === "reserved"
+      ? [
+          `Bonjour,\n\nLa pièce unique « ${product.name} » m'intéresse, mais elle est actuellement réservée. Pourriez-vous me prévenir si elle redevient disponible ?\n`,
+          `Bonjour, la pièce unique « ${product.name} » m'intéresse, mais elle est actuellement réservée. Pourriez-vous me prévenir si elle redevient disponible ?`,
+        ]
+      : [
+          `Bonjour,\n\nJe souhaite savoir si « ${product.name} » sera de nouveau disponible. Pouvez-vous me prévenir ?\n`,
+          `Bonjour, je souhaite savoir si « ${product.name} » sera de nouveau disponible. Pouvez-vous me prévenir ?`,
+        ];
+  const link = contactLink(contactSettings, `À propos de « ${product.name} »`, emailBody, waText);
+  const cls = compact
+    ? "inline-flex items-center gap-1.5 rounded-full border border-[#d9c5cc] px-3 py-1 text-xs text-[#8f6075] hover:bg-[#f5edf1] transition"
+    : "flex w-full mt-5 h-10 items-center justify-center gap-2 rounded-full border border-[#d9c5cc] text-sm text-[#8f6075] hover:bg-[#f5edf1] transition";
   return link ? (
-    <a href={link.href} target={link.external ? "_blank" : undefined} rel="noopener noreferrer" data-testid="catalog-write-us" className={cls}>
+    <a href={link.href} target={link.external ? "_blank" : undefined} rel="noopener noreferrer" data-testid="catalog-write-us" data-state={a.state} className={cls}>
+      <Pencil size={compact ? 12 : 15} aria-hidden="true" />
       Écrivez-nous
     </a>
   ) : (
-    <span data-testid="catalog-write-us" className={cls}>Épuisé</span>
+    <span data-testid="catalog-write-us" data-state={a.state} className={cls}>{a.label}</span>
   );
 }
 // Bijou normal épuisé : remplace le bouton « Ajouter au panier » (texte validé)

@@ -303,7 +303,7 @@ export default function QuizPage() {
     <div className="min-h-screen bg-[#fbf8f4] text-[#342b32] selection:bg-[#dcc8dd]">
       <MediaGuard />
       <Head>
-        <title>Quiz couleurs — Zenoria</title>
+        <title>Quiz colorimétrie — Zenoria</title>
         <meta name="description" content="Choisissez la couleur de vos cheveux, de vos yeux et de votre peau : Zenoria vous conseille les bagues façonnées à la main et les couleurs de vêtements qui vous mettent en valeur." />
       </Head>
 
@@ -315,7 +315,7 @@ export default function QuizPage() {
         {!showResult && (
           <>
             <div className="text-center mb-8 md:mb-10">
-              <div className="text-xs tracking-[.3em] text-[#9c7285] uppercase mb-3">Quiz couleurs</div>
+              <div className="text-xs tracking-[.3em] text-[#9c7285] uppercase mb-3">Quiz colorimétrie</div>
               <h1 className="font-serif text-3xl md:text-5xl leading-tight">Quelle bague s&apos;accorde à vos couleurs ?</h1>
               <p className="text-[#6e6268] mt-3 max-w-2xl mx-auto leading-7">
                 Trois choix, un mannequin : à chaque réponse, ses couleurs changent. Nous en déduisons les bagues et les vêtements qui vous mettent en valeur.

@@ -568,7 +568,7 @@ export default function ZenoriaShop() {
     if (!cartOpen || paymentMethod !== "transfer" || !user || cartLines.length === 0) setCartStep("cart");
   }, [cartOpen, paymentMethod, user, cartLines.length]);
   useEffect(() => {
-    if (!cartOpen) { setCheckoutError(""); setPieceUnavailableIds([]); } // ZENORIA_STEP3C_V1 : un message d'erreur ou une piece indisponible ne survit pas a la fermeture du panier
+    if (!cartOpen) { setCheckoutError(""); setPieceUnavailableIds([]); setCartNotice(""); } // ZENORIA_STEP3C_V1 : un message d'erreur ou une piece indisponible ne survit pas a la fermeture du panier
   }, [cartOpen]);
   // ZENORIA_STOCK_UI2_V1 : à l'ouverture du panier, une seule lecture du stock et de l'état des pièces des articles du panier
   // (pas d'interrogation régulière : le serveur reste la seule garantie au moment de payer).
@@ -1065,7 +1065,7 @@ export default function ZenoriaShop() {
                   data-testid="hero-quiz-link"
                   className="inline-flex items-center justify-center rounded-full border border-[#9b7a89] px-7 h-12 bg-white/35 hover:bg-white/70 text-sm font-medium transition"
                 >
-                  Faire le quiz couleurs
+                  Faire le quiz colorimétrie
                 </a>
               </div>
             </motion.div>
@@ -1240,7 +1240,7 @@ export default function ZenoriaShop() {
                           {p.videoCount} vidéo
                         </button>
                       </div>
-                      {p.isUnique !== true && !getAvailability(p).orderable ? (
+                      {!getAvailability(p).orderable /* ZENORIA_2C4_V1 : toute bague non commandable */ ? (
                         <CatalogWriteUs product={p} contactSettings={contactSettings} />
                       ) : (
                         <Button onClick={() => addToCart(p)} variant="outline" className="w-full mt-5 rounded-full border-[#b88d9f] hover:bg-[#8f6075] hover:text-white">
@@ -1300,7 +1300,7 @@ export default function ZenoriaShop() {
               className="relative text-left block rounded-[1.5rem] bg-[#fbf8f4] p-6 hover:shadow-lg transition overflow-hidden border border-[#eee2e5]"
             >
               <Sparkles className="text-[#412f3b] mb-4" size={26} />
-              <div className="font-serif text-xl mb-1 text-[#412f3b]">Le quiz couleurs</div>
+              <div className="font-serif text-xl mb-1 text-[#412f3b]">Le quiz colorimétrie</div>
               <div className="text-sm text-[#70656a]">Trouvez les pierres qui résonnent avec votre énergie.</div>
               <ArrowRight size={16} className="absolute right-5 bottom-5 text-[#8f6075]" />
             </a>
@@ -1336,7 +1336,7 @@ export default function ZenoriaShop() {
         <section id="quiz" className="max-w-6xl mx-auto px-6 py-20">
           <div className="rounded-[2.5rem] p-8 md:p-12 grid lg:grid-cols-[1.2fr_.8fr] gap-10 items-center" style={{ background: "linear-gradient(120deg,#eee3f5,#f6e3df)" }}>
             <div>
-              <div className="text-xs tracking-[.3em] text-[#956d83] uppercase mb-3">Quiz couleurs</div>
+              <div className="text-xs tracking-[.3em] text-[#956d83] uppercase mb-3">Quiz colorimétrie</div>
               <h2 className="font-serif text-4xl mb-4">{siteTexts.quiz_title}</h2>
               <p className="text-[#6d6068] leading-7 mb-6">
                 <TextLines text={siteTexts.quiz_text} />
@@ -1432,6 +1432,9 @@ export default function ZenoriaShop() {
               {cartLines.length === 0 ? (
                 <div className="flex-1 grid place-items-center p-8 text-center">
                   <div>
+                    {cartNotice && (
+                      <div data-testid="empty-cart-notice" className="mb-5 text-xs rounded-lg bg-amber-50 text-amber-700 px-3 py-2">{cartNotice}</div>
+                    )}
                     <ShoppingBag className="mx-auto text-[#b88d9f] mb-4" size={40} />
                     <div className="font-serif text-2xl mb-2">Votre panier est vide</div>
                     <p className="text-sm text-[#756a70] mb-6">Découvrez nos créations et laissez-vous guider par vos couleurs.</p>
@@ -1871,13 +1874,17 @@ export default function ZenoriaShop() {
                           >
                             Voir la fiche
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => { addToCart(p); setFavPanelOpen(false); }}
-                            className="rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-3 py-1 text-xs"
-                          >
-                            Ajouter au panier
-                          </button>
+                          {getAvailability(p).orderable ? (
+                            <button
+                              type="button"
+                              onClick={() => { addToCart(p); setFavPanelOpen(false); }}
+                              className="rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-3 py-1 text-xs"
+                            >
+                              Ajouter au panier
+                            </button>
+                          ) : (
+                            <CatalogWriteUs product={p} contactSettings={contactSettings} compact />
+                          )}
                         </div>
                       </div>
                     </div>

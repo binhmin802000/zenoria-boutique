@@ -2,11 +2,9 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
+import CrystalLogo from "@/components/CrystalLogo"; // ZENORIA_2C4_V1 : logo unifié du site (l'ancienne image hébergée ne s'affichait plus)
 
-// Logo Zenoria, déjà hébergé dans Supabase Storage (réutilisé depuis le
-// modèle d'e-mail « mot de passe oublié »).
-const LOGO_URL =
-  "https://dnzrssuclesccxgcurwz.supabase.co/storage/v1/object/public/product-media/Logos/zenoria_logo_horizontal_fond_blanc.png";
+// Logo : composant CrystalLogo, le même que l'en-tête du site (plus d'image hébergée à part).
 
 // Fenêtre affichée au retour réussi d'un paiement Stripe (voir le useEffect
 // qui détecte "?paiement=succes" dans pages/index.js). Ne contient encore
@@ -34,7 +32,7 @@ export default function PaymentConfirmationModal({ open, onClose }) {
               <X />
             </button>
 
-            <img src={LOGO_URL} alt="Zenoria" className="h-10 mx-auto mb-6 object-contain" />
+            <div className="flex justify-center mb-6"><CrystalLogo compact mode={1} /></div>
 
             <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-[#f5edf1] grid place-items-center text-[#8f6075] text-2xl">
               ✓

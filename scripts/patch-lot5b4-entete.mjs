@@ -36,7 +36,8 @@ if (j <= i) fail("ordre des reperes inattendu.");
 const region = c.slice(i, j);
 for (const m of MUST) { const k = region.split(m).length - 1; console.log((k === 1 ? "  OK  " : " ERREUR ") + "zone remplacee contient " + m + " : " + k); if (k !== 1) fail("contenu inattendu dans la zone a remplacer."); }
 c = c.slice(0, i) + NEW + c.slice(j);
-for (const m of MUST.concat(['data-testid="orders-revenue-total"', 'data-testid="orders-flow-alert"', "TEST\n"])) if (!c.includes(m)) fail("controle final : " + m + " absent.");
+const FINAL = MUST.filter((m) => !m.includes("date-preset-")).concat(['data-testid={"date-preset-" + key}', '["today", "Aujourd\'hui"]', '["all", "Tout"]', 'data-testid="orders-revenue-total"', 'data-testid="orders-flow-alert"', "TEST\n"]);
+for (const m of FINAL) if (!c.includes(m)) fail("controle final : " + m + " absent.");
 if (c.includes("Afficher aussi les données de test\n")) fail("controle final : ancien libelle encore present.");
 if (mode === "dry") { console.log("\nDRY-RUN termine : conforme. Rien n'a ete ecrit."); process.exit(0); }
 fs.writeFileSync(PATH, crlf ? c.replace(/\n/g, "\r\n") : c, "utf8");

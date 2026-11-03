@@ -749,113 +749,119 @@ export function AdminOrders() {
         </div>
       )}
 
-            {/* ZENORIA_ORDERS_5B3_V1 : en tête, le chiffre d'affaires encaissé (grand total + graphe), puis le parcours des commandes.
-          Les 6 anciennes cartes (4 chiffres + 2 alertes) sont retirées : leurs informations sont reprises ici. */}
-      <div className="grid gap-3 mb-5">
-        <div className="rounded-2xl bg-white border border-[#eee2e5] px-5 py-4" data-testid="orders-revenue-chart">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <div className="text-xs font-medium text-[#8b737e]">Chiffre d&apos;affaires encaissé</div>
-              <div className="font-serif text-4xl text-[#8f6075] mt-1 leading-tight" data-testid="orders-revenue-total">{loading ? "—" : formatOrderPrice(revenueCashed)}</div>
-              <div className="text-[11px] text-[#8b737e] mt-0.5">{dateFrom || dateTo ? "Sur la période choisie" : "Depuis l'ouverture de la boutique"} · selon la date d&apos;encaissement</div>
+      {/* ZENORIA_ORDERS_5B4_V1 : en-tête réorganisé.
+          Ligne 1 : chiffre d'affaires (grand total, période, case TEST) à gauche ; graphe par jour à droite.
+          Ligne 2 : période à gauche ; recherche à droite.
+          Ligne 3 : parcours des commandes (5 blocs égaux), aide en dessous. */}
+      <div className="rounded-2xl bg-white border border-[#eee2e5] px-5 py-4 mb-3" data-testid="orders-revenue-chart">
+        <div className="flex flex-col md:flex-row gap-5">
+          <div className="md:w-56 shrink-0">
+            <div className="text-xs font-medium text-[#8b737e]">Chiffre d&apos;affaires encaissé</div>
+            <div className="font-serif text-4xl text-[#8f6075] mt-1 leading-tight" data-testid="orders-revenue-total">{loading ? "—" : formatOrderPrice(revenueCashed)}</div>
+            <div className="text-[11px] text-[#8b737e] mt-0.5">{dateFrom || dateTo ? "Sur la période choisie" : "Depuis l'ouverture"}</div>
+            <label className="mt-3 inline-flex items-center gap-2 text-sm text-[#54434c]" title="Afficher aussi les données de test">
+              <input type="checkbox" checked={includeTestData} onChange={(e) => setIncludeTestData(e.target.checked)} data-testid="orders-include-test" aria-label="Afficher aussi les données de test" className="h-4 w-4" />
+              TEST
+            </label>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex justify-between gap-2 text-[11px] text-[#8b737e]">
+              <span>Par jour d&apos;encaissement · {chart.days.length} jours</span>
+              <span>{formatOrderPrice(chart.total)}</span>
             </div>
-            <div className="text-xs text-[#8b737e]">Graphe : {chart.days.length} jours · {formatOrderPrice(chart.total)}</div>
+            <div className="flex items-end gap-[3px] h-28 mt-2">
+              {chart.values.map((v, i) => (
+                <div
+                  key={chart.days[i]}
+                  title={formatParisDay(chart.days[i]) + " : " + formatOrderPrice(v)}
+                  className="flex-1 rounded-t bg-[#8f6075]"
+                  style={{ height: Math.max(2, Math.round((v / chart.max) * 100)) + "%", opacity: v ? 1 : 0.25 }}
+                />
+              ))}
+            </div>
+            <div className="flex justify-between text-[10px] text-[#8b737e] mt-1">
+              <span>{formatParisDay(chart.days[0])}</span>
+              <span>{formatParisDay(chart.days[chart.days.length - 1])}</span>
+            </div>
           </div>
-          <div className="flex items-end gap-[3px] h-24 mt-3">
-            {chart.values.map((v, i) => (
-              <div
-                key={chart.days[i]}
-                title={formatParisDay(chart.days[i]) + " : " + formatOrderPrice(v)}
-                className="flex-1 rounded-t bg-[#8f6075]"
-                style={{ height: Math.max(2, Math.round((v / chart.max) * 100)) + "%", opacity: v ? 1 : 0.25 }}
-              />
-            ))}
-          </div>
-          <div className="flex justify-between text-[10px] text-[#8b737e] mt-1">
-            <span>{formatParisDay(chart.days[0])}</span>
-            <span>{formatParisDay(chart.days[chart.days.length - 1])}</span>
-          </div>
-          <p className="mt-1 text-[11px] text-[#8b737e]">Paiement par carte confirmé ou virement reçu. Sans période choisie, le graphe montre les 30 derniers jours. Survolez une barre pour le montant du jour.</p>
         </div>
-        <div className="rounded-2xl bg-white border border-[#eee2e5] px-4 py-3.5" data-testid="orders-flow">
-          <div className="text-xs font-medium text-[#8b737e] mb-2">Parcours des commandes (période choisie, date de commande)</div>
-          <div className="flex gap-px rounded-lg overflow-hidden">
-            {segments.map((s) => (
-              <button
-                key={s.key}
-                type="button"
-                onClick={() => setStatusFilter(statusFilter === s.key ? "all" : s.key)}
-                aria-pressed={statusFilter === s.key}
-                data-testid={"orders-flow-" + s.key}
-                style={{ flex: 1, background: s.color, opacity: s.count ? 1 : 0.5, boxShadow: statusFilter === s.key ? "inset 0 0 0 3px #342b32" : "none" }}
-                className="min-h-[64px] min-w-0 px-1 py-1.5 text-white text-center overflow-hidden"
-              >
-                <span className="block text-[11px] font-medium truncate">{s.label}</span>
-                <span className="block font-serif text-2xl leading-7">{loading ? "—" : s.count}</span>
-                {s.key === "waiting" && alertCount > 0 && (
-                  <span className="mt-0.5 inline-block rounded-full bg-white text-red-700 px-2 text-[10px] font-semibold" data-testid="orders-flow-alert">dont {alertCount} en alerte</span>
-                )}
-              </button>
-            ))}
-          </div>
-          <p className="mt-1.5 text-[11px] text-[#8b737e]">Cliquez sur un bloc pour filtrer la liste ; un second clic retire le filtre.</p>
+      </div>
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {[
+            ["today", "Aujourd'hui"],
+            ["7d", "7 jours"],
+            ["30d", "30 jours"],
+            ["all", "Tout"],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setPreset(key)}
+              data-testid={"date-preset-" + key}
+              className={`rounded-full px-3 h-8 text-xs border transition ${datePreset === key ? "bg-[#8f6075] text-white border-[#8f6075]" : "border-[#d9c5cc] text-[#54434c] hover:bg-[#f5edf1]"}`}
+            >
+              {label}
+            </button>
+          ))}
+          <span className="text-[#d9c5cc]">|</span>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => { setDatePreset("custom"); setDateFrom(e.target.value); }}
+            data-testid="date-from"
+            aria-label="Date de début"
+            className="rounded-full border border-[#eadfe4] bg-white px-3 h-8 text-xs outline-none focus:border-[#8f6075]"
+          />
+          <span className="text-[#8b737e] text-xs">au</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => { setDatePreset("custom"); setDateTo(e.target.value); }}
+            data-testid="date-to"
+            aria-label="Date de fin"
+            className="rounded-full border border-[#eadfe4] bg-white px-3 h-8 text-xs outline-none focus:border-[#8f6075]"
+          />
         </div>
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Rechercher par référence, e-mail ou numéro"
+          aria-label="Rechercher une commande"
+          data-testid="orders-search"
+          className="w-full lg:w-80 rounded-full border border-[#eadfe4] bg-white px-4 h-10 text-sm outline-none focus:border-[#8f6075]"
+        />
+      </div>
+      <div className="rounded-2xl bg-white border border-[#eee2e5] px-4 py-3.5 mb-4" data-testid="orders-flow">
+        <div className="text-xs font-medium text-[#8b737e] mb-2">Parcours des commandes (période choisie, date de commande)</div>
+        <div className="flex gap-px rounded-lg overflow-hidden">
+          {segments.map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => setStatusFilter(statusFilter === s.key ? "all" : s.key)}
+              aria-pressed={statusFilter === s.key}
+              data-testid={"orders-flow-" + s.key}
+              style={{ flex: 1, background: s.color, opacity: s.count ? 1 : 0.5, boxShadow: statusFilter === s.key ? "inset 0 0 0 3px #342b32" : "none" }}
+              className="min-h-[64px] min-w-0 px-1 py-1.5 text-white text-center overflow-hidden"
+            >
+              <span className="block text-[11px] font-medium truncate">{s.label}</span>
+              <span className="block font-serif text-2xl leading-7">{loading ? "—" : s.count}</span>
+              {s.key === "waiting" && alertCount > 0 && (
+                <span className="mt-0.5 inline-block rounded-full bg-white text-red-700 px-2 text-[10px] font-semibold" data-testid="orders-flow-alert">dont {alertCount} en alerte</span>
+              )}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-[11px] text-[#8b737e]">Cliquez sur un bloc pour filtrer la liste ; un second clic retire le filtre.</p>
         {statusFilter !== "all" && (
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 mt-2">
             <span className="rounded-full bg-[#f5edf1] text-[#8f6075] px-3 py-1 text-xs" data-testid="orders-filter-label">Filtre : {STATUS_FILTER_LABELS[statusFilter]}</span>
             <button type="button" onClick={() => setStatusFilter("all")} className="text-xs text-[#8f6075] underline" data-testid="orders-filter-clear">Tout afficher</button>
           </div>
         )}
       </div>
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <button type="button" onClick={() => setPreset("today")} data-testid="date-preset-today" className={`rounded-full px-3 h-8 text-xs border transition ${datePreset === "today" ? "bg-[#8f6075] text-white border-[#8f6075]" : "border-[#d9c5cc] text-[#54434c] hover:bg-[#f5edf1]"}`}>
-          Aujourd'hui
-        </button>
-        <button type="button" onClick={() => setPreset("7d")} data-testid="date-preset-7d" className={`rounded-full px-3 h-8 text-xs border transition ${datePreset === "7d" ? "bg-[#8f6075] text-white border-[#8f6075]" : "border-[#d9c5cc] text-[#54434c] hover:bg-[#f5edf1]"}`}>
-          7 jours
-        </button>
-        <button type="button" onClick={() => setPreset("30d")} data-testid="date-preset-30d" className={`rounded-full px-3 h-8 text-xs border transition ${datePreset === "30d" ? "bg-[#8f6075] text-white border-[#8f6075]" : "border-[#d9c5cc] text-[#54434c] hover:bg-[#f5edf1]"}`}>
-          30 jours
-        </button>
-        <button type="button" onClick={() => setPreset("all")} data-testid="date-preset-all" className={`rounded-full px-3 h-8 text-xs border transition ${datePreset === "all" ? "bg-[#8f6075] text-white border-[#8f6075]" : "border-[#d9c5cc] text-[#54434c] hover:bg-[#f5edf1]"}`}>
-          Tout
-        </button>
-        <span className="text-[#d9c5cc]">|</span>
-        <input
-          type="date"
-          value={dateFrom}
-          onChange={(e) => { setDatePreset("custom"); setDateFrom(e.target.value); }}
-          data-testid="date-from"
-          aria-label="Date de début"
-          className="rounded-full border border-[#eadfe4] bg-white px-3 h-8 text-xs outline-none focus:border-[#8f6075]"
-        />
-        <span className="text-[#8b737e] text-xs">au</span>
-        <input
-          type="date"
-          value={dateTo}
-          onChange={(e) => { setDatePreset("custom"); setDateTo(e.target.value); }}
-          data-testid="date-to"
-          aria-label="Date de fin"
-          className="rounded-full border border-[#eadfe4] bg-white px-3 h-8 text-xs outline-none focus:border-[#8f6075]"
-        />
-      </div>
-
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mb-3">
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Rechercher par référence, e-mail ou numéro de commande"
-          aria-label="Rechercher une commande"
-          data-testid="orders-search"
-          className="w-full sm:w-80 rounded-full border border-[#eadfe4] bg-white px-4 h-10 text-sm outline-none focus:border-[#8f6075]"
-        />
-        <label className="flex items-center gap-2 text-sm text-[#54434c]">
-          <input type="checkbox" checked={includeTestData} onChange={(e) => setIncludeTestData(e.target.checked)} data-testid="orders-include-test" className="h-4 w-4" />
-          Afficher aussi les données de test
-        </label>
-      </div>
-
                   {/* ZENORIA_ORDERS_5B3_V1 : parcours et chiffre d'affaires déplacés en tête de page */}
       <div className="bg-white rounded-2xl border border-[#eee2e5] overflow-x-auto mb-4">
         <table className="w-full min-w-[720px] text-sm" data-testid="orders-table">

@@ -509,6 +509,44 @@ function OrderHistoryLog({ history }) {
     </div>
   );
 }
+// ZENORIA_ORDERS_5B_V1 : filtres par état (cartes d'alerte et barre « Parcours des commandes »)
+const ORDER_SEGMENTS = [
+  { key: "waiting", label: "En attente", color: "#c98a2b" },
+    { key: "paid", label: "À expédier", color: "#8f6075" }, // ZENORIA_ORDERS_5B3_V1 : payées, pas encore expédiées
+  { key: "shipped", label: "Expédiées", color: "#6d4659" },
+  { key: "delivered", label: "Livrées", color: "#2f7a57" },
+  { key: "closed", label: "Annulées", color: "#9d9197" },
+];
+const STATUS_FILTER_LABELS = {
+  all: "Toutes les commandes",
+  alert: "Virements en alerte",
+  waiting: "En attente de paiement",
+  paid: "Payées, à expédier",
+  shipped: "Expédiées",
+  delivered: "Livrées",
+  closed: "Annulées, expirées ou remboursées",
+};
+function matchesStatus(order, filter, graceDays) {
+  switch (filter) {
+    case "alert":
+      return order.status === "pending_transfer" && isAutoCancelAlert(order.transfer_due_at, graceDays);
+    case "waiting":
+      return order.status === "pending_transfer" || order.status === "pending";
+    case "paid":
+      return order.status === "paid";
+    case "shipped":
+      return order.status === "shipped";
+    case "delivered":
+      return order.status === "delivered";
+    case "closed":
+      return ["cancelled", "expired", "refunded"].includes(order.status);
+    default:
+      return true;
+  }
+}
+function formatParisDay(day) {
+  return String(day || "").split("-").reverse().join("/");
+}
 export function AdminOrders() {
   const [orders, setOrders] = useState([]);
   const [itemsByOrder, setItemsByOrder] = useState({});
@@ -557,7 +595,8 @@ export function AdminOrders() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
     const [includeTestData, setIncludeTestData] = useState(false);
-  const [graceDays, setGraceDays] = useState(DEFAULT_BANK_TRANSFER.grace_days);
+    const [graceDays, setGraceDays] = useState(DEFAULT_BANK_TRANSFER.grace_days);
+  const [statusFilter, setStatusFilter] = useState("all"); // ZENORIA_ORDERS_5B_V1
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -630,7 +669,8 @@ export function AdminOrders() {
   }, [filteredOrders]);
 
   const q = query.trim().toLowerCase();
-  const visible = filteredOrders.filter((o) => {
+    const visible = filteredOrders.filter((o) => {
+    if (!matchesStatus(o, statusFilter, graceDays)) return false; // ZENORIA_ORDERS_5B_V1
     if (!q) return true;
     const email = (o.guest_email || "").toLowerCase();
     const ref = String(o.id);
@@ -657,12 +697,31 @@ export function AdminOrders() {
     }
   };
 
-  const cards = [
-    { label: "Commandes totales", value: stats.total },
-    { label: "Commandes payées", value: stats.paid },
-    { label: "Chiffre d'affaires (payé)", value: formatOrderPrice(stats.revenue) },
-    { label: "Commandes ces 30 derniers jours", value: stats.recent },
-  ];
+    // ZENORIA_ORDERS_5B_V1 : alertes, parcours et chiffre d'affaires à la date d'encaissement
+  const baseOrders = orders.filter((o) => includeTestData || !o.is_test);
+  const alertCount = baseOrders.filter((o) => matchesStatus(o, "alert", graceDays)).length;
+  const waitingTransfer = baseOrders.filter((o) => o.status === "pending_transfer").length;
+  const toShip = baseOrders.filter((o) => o.status === "paid").length;
+  const segments = ORDER_SEGMENTS.map((s) => ({ ...s, count: filteredOrders.filter((o) => matchesStatus(o, s.key, graceDays)).length })); // ZENORIA_ORDERS_5B2_V1 : les 5 états sont toujours affichés, même à 0
+  const cashed = baseOrders.filter((o) => ["paid", "shipped", "delivered"].includes(o.status) && o.paid_at);
+  const revenueCashed = cashed
+    .filter((o) => (!dateFrom || parisDay(o.paid_at) >= dateFrom) && (!dateTo || parisDay(o.paid_at) <= dateTo))
+    .reduce((s, o) => s + Number(o.total || 0), 0);
+  const chart = (() => {
+    const end = dateTo || parisDay(new Date());
+    const start = dateFrom && dateFrom <= end ? dateFrom : addDaysToParisDay(end, -29);
+    const n = Math.max(1, Math.min(92, Math.round((Date.parse(end) - Date.parse(start)) / 86400000) + 1));
+    const days = [];
+    for (let i = n - 1; i >= 0; i -= 1) days.push(addDaysToParisDay(end, -i));
+    const totals = Object.fromEntries(days.map((d) => [d, 0]));
+    cashed.forEach((o) => {
+      const d = parisDay(o.paid_at);
+      if (Object.prototype.hasOwnProperty.call(totals, d)) totals[d] += Number(o.total || 0);
+    });
+    const values = days.map((d) => totals[d]);
+    return { days, values, total: values.reduce((a, b) => a + b, 0), max: Math.max(1, ...values) };
+  })();
+    // ZENORIA_ORDERS_5B3_V1 : les 4 cartes de chiffres sont retirées (chiffre d'affaires et parcours en tête de page)
 
   return (
     <>
@@ -690,66 +749,120 @@ export function AdminOrders() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        {cards.map((c) => (
-          <div key={c.label} className="rounded-2xl bg-white border border-[#eee2e5] px-4 py-4">
-            <div className="font-serif text-3xl text-[#8f6075]" data-testid="orders-stat">
-              {loading ? "—" : c.value}
-            </div>
-            <div className="text-xs text-[#756a70] mt-1">{c.label}</div>
+      {/* ZENORIA_ORDERS_5B4_V1 : en-tête réorganisé.
+          Ligne 1 : chiffre d'affaires (grand total, période, case TEST) à gauche ; graphe par jour à droite.
+          Ligne 2 : période à gauche ; recherche à droite.
+          Ligne 3 : parcours des commandes (5 blocs égaux), aide en dessous. */}
+      <div className="rounded-2xl bg-white border border-[#eee2e5] px-5 py-4 mb-3" data-testid="orders-revenue-chart">
+        <div className="flex flex-col md:flex-row gap-5">
+          <div className="md:w-56 shrink-0">
+            <div className="text-xs font-medium text-[#8b737e]">Chiffre d&apos;affaires encaissé</div>
+            <div className="font-serif text-4xl text-[#8f6075] mt-1 leading-tight" data-testid="orders-revenue-total">{loading ? "—" : formatOrderPrice(revenueCashed)}</div>
+            <div className="text-[11px] text-[#8b737e] mt-0.5">{dateFrom || dateTo ? "Sur la période choisie" : "Depuis l'ouverture"}</div>
+            <label className="mt-3 inline-flex items-center gap-2 text-sm text-[#54434c]" title="Afficher aussi les données de test">
+              <input type="checkbox" checked={includeTestData} onChange={(e) => setIncludeTestData(e.target.checked)} data-testid="orders-include-test" aria-label="Afficher aussi les données de test" className="h-4 w-4" />
+              TEST
+            </label>
           </div>
-        ))}
+          <div className="flex-1 min-w-0">
+            <div className="flex justify-between gap-2 text-[11px] text-[#8b737e]">
+              <span>Par jour d&apos;encaissement · {chart.days.length} jours</span>
+              <span>{formatOrderPrice(chart.total)}</span>
+            </div>
+            <div className="flex items-end gap-[3px] h-28 mt-2">
+              {chart.values.map((v, i) => (
+                <div
+                  key={chart.days[i]}
+                  title={formatParisDay(chart.days[i]) + " : " + formatOrderPrice(v)}
+                  className="flex-1 rounded-t bg-[#8f6075]"
+                  style={{ height: Math.max(2, Math.round((v / chart.max) * 100)) + "%", opacity: v ? 1 : 0.25 }}
+                />
+              ))}
+            </div>
+            <div className="flex justify-between text-[10px] text-[#8b737e] mt-1">
+              <span>{formatParisDay(chart.days[0])}</span>
+              <span>{formatParisDay(chart.days[chart.days.length - 1])}</span>
+            </div>
+          </div>
+        </div>
       </div>
-
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <button type="button" onClick={() => setPreset("today")} data-testid="date-preset-today" className={`rounded-full px-3 h-8 text-xs border transition ${datePreset === "today" ? "bg-[#8f6075] text-white border-[#8f6075]" : "border-[#d9c5cc] text-[#54434c] hover:bg-[#f5edf1]"}`}>
-          Aujourd'hui
-        </button>
-        <button type="button" onClick={() => setPreset("7d")} data-testid="date-preset-7d" className={`rounded-full px-3 h-8 text-xs border transition ${datePreset === "7d" ? "bg-[#8f6075] text-white border-[#8f6075]" : "border-[#d9c5cc] text-[#54434c] hover:bg-[#f5edf1]"}`}>
-          7 jours
-        </button>
-        <button type="button" onClick={() => setPreset("30d")} data-testid="date-preset-30d" className={`rounded-full px-3 h-8 text-xs border transition ${datePreset === "30d" ? "bg-[#8f6075] text-white border-[#8f6075]" : "border-[#d9c5cc] text-[#54434c] hover:bg-[#f5edf1]"}`}>
-          30 jours
-        </button>
-        <button type="button" onClick={() => setPreset("all")} data-testid="date-preset-all" className={`rounded-full px-3 h-8 text-xs border transition ${datePreset === "all" ? "bg-[#8f6075] text-white border-[#8f6075]" : "border-[#d9c5cc] text-[#54434c] hover:bg-[#f5edf1]"}`}>
-          Tout
-        </button>
-        <span className="text-[#d9c5cc]">|</span>
-        <input
-          type="date"
-          value={dateFrom}
-          onChange={(e) => { setDatePreset("custom"); setDateFrom(e.target.value); }}
-          data-testid="date-from"
-          aria-label="Date de début"
-          className="rounded-full border border-[#eadfe4] bg-white px-3 h-8 text-xs outline-none focus:border-[#8f6075]"
-        />
-        <span className="text-[#8b737e] text-xs">au</span>
-        <input
-          type="date"
-          value={dateTo}
-          onChange={(e) => { setDatePreset("custom"); setDateTo(e.target.value); }}
-          data-testid="date-to"
-          aria-label="Date de fin"
-          className="rounded-full border border-[#eadfe4] bg-white px-3 h-8 text-xs outline-none focus:border-[#8f6075]"
-        />
-      </div>
-
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mb-3">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {[
+            ["today", "Aujourd'hui"],
+            ["7d", "7 jours"],
+            ["30d", "30 jours"],
+            ["all", "Tout"],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setPreset(key)}
+              data-testid={"date-preset-" + key}
+              className={`rounded-full px-3 h-8 text-xs border transition ${datePreset === key ? "bg-[#8f6075] text-white border-[#8f6075]" : "border-[#d9c5cc] text-[#54434c] hover:bg-[#f5edf1]"}`}
+            >
+              {label}
+            </button>
+          ))}
+          <span className="text-[#d9c5cc]">|</span>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => { setDatePreset("custom"); setDateFrom(e.target.value); }}
+            data-testid="date-from"
+            aria-label="Date de début"
+            className="rounded-full border border-[#eadfe4] bg-white px-3 h-8 text-xs outline-none focus:border-[#8f6075]"
+          />
+          <span className="text-[#8b737e] text-xs">au</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => { setDatePreset("custom"); setDateTo(e.target.value); }}
+            data-testid="date-to"
+            aria-label="Date de fin"
+            className="rounded-full border border-[#eadfe4] bg-white px-3 h-8 text-xs outline-none focus:border-[#8f6075]"
+          />
+        </div>
         <input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Rechercher par référence, e-mail ou numéro de commande"
+          placeholder="Rechercher par référence, e-mail ou numéro"
           aria-label="Rechercher une commande"
           data-testid="orders-search"
-          className="w-full sm:w-80 rounded-full border border-[#eadfe4] bg-white px-4 h-10 text-sm outline-none focus:border-[#8f6075]"
+          className="w-full lg:w-80 rounded-full border border-[#eadfe4] bg-white px-4 h-10 text-sm outline-none focus:border-[#8f6075]"
         />
-        <label className="flex items-center gap-2 text-sm text-[#54434c]">
-          <input type="checkbox" checked={includeTestData} onChange={(e) => setIncludeTestData(e.target.checked)} data-testid="orders-include-test" className="h-4 w-4" />
-          Afficher aussi les données de test
-        </label>
       </div>
-
+      <div className="rounded-2xl bg-white border border-[#eee2e5] px-4 py-3.5 mb-4" data-testid="orders-flow">
+        <div className="text-xs font-medium text-[#8b737e] mb-2">Parcours des commandes (période choisie, date de commande)</div>
+        <div className="flex gap-px rounded-lg overflow-hidden">
+          {segments.map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => setStatusFilter(statusFilter === s.key ? "all" : s.key)}
+              aria-pressed={statusFilter === s.key}
+              data-testid={"orders-flow-" + s.key}
+              style={{ flex: 1, background: s.color, opacity: s.count ? 1 : 0.5, boxShadow: statusFilter === s.key ? "inset 0 0 0 3px #342b32" : "none" }}
+              className="min-h-[64px] min-w-0 px-1 py-1.5 text-white text-center overflow-hidden"
+            >
+              <span className="block text-[11px] font-medium truncate">{s.label}</span>
+              <span className="block font-serif text-2xl leading-7">{loading ? "—" : s.count}</span>
+              {s.key === "waiting" && alertCount > 0 && (
+                <span className="mt-0.5 inline-block rounded-full bg-white text-red-700 px-2 text-[10px] font-semibold" data-testid="orders-flow-alert">dont {alertCount} en alerte</span>
+              )}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-[11px] text-[#8b737e]">Cliquez sur un bloc pour filtrer la liste ; un second clic retire le filtre.</p>
+        {statusFilter !== "all" && (
+          <div className="flex flex-wrap items-center gap-3 mt-2">
+            <span className="rounded-full bg-[#f5edf1] text-[#8f6075] px-3 py-1 text-xs" data-testid="orders-filter-label">Filtre : {STATUS_FILTER_LABELS[statusFilter]}</span>
+            <button type="button" onClick={() => setStatusFilter("all")} className="text-xs text-[#8f6075] underline" data-testid="orders-filter-clear">Tout afficher</button>
+          </div>
+        )}
+      </div>
+                  {/* ZENORIA_ORDERS_5B3_V1 : parcours et chiffre d'affaires déplacés en tête de page */}
       <div className="bg-white rounded-2xl border border-[#eee2e5] overflow-x-auto mb-4">
         <table className="w-full min-w-[720px] text-sm" data-testid="orders-table">
           <thead>

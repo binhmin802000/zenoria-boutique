@@ -24,6 +24,10 @@ import AdminPaymentMethods from "@/components/AdminPaymentMethods"; // ZENORIA_A
 import AdminReviews from "@/components/AdminReviews";
 import AdminDataRequests from "@/components/AdminDataRequests";
 import { Star as ReviewsTabIcon } from "lucide-react";
+// ZENORIA_HOME_5D_V1 : Accueil (tableau de bord) et compteurs du menu
+import { Home as HomeIcon, LayoutDashboard } from "lucide-react";
+import AdminHome from "@/components/AdminHome";
+import { useAdminCounters } from "@/lib/adminCounters";
 import { ADMIN_NAV, DEFAULT_NAV, parseAdminHash, buildAdminHash, isAuthCallbackHash, technicalAlertLevel } from "@/lib/adminNav";
 import { worstLevel } from "@/lib/quota";
 
@@ -148,8 +152,9 @@ function formatEUR(n) {
   return Number(n).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
 }
 
-const GROUP_ICONS = { produits: Package, crm: Users, reglages: SlidersHorizontal, technique: Settings };
+const GROUP_ICONS = { accueil: HomeIcon, produits: Package, crm: Users, reglages: SlidersHorizontal, technique: Settings }; // ZENORIA_HOME_5D_V1
 const TAB_ICONS = {
+  tableau: LayoutDashboard, // ZENORIA_HOME_5D_V1
   avis: ReviewsTabIcon,
   collections: Package,
   familles: Palette,
@@ -224,6 +229,12 @@ export default function AdminPage() {
   const familiesStatus = useFamilies(isAdmin === true);
   const familyById = (id) => familiesStatus.families.find((f) => String(f.id) === String(id)) || null;
   const quotaLevel = worstLevel(computeQuotaAlerts(quota));
+  // ZENORIA_HOME_5D_V1 : compteurs de l'Accueil et du menu (relus à chaque changement d'onglet)
+  const counters = useAdminCounters(isAdmin === true, nav.sub);
+  // Le badge RGPD du menu est chargé dès l'ouverture (avant, il restait à 0 tant que l'onglet RGPD n'avait pas été ouvert)
+  useEffect(() => {
+    if (counters.loaded) setRgpdPendingCount(counters.rgpd.count);
+  }, [counters.loaded, counters.rgpd.count]);
 
   // Maintenance : chargée une fois pour le bandeau d'alerte et l'onglet « Maintenance »
   const maintenance = useMaintenanceStatus(isAdmin === true);
@@ -857,6 +868,16 @@ export default function AdminPage() {
                         aria-label={level === "critical" ? "Alerte critique dans ce groupe" : "Point d'attention dans ce groupe"}
                       />
                     )}
+                    {/* ZENORIA_HOME_5D_V1 : ce qui attend l'administratrice (groupes Accueil et CRM) */}
+                    {!sidebarCollapsed && (g.id === "accueil" || g.id === "crm") && counters.todoTotal > 0 && (
+                      <span
+                        data-testid={"group-count-" + g.id}
+                        className={"min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-medium flex items-center justify-center shrink-0 " + (activeGroup ? "bg-white text-[#8f6075]" : counters.urgent ? "bg-red-600 text-white" : "bg-[#8f6075] text-white")}
+                        aria-label={counters.todoTotal + " élément(s) à traiter"}
+                      >
+                        {counters.todoTotal}
+                      </span>
+                    )}
                     {!sidebarCollapsed && (activeGroup ? <ChevronDown size={14} className="shrink-0" /> : <ChevronRight size={14} className="shrink-0" />)}
                   </button>
 
@@ -884,6 +905,28 @@ export default function AdminPage() {
                             }`}
                           >
                             <TabIcon size={14} className="shrink-0" /> <span className="truncate">{t.label}</span>
+                            {/* ZENORIA_HOME_5D_V1 : compteurs des onglets Commandes, Avis et Comptes */}
+                            {t.id === "commandes" && counters.orders.menu > 0 && (
+                              <span
+                                data-testid="orders-menu-badge"
+                                className={"min-w-[18px] h-[18px] px-1 rounded-full text-white text-[10px] font-medium flex items-center justify-center shrink-0 " + (counters.orders.alert > 0 ? "bg-red-600" : "bg-[#8f6075]")}
+                                aria-label={counters.orders.menu + " commande(s) à traiter"}
+                              >
+                                {counters.orders.menu}
+                              </span>
+                            )}
+                            {t.id === "avis" && counters.reviews.pending > 0 && (
+                              <span
+                                data-testid="reviews-menu-badge"
+                                className={"min-w-[18px] h-[18px] px-1 rounded-full text-white text-[10px] font-medium flex items-center justify-center shrink-0 " + (counters.reviews.late > 0 ? "bg-red-600" : "bg-[#8f6075]")}
+                                aria-label={counters.reviews.pending + " avis à modérer"}
+                              >
+                                {counters.reviews.pending}
+                              </span>
+                            )}
+                            {t.id === "comptes" && counters.flagged.count > 0 && (
+                              <span data-testid="flagged-menu-dot" className="h-2 w-2 rounded-full shrink-0 bg-red-500" aria-label="Compte à surveiller" />
+                            )}
                             {t.id === "quotas" && quotaLevel !== "ok" && (
                               <span
                                 data-testid="quota-dot"
@@ -1101,6 +1144,7 @@ export default function AdminPage() {
 
         {tab === "familles" && <AdminFamilies status={familiesStatus} products={products} onProductsChanged={loadProducts} />}
         {tab === "promos" && <AdminBanners promoCodes={promoCodes} onCodesChanged={loadPromoCodes} siteMode={maintenanceActive && maintenance.row ? maintenance.row.mode : "off"} />}
+        {tab === "tableau" && <AdminHome counters={counters} onGo={goTo} />} {/* ZENORIA_HOME_5D_V1 */}
         {tab === "connexions" && <AdminConnections />}
 
         {tab === "site" && <AdminSiteMedia />}

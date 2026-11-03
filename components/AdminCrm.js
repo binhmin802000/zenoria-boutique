@@ -9,6 +9,8 @@ import { parisDay, parisDayDiff, addDaysToParisDay } from "@/lib/dates"; // ZENO
 // ZENORIA_FLAGGED_5E_V1 : signalement des comptes à 3 annulations par la cliente sur 30 jours
 import { useFlaggedAccounts } from "@/lib/flaggedAccounts";
 import FlaggedBadge from "@/components/FlaggedBadge";
+// ZENORIA_HOME_5D_V1 : l'Accueil ouvre cet écran avec un filtre déjà choisi
+import { peekOrdersHandoff, clearOrdersHandoff } from "@/lib/adminCounters";
 
 // ZENORIA_INVOICE_STEP3B_V1 : télécharge la facture PDF d'une commande depuis l'admin (même route que l'espace cliente ;
 // issue_invoice_for_order autorise un compte administrateur à générer la facture de n'importe quelle commande).
@@ -740,9 +742,18 @@ export function AdminOrders() {
   const [datePreset, setDatePreset] = useState("all"); // "today" | "7d" | "30d" | "custom" | "all"
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-    const [includeTestData, setIncludeTestData] = useState(false);
+    const [includeTestData, setIncludeTestData] = useState(() => {
+    const h = peekOrdersHandoff(); // ZENORIA_HOME_5D_V1
+    return Boolean(h && h.includeTest);
+  });
     const [graceDays, setGraceDays] = useState(DEFAULT_BANK_TRANSFER.grace_days);
-  const [statusFilter, setStatusFilter] = useState("all"); // ZENORIA_ORDERS_5B_V1
+  useEffect(() => {
+    clearOrdersHandoff(); // ZENORIA_HOME_5D_V1 : le filtre venu de l'Accueil n'est utilisé qu'à l'ouverture
+  }, []);
+  const [statusFilter, setStatusFilter] = useState(() => {
+    const h = peekOrdersHandoff();
+    return h && h.filter ? h.filter : "all";
+  }); // ZENORIA_ORDERS_5B_V1
   const flaggedAccounts = useFlaggedAccounts(orders); // ZENORIA_FLAGGED_5E_V1
   const [view, setView] = useState("list"); // ZENORIA_ORDERS_6A_V1 : "list" (commandes) ou "history" (historique des actions)
 

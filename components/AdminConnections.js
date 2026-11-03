@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw, ShieldCheck } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+// ZENORIA_FLAGGED_5E_V1 : signalement des comptes à 3 annulations par la cliente sur 30 jours
+import { useFlaggedAccounts } from "@/lib/flaggedAccounts";
+import FlaggedBadge from "@/components/FlaggedBadge";
 
 // ============================================================
 // ONGLET « CONNEXIONS » de l'administration (/admin)
@@ -63,6 +66,7 @@ export default function AdminConnections() {
   const [accounts, setAccounts] = useState([]);
   const [history, setHistory] = useState([]);
   const [maxRows, setMaxRows] = useState(50);
+  const flagged = useFlaggedAccounts(accounts); // ZENORIA_FLAGGED_5E_V1
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -159,6 +163,7 @@ export default function AdminConnections() {
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <span className="font-medium whitespace-nowrap">{a.email || "—"}</span>
+                    {flagged.get(a.account_id) && <FlaggedBadge count={flagged.get(a.account_id).count} />}
                     {a.is_admin_account && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-[#f5edf1] text-[#8f6075] px-2 py-0.5 text-[11px] shrink-0">
                         <ShieldCheck size={12} /> Admin

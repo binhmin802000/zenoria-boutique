@@ -6,6 +6,9 @@ import { parseBankTransfer, BANK_TRANSFER_KEY, DEFAULT_BANK_TRANSFER, autoCancel
 // ZENORIA_ORDERS_5B5_V1 : imports regroupés en tête de fichier
 import { orderStatusInfo, formatOrderPrice, formatOrderReference } from "@/lib/orderDisplay"; // ZENORIA_ACCOUNT_STEP13_V1
 import { parisDay, parisDayDiff, addDaysToParisDay } from "@/lib/dates"; // ZENORIA_ORDER_DATES_V1
+// ZENORIA_FLAGGED_5E_V1 : signalement des comptes à 3 annulations par la cliente sur 30 jours
+import { useFlaggedAccounts } from "@/lib/flaggedAccounts";
+import FlaggedBadge from "@/components/FlaggedBadge";
 
 // ZENORIA_INVOICE_STEP3B_V1 : télécharge la facture PDF d'une commande depuis l'admin (même route que l'espace cliente ;
 // issue_invoice_for_order autorise un compte administrateur à générer la facture de n'importe quelle commande).
@@ -71,6 +74,7 @@ export function CrmAccounts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [includeAdmins, setIncludeAdmins] = useState(false);
+  const flagged = useFlaggedAccounts(accounts); // ZENORIA_FLAGGED_5E_V1
   const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
@@ -145,6 +149,12 @@ export function CrmAccounts() {
         </div>
       )}
 
+      {/* ZENORIA_FLAGGED_5E_V1 : comptes à surveiller */}
+      {customers.some((a) => flagged.has(a.account_id)) && (
+        <div data-testid="flagged-banner" role="status" className="mb-5 rounded-xl bg-red-50 border border-red-200 text-red-800 px-4 py-3 text-[13px]">
+          {customers.filter((a) => flagged.has(a.account_id)).length} compte{customers.filter((a) => flagged.has(a.account_id)).length > 1 ? "s" : ""} à surveiller : 3 annulations ou plus faites par la cliente sur les 30 derniers jours.
+        </div>
+      )}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         {cards.map((c) => (
           <div key={c.label} className="rounded-2xl bg-white border border-[#eee2e5] px-4 py-4">
@@ -197,6 +207,7 @@ export function CrmAccounts() {
                 <td className="px-4 py-3">
                   <span className="font-medium whitespace-nowrap">{a.email || "—"}</span>
                   {a.is_admin_account && <span className="ml-2 rounded-full bg-[#f5edf1] text-[#8f6075] px-2 py-0.5 text-[11px]">Admin</span>}
+                  {flagged.get(a.account_id) && <FlaggedBadge count={flagged.get(a.account_id).count} />}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-[#54434c]">
                   {a.profile && (a.profile.first_name || a.profile.last_name)
@@ -732,6 +743,7 @@ export function AdminOrders() {
     const [includeTestData, setIncludeTestData] = useState(false);
     const [graceDays, setGraceDays] = useState(DEFAULT_BANK_TRANSFER.grace_days);
   const [statusFilter, setStatusFilter] = useState("all"); // ZENORIA_ORDERS_5B_V1
+  const flaggedAccounts = useFlaggedAccounts(orders); // ZENORIA_FLAGGED_5E_V1
   const [view, setView] = useState("list"); // ZENORIA_ORDERS_6A_V1 : "list" (commandes) ou "history" (historique des actions)
 
   const load = useCallback(async () => {
@@ -1057,6 +1069,7 @@ export function AdminOrders() {
                   </td>
                   <td className="px-4 py-3">
                     <span className="font-medium whitespace-nowrap">{o.guest_email || "Compte client"}</span>
+                    {o.user_id && flaggedAccounts.get(o.user_id) && <FlaggedBadge count={flaggedAccounts.get(o.user_id).count} />}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-[#54434c]">{formatDateTime(o.created_at)}</td>
                   <td className="px-4 py-3">{orderStatusBadge(o.status)}</td>
@@ -1117,6 +1130,11 @@ export function AdminOrders() {
                         })()}
                       </div>
 
+                      {o.user_id && flaggedAccounts.get(o.user_id) && (
+                        <div data-testid="flagged-order-note" className="mb-4 rounded-lg bg-red-50 border border-red-200 text-red-800 text-[12px] px-3 py-2">
+                          Compte à surveiller : {flaggedAccounts.get(o.user_id).count} annulations par la cliente sur les 30 derniers jours.
+                        </div>
+                      )}
                       <TransferPanel order={o} history={statusHistoryByOrder[o.id]} graceDays={graceDays} onDone={(msg) => { setAdminNotice(msg); load(); }} />
                       {/* ShippingPanel : transporteur, numéro de suivi, actions d'expédition */}
                       {/* ZENORIA_ORDER_JOURNAL_V1 : le bloc Expédition n'a pas de sens sur une commande annulée */}

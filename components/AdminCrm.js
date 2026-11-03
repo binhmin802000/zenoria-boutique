@@ -550,6 +550,138 @@ function matchesStatus(order, filter, graceDays) {
 function formatParisDay(day) {
   return String(day || "").split("-").reverse().join("/");
 }
+// ZENORIA_ORDERS_6A_V1 : sous-onglet « Historique des actions » (lecture seule).
+// Toutes les lignes du journal order_status_history, de toutes les commandes, les plus récentes d'abord.
+// Filtres : statut, « visible par la cliente », recherche libre (référence, e-mail, note, auteur).
+// L'auteur n'est enregistré que pour certaines actions (virement, annulation) ; sinon : « Automatique ou non renseigné ».
+const HISTORY_PAGE_SIZE = 100;
+const HISTORY_STATUS_OPTIONS = ["pending_transfer", "paid", "shipped", "delivered", "cancelled", "expired", "refunded", "pending"];
+
+function OrderActionsHistory({ orders, historyByOrder, loading, onOpenOrder }) {
+  const [statusFilter, setStatusFilter] = useState("");
+  const [visibleOnly, setVisibleOnly] = useState(false);
+  const [query, setQuery] = useState("");
+  const [limit, setLimit] = useState(HISTORY_PAGE_SIZE);
+
+  const rows = useMemo(() => {
+    const list = [];
+    (orders || []).forEach((o) => {
+      ((historyByOrder && historyByOrder[o.id]) || []).forEach((h) => list.push({ order: o, entry: h }));
+    });
+    list.sort((a, b) => {
+      const diff = new Date(b.entry.changed_at).getTime() - new Date(a.entry.changed_at).getTime();
+      return diff !== 0 && !Number.isNaN(diff) ? diff : Number(b.entry.id) - Number(a.entry.id);
+    });
+    return list;
+  }, [orders, historyByOrder]);
+
+  const q = query.trim().toLowerCase();
+  const filtered = rows.filter(({ order, entry }) => {
+    if (statusFilter && entry.status !== statusFilter) return false;
+    if (visibleOnly && !entry.customer_visible) return false;
+    if (!q) return true;
+    const haystack = [formatOrderReference(order), String(order.id), order.guest_email, entry.note, entry.actor_email]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(q);
+  });
+  const shown = filtered.slice(0, limit);
+  const field = "rounded-full border border-[#eadfe4] bg-white px-3 h-9 text-[13px] outline-none focus:border-[#8f6075]";
+
+  return (
+    <div data-testid="orders-history">
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <select
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.target.value); setLimit(HISTORY_PAGE_SIZE); }}
+          aria-label="Filtrer par statut"
+          data-testid="orders-history-status"
+          className={field}
+        >
+          <option value="">Tous les statuts</option>
+          {HISTORY_STATUS_OPTIONS.map((s) => (
+            <option key={s} value={s}>{orderStatusInfo(s).label}</option>
+          ))}
+        </select>
+        <label className="flex items-center gap-2 text-[13px] text-[#54434c]">
+          <input
+            type="checkbox"
+            checked={visibleOnly}
+            onChange={(e) => { setVisibleOnly(e.target.checked); setLimit(HISTORY_PAGE_SIZE); }}
+            data-testid="orders-history-visible-only"
+            className="h-4 w-4"
+          />
+          Visibles par la cliente seulement
+        </label>
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setLimit(HISTORY_PAGE_SIZE); }}
+          placeholder="Référence, e-mail, note ou auteur"
+          aria-label="Rechercher dans l'historique"
+          data-testid="orders-history-search"
+          className={field + " flex-1 min-w-[200px]"}
+        />
+      </div>
+      <p className="text-[12px] text-[#8b737e] mb-2" data-testid="orders-history-count" aria-live="polite">
+        {loading ? "Chargement…" : filtered.length + " action" + (filtered.length > 1 ? "s" : "") + " sur " + rows.length}
+      </p>
+      <div className="bg-white rounded-2xl border border-[#eee2e5] overflow-x-auto mb-4">
+        <table className="w-full min-w-[720px] text-sm" data-testid="orders-history-table">
+          <thead>
+            <tr className="bg-[#f5edf1] text-left text-[#8b737e]">
+              <th className="px-4 py-3 font-medium">Date</th>
+              <th className="px-4 py-3 font-medium">Commande</th>
+              <th className="px-4 py-3 font-medium">Action</th>
+              <th className="px-4 py-3 font-medium">Auteur</th>
+            </tr>
+          </thead>
+          <tbody>
+            {!loading && shown.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-4 py-6 text-center text-[#8b737e]" data-testid="orders-history-empty">Aucune action pour ces critères.</td>
+              </tr>
+            )}
+            {shown.map(({ order, entry }) => (
+              <tr key={entry.id} className="border-t border-[#eee2e5] align-top" data-testid="orders-history-row">
+                <td className="px-4 py-3 whitespace-nowrap text-[12px] text-[#8b737e]">{formatDateTime(entry.changed_at)}</td>
+                <td className="px-4 py-3">
+                  <button type="button" onClick={() => onOpenOrder(order)} data-testid="orders-history-open" className="text-[#8f6075] underline whitespace-nowrap">
+                    {formatOrderReference(order)}
+                  </button>
+                  <div className="text-[12px] text-[#8b737e]">{order.guest_email || "Compte client"}</div>
+                </td>
+                <td className="px-4 py-3 text-[13px] text-[#54434c]">
+                  {orderStatusBadge(entry.status)}
+                  {entry.note && <span className="block mt-1 leading-5">{entry.note}</span>}
+                  {entry.customer_visible && <span className="block text-[11px] text-[#8f6075]">Visible par la cliente</span>}
+                </td>
+                <td className="px-4 py-3 text-[12px] text-[#54434c]">
+                  {entry.actor_email || <span className="text-[#8b737e]">Automatique ou non renseigné</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {filtered.length > shown.length && (
+        <button
+          type="button"
+          onClick={() => setLimit((n) => n + HISTORY_PAGE_SIZE)}
+          data-testid="orders-history-more"
+          className="mb-4 rounded-full border border-[#d9c5cc] text-[#54434c] hover:bg-[#f5edf1] text-xs font-medium px-4 h-9 transition"
+        >
+          Afficher plus ({filtered.length - shown.length} restantes)
+        </button>
+      )}
+      <p className="text-[11px] leading-4 text-[#8b737e]">
+        Toutes les actions enregistrées dans le journal des commandes. L&apos;auteur n&apos;est enregistré que pour certaines actions (virement, annulation) ; pour les autres, la colonne indique « Automatique ou non renseigné ». Un clic sur la référence ouvre la commande.
+      </p>
+    </div>
+  );
+}
+
 export function AdminOrders() {
   const [orders, setOrders] = useState([]);
   const [itemsByOrder, setItemsByOrder] = useState({});
@@ -600,6 +732,7 @@ export function AdminOrders() {
     const [includeTestData, setIncludeTestData] = useState(false);
     const [graceDays, setGraceDays] = useState(DEFAULT_BANK_TRANSFER.grace_days);
   const [statusFilter, setStatusFilter] = useState("all"); // ZENORIA_ORDERS_5B_V1
+  const [view, setView] = useState("list"); // ZENORIA_ORDERS_6A_V1 : "list" (commandes) ou "history" (historique des actions)
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -743,6 +876,40 @@ export function AdminOrders() {
         </div>
       )}
 
+      {/* ZENORIA_ORDERS_6A_V1 : sous-onglets Commandes / Historique des actions */}
+      <div className="flex gap-1 border-b border-[#eee2e5] mb-4" role="tablist" data-testid="orders-subtabs">
+        {[
+          ["list", "Commandes"],
+          ["history", "Historique des actions"],
+        ].map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={view === key}
+            onClick={() => setView(key)}
+            data-testid={"orders-subtab-" + key}
+            className={`px-4 h-10 text-sm rounded-t-lg border border-b-0 -mb-px transition ${view === key ? "bg-white border-[#eee2e5] font-medium text-[#412f3b]" : "bg-[#f5edf1] border-transparent text-[#8b737e] hover:text-[#412f3b]"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {view === "history" ? (
+        <OrderActionsHistory
+          orders={baseOrders}
+          historyByOrder={statusHistoryByOrder}
+          loading={loading}
+          onOpenOrder={(order) => {
+            setView("list");
+            setStatusFilter("all");
+            setPreset("all");
+            setQuery(formatOrderReference(order));
+            setOpenOrderId(order.id);
+          }}
+        />
+      ) : (
+      <>
       {/* ZENORIA_ORDERS_5B4_V1 : en-tête réorganisé.
           Ligne 1 : chiffre d'affaires (grand total, période, case TEST) à gauche ; graphe par jour à droite.
           Ligne 2 : période à gauche ; recherche à droite.
@@ -1082,6 +1249,8 @@ export function AdminOrders() {
       <p className="text-[11px] leading-4 text-[#8b737e]">
         Les commandes par carte sont créées automatiquement par le webhook de paiement Stripe. Pour un virement, l&apos;encaissement, la prolongation et l&apos;annulation se font depuis le détail de la commande.
       </p>
+      </>
+      )}
     </>
   );
 }

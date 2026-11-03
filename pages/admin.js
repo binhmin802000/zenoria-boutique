@@ -27,7 +27,7 @@ import { Star as ReviewsTabIcon } from "lucide-react";
 // ZENORIA_HOME_5D_V1 : Accueil (tableau de bord) et compteurs du menu
 import { Home as HomeIcon, LayoutDashboard } from "lucide-react";
 import AdminHome from "@/components/AdminHome";
-import { useAdminCounters } from "@/lib/adminCounters";
+import { useAdminCounters, stockFilterMatches, STOCK_FILTER_LABELS } from "@/lib/adminCounters"; // ZENORIA_HOME_5D2_V1
 import { ADMIN_NAV, DEFAULT_NAV, parseAdminHash, buildAdminHash, isAuthCallbackHash, technicalAlertLevel } from "@/lib/adminNav";
 import { worstLevel } from "@/lib/quota";
 
@@ -185,6 +185,7 @@ export default function AdminPage() {
   const subBarRef = useRef(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [rgpdPendingCount, setRgpdPendingCount] = useState(0);
+  const [stockFilter, setStockFilter] = useState(""); // ZENORIA_HOME_5D2_V1 : filtre de la liste des bijoux (venu de l'Accueil)
   const tab = nav.sub;
 
   const goTo = (group, sub) => {
@@ -192,9 +193,16 @@ export default function AdminPage() {
     if (!g) return;
     const target = sub && g.tabs.some((t) => t.id === sub) ? sub : lastSubByGroup.current[group] || g.tabs[0].id;
     lastSubByGroup.current[group] = target;
+    setStockFilter(""); // ZENORIA_HOME_5D2_V1 : un clic sur le menu retire le filtre de stock
     setNav({ group, sub: target });
   };
 
+  // ZENORIA_HOME_5D2_V1 : ouvre la liste des bijoux filtrée (tuiles de l'Accueil) ; la liste est relue pour rester cohérente avec les chiffres
+  const openStock = (filter) => {
+    goTo("produits", "collections");
+    setStockFilter(filter);
+    loadProducts();
+  };
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [promoCodes, setPromoCodes] = useState([]);
@@ -209,6 +217,7 @@ export default function AdminPage() {
   const [pieceHolds, setPieceHolds] = useState([]);
   const [holdOrders, setHoldOrders] = useState({});
   const [uniqueWarning, setUniqueWarning] = useState(null);
+  const visibleProducts = stockFilter ? products.filter((p) => stockFilterMatches(stockFilter, p, pieceHolds)) : products; // ZENORIA_HOME_5D2_V1
 
   // Upload de médias (photos / vidéo)
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -986,6 +995,18 @@ export default function AdminPage() {
               </button>
             </div>
 
+            {/* ZENORIA_HOME_5D2_V1 : filtre de stock venu de l'Accueil */}
+            {stockFilter && !productsLoading && (
+              <div data-testid="stock-filter-banner" className="mb-4 flex flex-wrap items-center gap-3 rounded-xl bg-[#f5edf1] px-4 py-2.5 text-[13px] text-[#54434c]">
+                <span>
+                  Filtre : <b>{STOCK_FILTER_LABELS[stockFilter] || stockFilter}</b> · {visibleProducts.length} collection{visibleProducts.length > 1 ? "s" : ""}
+                  {visibleProducts.length === 0 && " : aucune collection ne correspond."}
+                </span>
+                <button type="button" onClick={() => setStockFilter("")} data-testid="stock-filter-clear" className="text-[#8f6075] underline">
+                  Afficher toutes les collections
+                </button>
+              </div>
+            )}
             {productsLoading ? (
               <p className="text-sm text-[#8b737e]">Chargement des collections...</p>
             ) : (
@@ -1003,7 +1024,7 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {products.map((p) => (
+                    {visibleProducts.map((p) => (
                       <tr key={p.id} className="border-t border-[#eee2e5]">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
@@ -1022,7 +1043,7 @@ export default function AdminPage() {
                                 const st = pieceStateFor(p.id, pieceHolds).state;
                                 return (
                                   <span className={"inline-block mt-1 rounded-full px-2 py-0.5 text-[10px] " + (st === "sold" ? "bg-[#eeeaec] text-[#6b5f66]" : st === "reserved" ? "bg-amber-50 text-amber-800" : "bg-[#f7efdf] text-[#8a6116]")} data-testid="unique-badge">
-                                    {pieceBadgeLabel(st)}
+                                    {pieceBadgeLabel(st)}{stockFilter === "reserved" && st === "reserved" ? " · " + formatOrderReference(holdOrders[pieceStateFor(p.id, pieceHolds).orderId] || { id: pieceStateFor(p.id, pieceHolds).orderId }) : ""}
                                   </span>
                                 );
                               })()}
@@ -1144,7 +1165,7 @@ export default function AdminPage() {
 
         {tab === "familles" && <AdminFamilies status={familiesStatus} products={products} onProductsChanged={loadProducts} />}
         {tab === "promos" && <AdminBanners promoCodes={promoCodes} onCodesChanged={loadPromoCodes} siteMode={maintenanceActive && maintenance.row ? maintenance.row.mode : "off"} />}
-        {tab === "tableau" && <AdminHome counters={counters} onGo={goTo} />} {/* ZENORIA_HOME_5D_V1 */}
+        {tab === "tableau" && <AdminHome counters={counters} onGo={goTo} onOpenStock={openStock} />} {/* ZENORIA_HOME_5D_V1 */}
         {tab === "connexions" && <AdminConnections />}
 
         {tab === "site" && <AdminSiteMedia />}

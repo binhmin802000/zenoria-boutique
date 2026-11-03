@@ -35,7 +35,7 @@ function Figure({ value, label, testId }) {
   );
 }
 
-export default function AdminHome({ counters, onGo }) {
+export default function AdminHome({ counters, onGo, onOpenStock }) { // ZENORIA_HOME_5D2_V1
   const c = counters;
   const loaded = c.loaded;
   const goOrders = (filter) => {
@@ -147,13 +147,13 @@ export default function AdminHome({ counters, onGo }) {
             tone={t.tone}
             zero={t.zero}
             zeroText="Aucun"
-            onClick={() => onGo("produits", "collections")}
+            onClick={() => (onOpenStock ? onOpenStock(t.key) : onGo("produits", "collections"))}
             loaded={loaded}
           />
         ))}
       </div>
       <p className="text-[11px] leading-4 text-[#8b737e] mb-7">
-        Seuls les bijoux visibles sur le site sont comptés. Les pièces uniques se lisent dans leurs réservations ; l&apos;état des autres bijoux vient de la colonne stock.
+        Seuls les bijoux visibles sur le site sont comptés. Un clic sur une tuile ouvre la liste des bijoux concernés. Les pièces uniques se lisent dans leurs réservations ; l&apos;état des autres bijoux vient de la colonne stock.
       </p>
 
       <h2 className="text-sm font-medium text-[#412f3b] mb-2">Mois en cours{loaded && c.month.label ? " : " + c.month.label : ""}</h2>

@@ -702,7 +702,7 @@ export function AdminOrders() {
   const alertCount = baseOrders.filter((o) => matchesStatus(o, "alert", graceDays)).length;
   const waitingTransfer = baseOrders.filter((o) => o.status === "pending_transfer").length;
   const toShip = baseOrders.filter((o) => o.status === "paid").length;
-  const segments = ORDER_SEGMENTS.map((s) => ({ ...s, count: filteredOrders.filter((o) => matchesStatus(o, s.key, graceDays)).length })).filter((s) => s.count > 0);
+  const segments = ORDER_SEGMENTS.map((s) => ({ ...s, count: filteredOrders.filter((o) => matchesStatus(o, s.key, graceDays)).length })); // ZENORIA_ORDERS_5B2_V1 : les 5 états sont toujours affichés, même à 0
   const cashed = baseOrders.filter((o) => ["paid", "shipped", "delivered"].includes(o.status) && o.paid_at);
   const revenueCashed = cashed
     .filter((o) => (!dateFrom || parisDay(o.paid_at) >= dateFrom) && (!dateTo || parisDay(o.paid_at) <= dateTo))
@@ -852,10 +852,11 @@ export function AdminOrders() {
                   onClick={() => setStatusFilter(statusFilter === s.key ? "all" : s.key)}
                   aria-pressed={statusFilter === s.key}
                   data-testid={"orders-flow-" + s.key}
-                  style={{ flex: s.count, background: s.color, boxShadow: statusFilter === s.key ? "inset 0 0 0 3px #342b32" : "none" }}
-                  className="h-10 min-w-0 px-1 text-[11px] font-semibold text-white whitespace-nowrap overflow-hidden"
+                  style={{ flex: 1, background: s.color, opacity: s.count ? 1 : 0.5, boxShadow: statusFilter === s.key ? "inset 0 0 0 3px #342b32" : "none" }}
+                  className="h-16 min-w-0 px-1 text-white text-center overflow-hidden"
                 >
-                  {s.label} {s.count}
+                  <span className="block text-[11px] font-medium truncate">{s.label}</span>
+                  <span className="block font-serif text-2xl leading-7">{s.count}</span>
                 </button>
               ))}
             </div>

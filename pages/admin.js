@@ -183,7 +183,38 @@ export default function AdminPage() {
   const [navReady, setNavReady] = useState(false);
   const lastSubByGroup = useRef({}); // chaque groupe se souvient de son dernier onglet
   const subBarRef = useRef(null);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // ZENORIA_NAV_5H_V1 : menu replié par défaut ; il se déplie au survol du bord gauche et se replie au clic. « Épinglé » = gardé ouvert en permanence.
+  const [sidebarPinned, setSidebarPinned] = useState(false);
+  const [sidebarHover, setSidebarHover] = useState(false);
+  const sidebarCollapsed = !(sidebarPinned || sidebarHover); // vrai quand seules les icônes sont affichées
+  const sidebarTimer = useRef(null);
+  const queueSidebarOpen = () => {
+    if (sidebarTimer.current) clearTimeout(sidebarTimer.current);
+    sidebarTimer.current = setTimeout(() => setSidebarHover(true), 120); // court délai : pas d'ouverture par accident
+  };
+  const queueSidebarClose = () => {
+    if (sidebarTimer.current) clearTimeout(sidebarTimer.current);
+    sidebarTimer.current = setTimeout(() => setSidebarHover(false), 300);
+  };
+  const closeSidebarNow = () => {
+    if (sidebarTimer.current) clearTimeout(sidebarTimer.current);
+    sidebarTimer.current = null;
+    setSidebarHover(false);
+  };
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        if (sidebarTimer.current) clearTimeout(sidebarTimer.current);
+        sidebarTimer.current = null;
+        setSidebarHover(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (sidebarTimer.current) clearTimeout(sidebarTimer.current);
+    };
+  }, []);
   const [rgpdPendingCount, setRgpdPendingCount] = useState(0);
   const [stockFilter, setStockFilter] = useState(""); // ZENORIA_HOME_5D2_V1 : filtre de la liste des bijoux (venu de l'Accueil)
   const tab = nav.sub;
@@ -837,16 +868,30 @@ export default function AdminPage() {
         <aside
           data-testid="admin-sidebar-accordion"
           aria-label="Navigation de l'administration"
-          className={`shrink-0 sticky top-20 self-start transition-all ${sidebarCollapsed ? "w-14" : "w-60"}`}
+          className={`shrink-0 sticky top-20 self-start z-20 ${sidebarPinned ? "w-60" : "w-14"}`}
+          onMouseEnter={queueSidebarOpen}
+          onMouseLeave={queueSidebarClose}
         >
+          {/* ZENORIA_NAV_5H_V1 : zone sensible le long du bord gauche de l'écran (le menu s'y déplie) */}
+          {!sidebarPinned && (
+            <div aria-hidden="true" data-testid="sidebar-hotzone" className="fixed left-0" style={{ top: 64, bottom: 0, width: "max(12px, calc((100vw - 72rem) / 2 + 76px))" }} />
+          )}
+          <div
+            data-testid="sidebar-panel"
+            className={!sidebarPinned && !sidebarCollapsed ? "absolute -left-2 -top-2 z-30 w-64 rounded-2xl bg-[#fbf8f4] p-2 shadow-xl ring-1 ring-[#eadfe4]" : "relative"}
+          >
           <button
             type="button"
-            onClick={() => setSidebarCollapsed((v) => !v)}
+            onClick={() => {
+              setSidebarPinned((v) => !v);
+              setSidebarHover(false);
+            }}
             data-testid="sidebar-toggle"
-            aria-label={sidebarCollapsed ? "Agrandir la navigation" : "Réduire la navigation"}
+            aria-label={sidebarPinned ? "Rétablir le repli automatique du menu" : "Garder le menu ouvert"}
+            title={sidebarPinned ? "Rétablir le repli automatique du menu" : "Garder le menu ouvert"}
             className="mb-3 flex items-center justify-center h-8 w-8 rounded-full bg-[#f5edf1] hover:bg-[#ead9e1] text-[#54434c] transition"
           >
-            {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            {sidebarPinned ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
           </button>
 
           <div role="tablist" aria-label="Sections de l'administration" data-testid="group-bar" className="flex flex-col gap-1.5">
@@ -862,8 +907,11 @@ export default function AdminPage() {
                     aria-selected={activeGroup}
                     aria-expanded={activeGroup}
                     data-testid={`group-${g.id}`}
-                    onClick={() => goTo(g.id)}
-                    className={`flex items-center gap-2 rounded-full px-3.5 h-10 text-sm font-medium transition whitespace-nowrap w-full ${
+                    onClick={() => {
+                      goTo(g.id);
+                      if (g.tabs.length === 1) closeSidebarNow(); // groupe sans sous-onglet (Accueil) : on y va et le menu se replie
+                    }}
+                    className={`relative flex items-center gap-2 rounded-full px-3.5 h-10 text-sm font-medium transition whitespace-nowrap w-full ${
                       activeGroup ? "bg-[#8f6075] text-white shadow-sm" : "bg-[#f5edf1] text-[#54434c] hover:bg-[#ead9e1]"
                     }`}
                   >
@@ -878,10 +926,10 @@ export default function AdminPage() {
                       />
                     )}
                     {/* ZENORIA_HOME_5D_V1 : ce qui attend l'administratrice (groupes Accueil et CRM) */}
-                    {!sidebarCollapsed && (g.id === "accueil" || g.id === "crm") && counters.todoTotal > 0 && (
+                    {(g.id === "accueil" || g.id === "crm") && counters.todoTotal > 0 && (
                       <span
                         data-testid={"group-count-" + g.id}
-                        className={"min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-medium flex items-center justify-center shrink-0 " + (activeGroup ? "bg-white text-[#8f6075]" : counters.urgent ? "bg-red-600 text-white" : "bg-[#8f6075] text-white")}
+                        className={(sidebarCollapsed ? "absolute -top-1 -right-1 " : "") + "min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-medium flex items-center justify-center shrink-0 " + (activeGroup ? "bg-white text-[#8f6075]" : counters.urgent ? "bg-red-600 text-white" : "bg-[#8f6075] text-white")}
                         aria-label={counters.todoTotal + " élément(s) à traiter"}
                       >
                         {counters.todoTotal}
@@ -908,7 +956,10 @@ export default function AdminPage() {
                             role="tab"
                             aria-selected={activeTab}
                             data-testid={`sub-${t.id}`}
-                            onClick={() => goTo(g.id, t.id)}
+                            onClick={() => {
+                              goTo(g.id, t.id);
+                              closeSidebarNow();
+                            }}
                             className={`flex items-center gap-1.5 rounded-full px-3.5 h-8 text-[13px] transition whitespace-nowrap w-full ${
                               activeTab ? "bg-[#f0e6ea] text-[#412f3b] font-medium ring-1 ring-[#d9c5cc]" : "text-[#54434c] hover:bg-[#f5edf1]"
                             }`}
@@ -969,9 +1020,10 @@ export default function AdminPage() {
               );
             })}
           </div>
+        </div>
         </aside>
 
-        <main className="flex-1 min-w-0 py-8">
+        <main className="flex-1 min-w-0 py-8" onMouseDownCapture={closeSidebarNow} onFocusCapture={closeSidebarNow}>
         {tab !== "maintenance" && <MaintenanceBanner status={maintenance} onOpen={() => goTo("technique", "maintenance")} />}
 
         {tab !== "quotas" && <QuotaBanner status={quota} onOpen={() => goTo("technique", "quotas")} />}

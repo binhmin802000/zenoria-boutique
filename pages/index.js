@@ -1527,7 +1527,7 @@ export default function ZenoriaShop() {
                     <div data-testid="transfer-recap-payment" className="rounded-xl bg-[#fbf7f9] border border-[#eee2e5] px-3 py-3 text-[12px] leading-5 text-[#54434c]">
                       <div className="text-[13px] font-medium text-[#412f3b]">Paiement par virement bancaire</div>
                       <p className="mt-1">Une fois la commande validée, nous vous donnons l&apos;IBAN et la référence à indiquer dans votre virement.</p>
-                      <p className="mt-1.5">Nous réservons vos pièces pour vous pendant <strong>{transferDelayDays ? transferDelayDays + " jour" + (transferDelayDays > 1 ? "s" : "") : "le délai indiqué à la confirmation"}</strong> après validation. Passé ce délai sans virement reçu, la commande pourra être annulée et les pièces remises en vente. La date limite exacte vous est donnée à la confirmation.</p>
+                      <p className="mt-1.5">Nous réservons vos pièces pour vous pendant <strong>{transferDelayDays ? transferDelayDays + " jour" + (transferDelayDays > 1 ? "s" : "") : "le délai indiqué à la confirmation"}</strong> après validation. Passé ce délai sans virement reçu, la commande sera annulée automatiquement et les pièces remises en vente. La date limite exacte vous est donnée à la confirmation.</p>
                     </div>
                   </div>
                   <div className="flex-none border-t border-[#eadfe4] bg-white/80 px-5 py-4 space-y-3">

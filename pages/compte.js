@@ -4,9 +4,10 @@ import AccountDataSection from "@/components/AccountDataSection";
 import TransferInstructions from "@/components/TransferInstructions"; // ZENORIA_STEP3C2_V1
 import { CatalogWriteUs } from "@/components/ProductParts"; // ZENORIA_FAV_STOCK_V1
 import { getAvailability, pieceStateMap, stockStateMap } from "@/lib/shopUtils";
+import { autoCancelAt, isAutoCancelAlert, formatAutoCancel, DEFAULT_BANK_TRANSFER } from "@/lib/paymentSettings"; // ZENORIA_AUTO_CANCEL_UI_V1
 import AccountProfileSection from "@/components/AccountProfileSection";
 import Head from "next/head";
-import { Home, Package, Star, Heart, UserCog, ShieldCheck, LogOut, Truck, ChevronLeft, FileDown } from "lucide-react"; // ZENORIA_INVOICE_STEP3_V1
+import { Home, Package, Star, Heart, UserCog, ShieldCheck, LogOut, Truck, ChevronLeft, FileDown, AlertTriangle } from "lucide-react"; // ZENORIA_INVOICE_STEP3_V1
 import { supabase as supabaseForInvoice } from "@/lib/supabase"; // ZENORIA_INVOICE_STEP3_V1
 import { supabase, getMediaUrl, SITE_MEDIA_TABLE, SITE_SLOT_ACCOUNT_HERO } from "@/lib/supabase";
 import { SITE_SETTINGS_TABLE } from "@/lib/siteSettings";
@@ -217,7 +218,21 @@ async function downloadInvoice(orderId, onError) {
     onError("Impossible de générer la facture pour le moment.");
   }
 }
-function OrderDetail({ order, contactCfg, questionOpen, setQuestionOpen, onBack, onOrderChanged }) { // ZENORIA_STEP3C2_V1
+// ZENORIA_AUTO_CANCEL_UI_V1 : bandeau rouge vif avant l'annulation automatique d'une commande par virement (texte validé)
+function AutoCancelAlert({ order, graceDays }) {
+  if (!order || order.status !== "pending_transfer" || !order.transfer_due_at) return null;
+  if (!isAutoCancelAlert(order.transfer_due_at, graceDays)) return null;
+  const at = autoCancelAt(order.transfer_due_at, graceDays);
+  return (
+    <div role="alert" data-testid="auto-cancel-alert" className="flex gap-2.5 rounded-xl border-2 border-[#e5484d] bg-[#fdecec] px-4 py-3 text-sm leading-5 text-[#b42318]">
+      <AlertTriangle size={18} className="shrink-0 mt-0.5" aria-hidden="true" />
+      <span>
+        Votre virement n&apos;a pas encore été reçu. Sans réception avant le <strong>{formatAutoCancel(at)}</strong>, votre commande sera annulée automatiquement et votre bijou remis en vente.
+      </span>
+    </div>
+  );
+}
+function OrderDetail({ order, contactCfg, questionOpen, setQuestionOpen, onBack, onOrderChanged, graceDays }) { // ZENORIA_STEP3C2_V1
   const [invoiceBusy, setInvoiceBusy] = useState(false); // ZENORIA_INVOICE_STEP3_V1
   const [invoiceError, setInvoiceError] = useState(""); // ZENORIA_INVOICE_STEP3_V1
   const isTransfer = order.payment_method === "transfer"; // ZENORIA_STEP3C2_V1
@@ -265,6 +280,7 @@ function OrderDetail({ order, contactCfg, questionOpen, setQuestionOpen, onBack,
 
       {isTransfer && order.status === "pending_transfer" ? (
         <div className="mt-5 space-y-3">
+                    <AutoCancelAlert order={order} graceDays={graceDays} />
           <TransferInstructions orderId={order.id} contactCfg={contactCfg} />
           <button type="button" onClick={() => setCancelOpen(true)} data-testid="account-cancel-transfer" className="rounded-full border border-[#d9c5cc] px-4 h-10 text-sm hover:bg-[#f5edf1]">Annuler ma commande</button>
         </div>
@@ -383,7 +399,8 @@ export default function Compte() {
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [contactCfg, setContactCfg] = useState(DEFAULT_CONTACT);
   const [questionOpenId, setQuestionOpenId] = useState(null);
-  const [ordersVersion, setOrdersVersion] = useState(0); // ZENORIA_STEP3C2_V1 : recharge apres annulation
+    const [ordersVersion, setOrdersVersion] = useState(0);
+  const [graceDays, setGraceDays] = useState(DEFAULT_BANK_TRANSFER.grace_days); // ZENORIA_AUTO_CANCEL_UI_V1 // ZENORIA_STEP3C2_V1 : recharge apres annulation
   const [logoutAsk, setLogoutAsk] = useState(false); // fenetre "garder le panier ?" a la deconnexion
   const [logoutCartCount, setLogoutCartCount] = useState(0);
   useEffect(() => {
@@ -467,14 +484,16 @@ export default function Compte() {
     let alive = true;
     (async () => {
       setOrdersLoading(true);
-      const [ordersRes, contactRes, reviewRes] = await Promise.all([
+            const [ordersRes, contactRes, reviewRes, graceRes] = await Promise.all([
         supabase.from("orders").select("*").eq("user_id", user.id).order("created_at", { ascending: false }), // ZENORIA_ACCOUNT_FIX1_V1 : filtre explicite (ne pas dépendre de la RLS, qui laisse un compte admin tout voir) ; ZENORIA_STEP3C2_V1 : plus de filtre de statut ici (tri effectue ensuite, voir plus bas)
         supabase.from(SITE_SETTINGS_TABLE).select("value").eq("key", CONTACT_KEY).maybeSingle(),
-        supabase.rpc("list_reviewable_items"),
+                supabase.rpc("list_reviewable_items"),
+        supabase.rpc("transfer_grace_days"),
       ]);
       if (!alive) return;
       setContactCfg(parseContactSetting(contactRes && !contactRes.error && contactRes.data ? contactRes.data.value : null));
-      setReviewItems((reviewRes && !reviewRes.error && reviewRes.data) || []);
+            setReviewItems((reviewRes && !reviewRes.error && reviewRes.data) || []);
+      if (graceRes && !graceRes.error && typeof graceRes.data === "number") setGraceDays(graceRes.data);
 
       const list = (ordersRes && !ordersRes.error && ordersRes.data) || [];
       if (list.length === 0) {
@@ -869,7 +888,8 @@ export default function Compte() {
                         <h3 className="font-serif text-lg text-[#412f3b]">Commande en attente de virement</h3>
                         <button type="button" onClick={() => { setSelectedOrderId(o.id); go("commandes"); }} className="text-xs text-[#8f6075] underline">Voir les instructions</button>
                       </div>
-                      <div className="text-sm text-[#54434c]">Commande {o.reference} · {formatOrderPrice(o.total)}{o.transfer_due_at ? <> · à régler avant le {formatDate(o.transfer_due_at)}</> : null}</div>
+                                            <div className="text-sm text-[#54434c]">Commande {o.reference} · {formatOrderPrice(o.total)}{o.transfer_due_at ? <> · à régler avant le {formatDate(o.transfer_due_at)}</> : null}</div>
+                      {isAutoCancelAlert(o.transfer_due_at, graceDays) && <div className="mt-2"><AutoCancelAlert order={o} graceDays={graceDays} /></div>}
                     </div>
                   ))}
                 </div>
@@ -883,7 +903,8 @@ export default function Compte() {
                       questionOpen={questionOpenId}
                       setQuestionOpen={setQuestionOpenId}
                       onBack={() => setSelectedOrderId(null)}
-                      onOrderChanged={() => { setSelectedOrderId(null); setOrdersVersion((v) => v + 1); }} // ZENORIA_STEP3C2_V1
+                                            onOrderChanged={() => { setSelectedOrderId(null); setOrdersVersion((v) => v + 1); }} // ZENORIA_STEP3C2_V1
+                      graceDays={graceDays}
                     />
                   ) : (
                     <>

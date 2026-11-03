@@ -3,7 +3,7 @@ import AdminBilling from "@/components/AdminBilling"; // ZENORIA_BILLING_STEP2_V
 import AdminPaymentMethods from "@/components/AdminPaymentMethods"; // ZENORIA_PAYMENT_STEP2_V1
 import { RefreshCw, FileDown } from "lucide-react"; // ZENORIA_INVOICE_STEP3B_V1
 import { supabase, getMediaUrl } from "@/lib/supabase";
-import { parseBankTransfer, BANK_TRANSFER_KEY } from "@/lib/paymentSettings"; // ZENORIA_ADMIN_TRANSFER_V1
+import { parseBankTransfer, BANK_TRANSFER_KEY, DEFAULT_BANK_TRANSFER, autoCancelAt, isAutoCancelAlert, formatAutoCancel } from "@/lib/paymentSettings"; // ZENORIA_ADMIN_TRANSFER_V1 · ZENORIA_AUTO_CANCEL_UI_V1
 
 // ZENORIA_INVOICE_STEP3B_V1 : télécharge la facture PDF d'une commande depuis l'admin (même route que l'espace cliente ;
 // issue_invoice_for_order autorise un compte administrateur à générer la facture de n'importe quelle commande).
@@ -244,7 +244,7 @@ function orderStatusBadge(status) {
 // ZENORIA_ADMIN_TRANSFER_V1 : actions de l'administration sur une commande payee par virement.
 // Les trois actions appellent des fonctions SQL atomiques qui verifient elles-memes le droit
 // administrateur (is_admin) et le statut : confirmer l'encaissement, prolonger l'echeance, annuler.
-const TRANSFER_LATE_DAYS = 5; // l'etat passe en rouge ("En retard") a partir de 5 jours apres l'echeance
+// ZENORIA_AUTO_CANCEL_UI_V1 : l'etat passe en rouge pendant la periode d'alerte avant l'annulation automatique (plus de seuil fixe de 5 jours)
 const TRANSFER_CANCEL_REASONS = [
   { value: "not_received", label: "Virement non reçu dans les délais" },
   { value: "customer_request", label: "Demande de la cliente" },
@@ -267,18 +267,19 @@ function transferErrorMessage(err, kind) {
 }
 // ZENORIA_ORDER_DATES_V1 : l'échéance s'apprécie en JOURS CALENDAIRES de Paris (et non en blocs de 24 h).
 // Jusqu'à la fin du jour d'échéance la commande est « en attente » ; ensuite chaque jour écoulé compte pour un jour de retard.
-function transferDueState(order, now) {
+function transferDueState(order, now, graceDays) {
   if (!order.transfer_due_at) return null;
   const left = parisDayDiff(parisDay(now), parisDay(order.transfer_due_at)); // jours restants jusqu'au jour d'échéance
+  const alert = isAutoCancelAlert(order.transfer_due_at, graceDays, now);
   if (left >= 0) {
-    return { level: "ok", label: "En attente", detail: left === 0 ? "échéance aujourd'hui" : "échéance dans " + left + " jour" + (left > 1 ? "s" : "") };
+    const detail = left === 0 ? "échéance aujourd'hui" : "échéance dans " + left + " jour" + (left > 1 ? "s" : "");
+    return alert ? { level: "late", label: "Annulation imminente", detail } : { level: "ok", label: "En attente", detail };
   }
   const late = -left;
   const detail = "échéance dépassée de " + late + " jour" + (late > 1 ? "s" : "");
-  if (late >= TRANSFER_LATE_DAYS) return { level: "late", label: "En retard", detail };
-  return { level: "over", label: "Échéance dépassée", detail };
+  return alert ? { level: "late", label: "En retard", detail } : { level: "over", label: "Échéance dépassée", detail };
 }
-function TransferPanel({ order, history, onDone }) {
+function TransferPanel({ order, history, onDone, graceDays }) {
   const [mode, setMode] = useState(null); // null | "confirm" | "extend" | "cancel"
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -304,11 +305,11 @@ function TransferPanel({ order, history, onDone }) {
   if (order.status === "cancelled" && order.cancelled_at) {
     // ZENORIA_ORDER_JOURNAL_V1 : le motif est lu dans la derniere ligne d'annulation du journal de la commande
     const cancelEntry = [...(history || [])].reverse().find((h) => h.status === "cancelled" && h.note);
-    const cancelReason = cancelEntry ? String(cancelEntry.note).replace(/^Annulée par l.administration\s*:\s*/i, "Motif : ").replace(/^Annulée par la cliente depuis Mes commandes\.\s*/i, "") : "";
+    const cancelReason = cancelEntry ? String(cancelEntry.note).replace(/^Annulée par l.administration\s*:\s*/i, "Motif : ").replace(/^Annulée par la cliente depuis Mes commandes\.\s*/i, "").replace(/^Annulée automatiquement\s*:\s*/i, "Motif : ") : "";
     return (
       <div data-testid="transfer-cancelled-note" className="mb-4 rounded-xl bg-white border border-[#eee2e5] px-4 py-3 text-[13px] text-[#54434c]">
         <span className="font-medium text-[#412f3b]">Commande annulée</span> le {formatDateTime(order.cancelled_at)}{" "}
-        {order.cancelled_by === "customer" ? "par la cliente" : order.cancelled_by === "admin" ? "par l'administration" : ""}.
+        {order.cancelled_by === "customer" ? "par la cliente" : order.cancelled_by === "admin" ? "par l'administration" : order.cancelled_by === "system" ? "automatiquement (virement non reçu)" : ""}.
         {cancelReason && (
           <span data-testid="transfer-cancel-reason" className="block text-[12px] text-[#54434c] mt-1">{cancelReason}</span>
         )}
@@ -317,7 +318,8 @@ function TransferPanel({ order, history, onDone }) {
   }
   if (order.status !== "pending_transfer") return null;
 
-  const state = transferDueState(order, Date.now());
+    const state = transferDueState(order, Date.now(), graceDays);
+  const cancelAt = autoCancelAt(order.transfer_due_at, graceDays);
   const badgeClass = state && state.level === "late" ? "bg-red-50 text-red-700" : state && state.level === "over" ? "bg-amber-50 text-amber-700" : "bg-[#f5edf1] text-[#8f6075]";
 
   const open = (m) => {
@@ -380,7 +382,10 @@ function TransferPanel({ order, history, onDone }) {
         Référence à indiquer : <strong>{formatOrderReference(order)}</strong> · Montant attendu : <strong>{formatOrderPrice(order.total)}</strong>
         {order.transfer_due_at && (
           <>
-            <br />Échéance : {formatDateOnly(order.transfer_due_at)}{state ? " (" + state.detail + ")" : ""}
+                        <br />Échéance : {formatDateOnly(order.transfer_due_at)}{state ? " (" + state.detail + ")" : ""}
+            {cancelAt && (
+              <span data-testid="transfer-auto-cancel" className={"block mt-0.5 " + (state && state.level === "late" ? "text-[#b42318] font-semibold" : "text-[#8b737e]")}>Annulation automatique le {formatAutoCancel(cancelAt)} si aucun virement n&apos;est reçu</span>
+            )}
           </>
         )}
       </p>
@@ -552,7 +557,8 @@ export function AdminOrders() {
   const [datePreset, setDatePreset] = useState("all"); // "today" | "7d" | "30d" | "custom" | "all"
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [includeTestData, setIncludeTestData] = useState(false);
+    const [includeTestData, setIncludeTestData] = useState(false);
+  const [graceDays, setGraceDays] = useState(DEFAULT_BANK_TRANSFER.grace_days);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -561,12 +567,14 @@ export function AdminOrders() {
       { data: ordersData, error: ordersErr },
       { data: itemsData, error: itemsErr },
       { data: historyData, error: historyErr },
-      { data: productsData },
+            { data: productsData },
+      bankRes,
     ] = await Promise.all([
       supabase.from("orders").select("*").order("created_at", { ascending: false }),
       supabase.from("order_items").select("*"),
       supabase.from("order_status_history").select("*").order("changed_at", { ascending: true }),
-      supabase.from("products").select("id, photos, slug, color, stone"),
+            supabase.from("products").select("id, photos, slug, color, stone"),
+      supabase.from("site_settings").select("value").eq("key", BANK_TRANSFER_KEY).maybeSingle(),
     ]);
     if (ordersErr) {
       setError("Impossible de charger les commandes : " + ordersErr.message);
@@ -590,7 +598,8 @@ export function AdminOrders() {
       });
       setStatusHistoryByOrder(groupedHistory);
     }
-    setProductsById(Object.fromEntries((productsData || []).map((p) => [p.id, p])));
+        setProductsById(Object.fromEntries((productsData || []).map((p) => [p.id, p])));
+    setGraceDays(parseBankTransfer(bankRes && !bankRes.error && bankRes.data ? bankRes.data.value : null).grace_days);
     setLoading(false);
   }, []);
 
@@ -838,7 +847,7 @@ export function AdminOrders() {
                         })()}
                       </div>
 
-                      <TransferPanel order={o} history={statusHistoryByOrder[o.id]} onDone={(msg) => { setAdminNotice(msg); load(); }} />
+                      <TransferPanel order={o} history={statusHistoryByOrder[o.id]} graceDays={graceDays} onDone={(msg) => { setAdminNotice(msg); load(); }} />
                       {/* ShippingPanel : transporteur, numéro de suivi, actions d'expédition */}
                       {/* ZENORIA_ORDER_JOURNAL_V1 : le bloc Expédition n'a pas de sens sur une commande annulée */}
                       {o.status !== "cancelled" && (

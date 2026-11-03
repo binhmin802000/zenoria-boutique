@@ -1,4 +1,4 @@
-// ZENORIA_STEP3C_V1
+// ZENORIA_STEP3C_V1 · ZENORIA_AUTO_CANCEL_UI_V1
 // ============================================================
 // components/TransferInstructions.js
 //
@@ -131,7 +131,7 @@ export default function TransferInstructions({ orderId, contactCfg }) {
       {data.bic && <CopyField label="BIC" value={data.bic} testId="transfer-copy-bic" />}
       <CopyField label="Référence à indiquer" value={reference} testId="transfer-copy-reference" />
       <div className="pt-2 mt-1 border-t border-[#f0e6ea] text-sm text-[#54434c]">
-        Merci d&apos;effectuer votre virement avant le <strong>{formatDueDate(data.due_at)}</strong>. Votre bijou vous est réservé jusqu&apos;à cette date. Au-delà, la commande pourra être annulée.
+        Merci d&apos;effectuer votre virement avant le <strong>{formatDueDate(data.due_at)}</strong>. Votre bijou vous est réservé jusqu&apos;à cette date. Au-delà, la commande sera annulée automatiquement.
       </div>
     </div>
   );

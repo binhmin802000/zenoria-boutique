@@ -16,7 +16,10 @@ import {
   isTransferReady,
   isValidIban,
   isValidBic,
-  isValidDelay,
+    isValidDelay,
+  isValidGrace, // ZENORIA_AUTO_CANCEL_UI_V1
+  GRACE_MIN,
+  GRACE_MAX,
   formatIban,
   normalizeIban,
 } from "@/lib/paymentSettings";
@@ -133,7 +136,8 @@ export default function AdminPaymentMethods() {
   const bicFilled = String(draft.bic || "").trim() !== "";
   const ibanInvalid = ibanFilled && !isValidIban(draft.iban);
   const bicInvalid = bicFilled && !isValidBic(draft.bic);
-  const delayInvalid = !isValidDelay(draft.delay_days);
+    const delayInvalid = !isValidDelay(draft.delay_days);
+  const graceInvalid = !isValidGrace(draft.grace_days);
   const ibanChanged = normalizeIban(draft.iban) !== savedBank.iban;
 
   const noneActive = !loading && !loadError && !savedMethods.stripe_enabled && !savedMethods.transfer_enabled;
@@ -185,8 +189,12 @@ export default function AdminPaymentMethods() {
       setError("Ce BIC n'est pas valide (8 ou 11 caractères).");
       return;
     }
-    if (delayInvalid) {
+        if (delayInvalid) {
       setError("Le délai de paiement doit être un nombre entier de jours, entre " + DELAY_MIN + " et " + DELAY_MAX + ".");
+      return;
+    }
+    if (graceInvalid) {
+      setError("Le délai de grâce doit être un nombre entier de jours, entre " + GRACE_MIN + " et " + GRACE_MAX + ".");
       return;
     }
     if (savedMethods.transfer_enabled && !isTransferReady(draft)) {
@@ -345,11 +353,28 @@ export default function AdminPaymentMethods() {
               aria-invalid={delayInvalid}
               className={inputCls + (delayInvalid ? " border-red-300" : "")}
             />
-            {delayInvalid && <div className="text-[11px] text-red-600 mt-1">Entier entre {DELAY_MIN} et {DELAY_MAX}.</div>}
+                        {delayInvalid && <div className="text-[11px] text-red-600 mt-1">Entier entre {DELAY_MIN} et {DELAY_MAX}.</div>}
+          </div>
+          <div>
+            <label className="text-xs text-[#54434c] font-medium" htmlFor="bt_grace">Délai de grâce avant annulation automatique (jours)</label>
+            <input
+              id="bt_grace"
+              type="number"
+              min={GRACE_MIN}
+              max={GRACE_MAX}
+              step={1}
+              value={draft.grace_days}
+              disabled={disabled}
+              onChange={(e) => setField("grace_days", e.target.value)}
+              aria-invalid={graceInvalid}
+              data-testid="payment-grace"
+              className={inputCls + (graceInvalid ? " border-red-300" : "")}
+            />
+            {graceInvalid && <div className="text-[11px] text-red-600 mt-1">Entier entre {GRACE_MIN} et {GRACE_MAX} (0 = dès l&apos;échéance).</div>}
           </div>
         </div>
         <div className="text-[11px] text-[#8b737e] mt-3 leading-4">
-          Date limite de paiement <b>indicative</b> : aucune annulation automatique. Elle est affichée à la cliente et vous sert de repère de relance.
+          Date limite de paiement affichée à la cliente. Sans virement reçu, la commande est <b>annulée automatiquement</b> une fois le délai de grâce écoulé après cette date (vérification toutes les heures), et ses bijoux sont remis en vente.
           La prolongation d&apos;une commande reprend par défaut ce délai (modifiable de {DELAY_MIN} à {DELAY_MAX} jours). Les espaces de l&apos;IBAN sont ignorés.
         </div>
 
@@ -373,7 +398,7 @@ export default function AdminPaymentMethods() {
           <button
             type="button"
             onClick={save}
-            disabled={disabled || !dirty || ibanInvalid || bicInvalid || delayInvalid}
+            disabled={disabled || !dirty || ibanInvalid || bicInvalid || delayInvalid || graceInvalid}
             data-testid="payment-save"
             className="rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-6 h-10 text-sm disabled:opacity-50 disabled:hover:bg-[#8f6075]"
           >

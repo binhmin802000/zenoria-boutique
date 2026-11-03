@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import AdminBilling from "@/components/AdminBilling"; // ZENORIA_BILLING_STEP2_V1
-import AdminPaymentMethods from "@/components/AdminPaymentMethods"; // ZENORIA_PAYMENT_STEP2_V1
+// ZENORIA_ADMIN_NAV_5A_V1 : AdminBilling et AdminPaymentMethods sont affichés dans le groupe Réglages (pages/admin.js)
 import { RefreshCw, FileDown } from "lucide-react"; // ZENORIA_INVOICE_STEP3B_V1
 import { supabase, getMediaUrl } from "@/lib/supabase";
 import { parseBankTransfer, BANK_TRANSFER_KEY, DEFAULT_BANK_TRANSFER, autoCancelAt, isAutoCancelAlert, formatAutoCancel } from "@/lib/paymentSettings"; // ZENORIA_ADMIN_TRANSFER_V1 · ZENORIA_AUTO_CANCEL_UI_V1
@@ -42,7 +41,7 @@ import { orderStatusInfo, formatOrderPrice, formatOrderReference } from "@/lib/o
 //  - CrmAccounts : la liste des comptes créés sur le site. C'est tout ce que la base contient pour
 //    l'instant sur les clientes : une adresse e-mail et des dates. Les données viennent de la fonction
 //    SQL admin_list_accounts() (voir supabase_admin_connections.sql), réservée aux administrateurs.
-//  - CrmRoadmap  : ce qui viendra, avec ce dont chaque élément dépend. Rien n'y est enregistré.
+//  - AdminOrders : les commandes (l'ancien écran « À venir », CrmRoadmap, est supprimé au lot 5a).
 // ============================================================
 
 import { parisDay, parisDayDiff, addDaysToParisDay } from "@/lib/dates"; // ZENORIA_ORDER_DATES_V1
@@ -135,8 +134,8 @@ export function CrmAccounts() {
       </div>
 
       <div data-testid="crm-notice" className="mb-5 rounded-xl bg-[#faf6f8] border border-[#eee2e5] px-4 py-3 text-[12px] leading-5 text-[#54434c]">
-        Les comptes affichent désormais le prénom, le nom et le téléphone quand la cliente les a renseignés.
-        Les adresses de livraison et l'historique des commandes viendront avec le paiement en ligne : voir l'onglet « À venir ».
+                Les comptes affichent le prénom, le nom et le téléphone quand la cliente les a renseignés.
+        Les commandes et les adresses de livraison se consultent dans CRM › Commandes.
       </div>
 
       {error && (
@@ -218,8 +217,8 @@ export function CrmAccounts() {
       </div>
 
       <p className="text-[11px] leading-4 text-[#8b737e]">
-        Les adresses e-mail sont des données personnelles : cet écran est réservé à l&apos;administration. En attendant un outil d&apos;export et d&apos;effacement, une demande
-        d&apos;effacement se traite à la main dans Supabase (Authentication, Users). L&apos;historique des connexions et les adresses IP restent dans Technique, onglet Connexions.
+                Les adresses e-mail sont des données personnelles : cet écran est réservé à l&apos;administration. Les demandes d&apos;export ou d&apos;effacement
+        des données se traitent dans CRM › RGPD. L&apos;historique des connexions et les adresses IP restent dans Technique › Connexions.
       </p>
     </>
   );
@@ -667,10 +666,7 @@ export function AdminOrders() {
 
   return (
     <>
-      {/* ZENORIA_BILLING_STEP2_V1 */}
-      <AdminBilling />
-      {/* ZENORIA_PAYMENT_STEP2_V1 */}
-      <AdminPaymentMethods />
+            {/* ZENORIA_ADMIN_NAV_5A_V1 : Facturation et Moyens de paiement sont dans le groupe Réglages */}
       <div className="flex justify-between items-center mb-5 gap-3">
         <div>
           <h1 className="font-serif text-2xl">Commandes</h1>
@@ -979,51 +975,6 @@ export function AdminOrders() {
       <p className="text-[11px] leading-4 text-[#8b737e]">
         Les commandes par carte sont créées automatiquement par le webhook de paiement Stripe. Pour un virement, l&apos;encaissement, la prolongation et l&apos;annulation se font depuis le détail de la commande.
       </p>
-    </>
-  );
-}
-
-// Ce qui viendra, avec ce dont chaque élément dépend. Aucune date : elles dépendent de la base de données et du paiement.
-const ROADMAP = [
-  {
-    title: "Newsletter et consentements",
-    text: "Aujourd'hui, le champ « Je m'inscris » du site n'enregistre aucune adresse. Il faudra un consentement explicite, daté, avec possibilité de se désinscrire.",
-    needs: "Base de données, phase 1 ; domaine vérifié dans Resend pour les envois.",
-  },
-  {
-    title: "Export et anonymisation à la demande (RGPD)",
-    text: "Fournir ou effacer toutes les données d'une cliente en un clic, avec une trace de la demande. À concevoir en même temps que les tables clientes.",
-    needs: "Base de données, phase 1.",
-  },
-  {
-    title: "Favoris et avis",
-    text: "Les bagues mises en favori (aujourd'hui, uniquement dans le navigateur) et les avis des clientes.",
-    needs: "Commandes enregistrées (pour n'accepter que des avis d'acheteuses).",
-  },
-];
-
-export function CrmRoadmap() {
-  return (
-    <>
-      <div className="mb-5">
-        <h1 className="font-serif text-2xl">À venir dans le CRM</h1>
-        <p className="text-sm text-[#8b737e]">Ce qui sera ajouté, et ce dont chaque élément dépend</p>
-      </div>
-      <div className="rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[12px] leading-5 px-4 py-3 mb-5" data-testid="roadmap-notice">
-        Rien de cette liste n&apos;existe encore : aucune donnée n&apos;est enregistrée à ce sujet. Chaque élément dépend de la base de données (phase 1) ou du paiement en
-        ligne, qui ne sont pas encore en place.
-      </div>
-      <ul className="grid md:grid-cols-2 gap-3" data-testid="roadmap-list">
-        {ROADMAP.map((r) => (
-          <li key={r.title} className="rounded-2xl bg-white border border-[#eee2e5] px-5 py-4" data-testid="roadmap-item">
-            <div className="font-serif text-lg text-[#412f3b]">{r.title}</div>
-            <p className="text-[13px] leading-5 text-[#54434c] mt-1.5">{r.text}</p>
-            <p className="text-[11px] leading-4 text-[#8b737e] mt-2.5">
-              <strong>Dépend de :</strong> {r.needs}
-            </p>
-          </li>
-        ))}
-      </ul>
     </>
   );
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import Head from "next/head";
-import { Plus, Pencil, Trash2, X, LogOut, Tag, Package, ArrowLeft, Upload, Film, Users, Sparkles, Gauge, Wrench, Activity, Settings, LogIn, Clock, Palette, ShoppingBag, ChevronDown, ChevronLeft, ChevronRight, ShieldCheck } from "lucide-react";
+import { Plus, Pencil, Trash2, X, LogOut, Tag, Package, ArrowLeft, Upload, Film, Users, Sparkles, Gauge, Wrench, Activity, Settings, LogIn, Clock, Palette, ShoppingBag, ChevronDown, ChevronLeft, ChevronRight, ShieldCheck, CreditCard, FileText, SlidersHorizontal } from "lucide-react"; // ZENORIA_ADMIN_NAV_5A_V1 : icônes du groupe Réglages
 import { supabase, getMediaUrl, uploadProductMedia, deleteProductMedia } from "@/lib/supabase";
 import AuthModal from "@/components/AuthModal";
 import AdminConnections from "@/components/AdminConnections";
@@ -17,7 +17,9 @@ import { formatOrderReference } from "@/lib/orderDisplay"; // ZENORIA_PIECE_UNIQ
 import { parsePieceLockError, pieceLockMessage, pieceStateFor, pieceBadgeLabel, relistErrorMessage } from "@/lib/pieceLock";
 import { legacyFamilyText, validateDominantColors, cleanDominantColors, DOMINANT_MAX, DOMINANT_NAME_MAX } from "@/lib/families";
 import { promoCodeStatus, validatePromoDates, formatParis } from "@/lib/banners";
-import { CrmAccounts, CrmRoadmap, AdminOrders } from "@/components/AdminCrm";
+import { CrmAccounts, AdminOrders } from "@/components/AdminCrm";
+import AdminBilling from "@/components/AdminBilling"; // ZENORIA_ADMIN_NAV_5A_V1 : déplacé depuis l'onglet Commandes
+import AdminPaymentMethods from "@/components/AdminPaymentMethods"; // ZENORIA_ADMIN_NAV_5A_V1 : déplacé depuis l'onglet Commandes
 // ZENORIA_REVIEWS_STEP2_V1 : onglet « Avis »
 import AdminReviews from "@/components/AdminReviews";
 import AdminDataRequests from "@/components/AdminDataRequests";
@@ -49,7 +51,7 @@ import { worstLevel } from "@/lib/quota";
 // et middleware.js). L'onglet « Santé » teste la chaîne complète et affiche le journal des erreurs
 // des visiteurs (voir supabase_admin_diagnostic.sql).
 //
-// NAVIGATION : trois groupes (Produits, CRM, Technique), chacun avec ses onglets. La structure est
+// NAVIGATION : quatre groupes (Produits, CRM, Réglages, Technique), chacun avec ses onglets. La structure est
 // décrite dans lib/adminNav.js et la position est conservée dans l'adresse (par exemple /admin#technique/sante).
 // ============================================================
 
@@ -146,7 +148,7 @@ function formatEUR(n) {
   return Number(n).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
 }
 
-const GROUP_ICONS = { produits: Package, crm: Users, technique: Settings };
+const GROUP_ICONS = { produits: Package, crm: Users, reglages: SlidersHorizontal, technique: Settings };
 const TAB_ICONS = {
   avis: ReviewsTabIcon,
   collections: Package,
@@ -155,7 +157,8 @@ const TAB_ICONS = {
   site: Sparkles,
   comptes: Users,
   commandes: ShoppingBag,
-  avenir: Clock,
+    paiement: CreditCard, // ZENORIA_ADMIN_NAV_5A_V1
+  facturation: FileText,
   rgpd: ShieldCheck,
   connexions: LogIn,
   quotas: Gauge,
@@ -1108,7 +1111,25 @@ export default function AdminPage() {
 
         {tab === "avis" && <AdminReviews />}
 
-        {tab === "avenir" && <CrmRoadmap />}
+                {/* ZENORIA_ADMIN_NAV_5A_V1 : groupe Réglages (cartes déplacées depuis l'onglet Commandes, contenu inchangé) */}
+        {tab === "paiement" && (
+          <>
+            <div className="mb-5">
+              <h1 className="font-serif text-2xl">Moyens de paiement</h1>
+              <p className="text-sm text-[#8b737e]">Carte et virement, coordonnées bancaires, délais de paiement et d&apos;annulation automatique</p>
+            </div>
+            <AdminPaymentMethods />
+          </>
+        )}
+        {tab === "facturation" && (
+          <>
+            <div className="mb-5">
+              <h1 className="font-serif text-2xl">Facturation et TVA</h1>
+              <p className="text-sm text-[#8b737e]">Identité du vendeur, TVA et numérotation des factures</p>
+            </div>
+            <AdminBilling />
+          </>
+        )}
 
         {tab === "rgpd" && <AdminDataRequests onPendingCountChange={setRgpdPendingCount} />}
 

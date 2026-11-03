@@ -24,6 +24,10 @@ import AdminPaymentMethods from "@/components/AdminPaymentMethods"; // ZENORIA_A
 import AdminReviews from "@/components/AdminReviews";
 import AdminDataRequests from "@/components/AdminDataRequests";
 import { Star as ReviewsTabIcon } from "lucide-react";
+// ZENORIA_HOME_5D_V1 : Accueil (tableau de bord) et compteurs du menu
+import { Home as HomeIcon, LayoutDashboard } from "lucide-react";
+import AdminHome from "@/components/AdminHome";
+import { useAdminCounters, stockFilterMatches, STOCK_FILTER_LABELS } from "@/lib/adminCounters"; // ZENORIA_HOME_5D2_V1
 import { ADMIN_NAV, DEFAULT_NAV, parseAdminHash, buildAdminHash, isAuthCallbackHash, technicalAlertLevel } from "@/lib/adminNav";
 import { worstLevel } from "@/lib/quota";
 
@@ -148,8 +152,9 @@ function formatEUR(n) {
   return Number(n).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
 }
 
-const GROUP_ICONS = { produits: Package, crm: Users, reglages: SlidersHorizontal, technique: Settings };
+const GROUP_ICONS = { accueil: HomeIcon, produits: Package, crm: Users, reglages: SlidersHorizontal, technique: Settings }; // ZENORIA_HOME_5D_V1
 const TAB_ICONS = {
+  tableau: LayoutDashboard, // ZENORIA_HOME_5D_V1
   avis: ReviewsTabIcon,
   collections: Package,
   familles: Palette,
@@ -178,8 +183,40 @@ export default function AdminPage() {
   const [navReady, setNavReady] = useState(false);
   const lastSubByGroup = useRef({}); // chaque groupe se souvient de son dernier onglet
   const subBarRef = useRef(null);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // ZENORIA_NAV_5H_V1 : menu replié par défaut ; il se déplie au survol du bord gauche et se replie au clic. « Épinglé » = gardé ouvert en permanence.
+  const [sidebarPinned, setSidebarPinned] = useState(false);
+  const [sidebarHover, setSidebarHover] = useState(false);
+  const sidebarCollapsed = !(sidebarPinned || sidebarHover); // vrai quand seules les icônes sont affichées
+  const sidebarTimer = useRef(null);
+  const queueSidebarOpen = () => {
+    if (sidebarTimer.current) clearTimeout(sidebarTimer.current);
+    sidebarTimer.current = setTimeout(() => setSidebarHover(true), 120); // court délai : pas d'ouverture par accident
+  };
+  const queueSidebarClose = () => {
+    if (sidebarTimer.current) clearTimeout(sidebarTimer.current);
+    sidebarTimer.current = setTimeout(() => setSidebarHover(false), 300);
+  };
+  const closeSidebarNow = () => {
+    if (sidebarTimer.current) clearTimeout(sidebarTimer.current);
+    sidebarTimer.current = null;
+    setSidebarHover(false);
+  };
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        if (sidebarTimer.current) clearTimeout(sidebarTimer.current);
+        sidebarTimer.current = null;
+        setSidebarHover(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (sidebarTimer.current) clearTimeout(sidebarTimer.current);
+    };
+  }, []);
   const [rgpdPendingCount, setRgpdPendingCount] = useState(0);
+  const [stockFilter, setStockFilter] = useState(""); // ZENORIA_HOME_5D2_V1 : filtre de la liste des bijoux (venu de l'Accueil)
   const tab = nav.sub;
 
   const goTo = (group, sub) => {
@@ -187,9 +224,16 @@ export default function AdminPage() {
     if (!g) return;
     const target = sub && g.tabs.some((t) => t.id === sub) ? sub : lastSubByGroup.current[group] || g.tabs[0].id;
     lastSubByGroup.current[group] = target;
+    setStockFilter(""); // ZENORIA_HOME_5D2_V1 : un clic sur le menu retire le filtre de stock
     setNav({ group, sub: target });
   };
 
+  // ZENORIA_HOME_5D2_V1 : ouvre la liste des bijoux filtrée (tuiles de l'Accueil) ; la liste est relue pour rester cohérente avec les chiffres
+  const openStock = (filter) => {
+    goTo("produits", "collections");
+    setStockFilter(filter);
+    loadProducts();
+  };
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [promoCodes, setPromoCodes] = useState([]);
@@ -204,6 +248,7 @@ export default function AdminPage() {
   const [pieceHolds, setPieceHolds] = useState([]);
   const [holdOrders, setHoldOrders] = useState({});
   const [uniqueWarning, setUniqueWarning] = useState(null);
+  const visibleProducts = stockFilter ? products.filter((p) => stockFilterMatches(stockFilter, p, pieceHolds)) : products; // ZENORIA_HOME_5D2_V1
 
   // Upload de médias (photos / vidéo)
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -224,6 +269,12 @@ export default function AdminPage() {
   const familiesStatus = useFamilies(isAdmin === true);
   const familyById = (id) => familiesStatus.families.find((f) => String(f.id) === String(id)) || null;
   const quotaLevel = worstLevel(computeQuotaAlerts(quota));
+  // ZENORIA_HOME_5D_V1 : compteurs de l'Accueil et du menu (relus à chaque changement d'onglet)
+  const counters = useAdminCounters(isAdmin === true, nav.sub);
+  // Le badge RGPD du menu est chargé dès l'ouverture (avant, il restait à 0 tant que l'onglet RGPD n'avait pas été ouvert)
+  useEffect(() => {
+    if (counters.loaded) setRgpdPendingCount(counters.rgpd.count);
+  }, [counters.loaded, counters.rgpd.count]);
 
   // Maintenance : chargée une fois pour le bandeau d'alerte et l'onglet « Maintenance »
   const maintenance = useMaintenanceStatus(isAdmin === true);
@@ -817,16 +868,30 @@ export default function AdminPage() {
         <aside
           data-testid="admin-sidebar-accordion"
           aria-label="Navigation de l'administration"
-          className={`shrink-0 sticky top-20 self-start transition-all ${sidebarCollapsed ? "w-14" : "w-60"}`}
+          className={`shrink-0 sticky top-20 self-start z-20 ${sidebarPinned ? "w-60" : "w-14"}`}
+          onMouseEnter={queueSidebarOpen}
+          onMouseLeave={queueSidebarClose}
         >
+          {/* ZENORIA_NAV_5H_V1 : zone sensible le long du bord gauche de l'écran (le menu s'y déplie) */}
+          {!sidebarPinned && (
+            <div aria-hidden="true" data-testid="sidebar-hotzone" className="fixed left-0" style={{ top: 64, bottom: 0, width: "max(12px, calc((100vw - 72rem) / 2 + 76px))" }} />
+          )}
+          <div
+            data-testid="sidebar-panel"
+            className={!sidebarPinned && !sidebarCollapsed ? "absolute -left-2 -top-2 z-30 w-64 rounded-2xl bg-[#fbf8f4] p-2 shadow-xl ring-1 ring-[#eadfe4]" : "relative"}
+          >
           <button
             type="button"
-            onClick={() => setSidebarCollapsed((v) => !v)}
+            onClick={() => {
+              setSidebarPinned((v) => !v);
+              setSidebarHover(false);
+            }}
             data-testid="sidebar-toggle"
-            aria-label={sidebarCollapsed ? "Agrandir la navigation" : "Réduire la navigation"}
+            aria-label={sidebarPinned ? "Rétablir le repli automatique du menu" : "Garder le menu ouvert"}
+            title={sidebarPinned ? "Rétablir le repli automatique du menu" : "Garder le menu ouvert"}
             className="mb-3 flex items-center justify-center h-8 w-8 rounded-full bg-[#f5edf1] hover:bg-[#ead9e1] text-[#54434c] transition"
           >
-            {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            {sidebarPinned ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
           </button>
 
           <div role="tablist" aria-label="Sections de l'administration" data-testid="group-bar" className="flex flex-col gap-1.5">
@@ -842,8 +907,11 @@ export default function AdminPage() {
                     aria-selected={activeGroup}
                     aria-expanded={activeGroup}
                     data-testid={`group-${g.id}`}
-                    onClick={() => goTo(g.id)}
-                    className={`flex items-center gap-2 rounded-full px-3.5 h-10 text-sm font-medium transition whitespace-nowrap w-full ${
+                    onClick={() => {
+                      goTo(g.id);
+                      if (g.tabs.length === 1) closeSidebarNow(); // groupe sans sous-onglet (Accueil) : on y va et le menu se replie
+                    }}
+                    className={`relative flex items-center gap-2 rounded-full px-3.5 h-10 text-sm font-medium transition whitespace-nowrap w-full ${
                       activeGroup ? "bg-[#8f6075] text-white shadow-sm" : "bg-[#f5edf1] text-[#54434c] hover:bg-[#ead9e1]"
                     }`}
                   >
@@ -856,6 +924,16 @@ export default function AdminPage() {
                         className={`h-2.5 w-2.5 rounded-full ring-2 shrink-0 ${activeGroup ? "ring-[#8f6075]" : "ring-[#f5edf1]"} ${level === "critical" ? "bg-red-500" : "bg-amber-400"}`}
                         aria-label={level === "critical" ? "Alerte critique dans ce groupe" : "Point d'attention dans ce groupe"}
                       />
+                    )}
+                    {/* ZENORIA_HOME_5D_V1 : ce qui attend l'administratrice (groupes Accueil et CRM) */}
+                    {(g.id === "accueil" || g.id === "crm") && counters.todoTotal > 0 && (
+                      <span
+                        data-testid={"group-count-" + g.id}
+                        className={(sidebarCollapsed ? "absolute -top-1 -right-1 " : "") + "min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-medium flex items-center justify-center shrink-0 " + (activeGroup ? "bg-white text-[#8f6075]" : counters.urgent ? "bg-red-600 text-white" : "bg-[#8f6075] text-white")}
+                        aria-label={counters.todoTotal + " élément(s) à traiter"}
+                      >
+                        {counters.todoTotal}
+                      </span>
                     )}
                     {!sidebarCollapsed && (activeGroup ? <ChevronDown size={14} className="shrink-0" /> : <ChevronRight size={14} className="shrink-0" />)}
                   </button>
@@ -878,12 +956,37 @@ export default function AdminPage() {
                             role="tab"
                             aria-selected={activeTab}
                             data-testid={`sub-${t.id}`}
-                            onClick={() => goTo(g.id, t.id)}
+                            onClick={() => {
+                              goTo(g.id, t.id);
+                              closeSidebarNow();
+                            }}
                             className={`flex items-center gap-1.5 rounded-full px-3.5 h-8 text-[13px] transition whitespace-nowrap w-full ${
                               activeTab ? "bg-[#f0e6ea] text-[#412f3b] font-medium ring-1 ring-[#d9c5cc]" : "text-[#54434c] hover:bg-[#f5edf1]"
                             }`}
                           >
                             <TabIcon size={14} className="shrink-0" /> <span className="truncate">{t.label}</span>
+                            {/* ZENORIA_HOME_5D_V1 : compteurs des onglets Commandes, Avis et Comptes */}
+                            {t.id === "commandes" && counters.orders.menu > 0 && (
+                              <span
+                                data-testid="orders-menu-badge"
+                                className={"min-w-[18px] h-[18px] px-1 rounded-full text-white text-[10px] font-medium flex items-center justify-center shrink-0 " + (counters.orders.alert > 0 ? "bg-red-600" : "bg-[#8f6075]")}
+                                aria-label={counters.orders.menu + " commande(s) à traiter"}
+                              >
+                                {counters.orders.menu}
+                              </span>
+                            )}
+                            {t.id === "avis" && counters.reviews.pending > 0 && (
+                              <span
+                                data-testid="reviews-menu-badge"
+                                className={"min-w-[18px] h-[18px] px-1 rounded-full text-white text-[10px] font-medium flex items-center justify-center shrink-0 " + (counters.reviews.late > 0 ? "bg-red-600" : "bg-[#8f6075]")}
+                                aria-label={counters.reviews.pending + " avis à modérer"}
+                              >
+                                {counters.reviews.pending}
+                              </span>
+                            )}
+                            {t.id === "comptes" && counters.flagged.count > 0 && (
+                              <span data-testid="flagged-menu-dot" className="h-2 w-2 rounded-full shrink-0 bg-red-500" aria-label="Compte à surveiller" />
+                            )}
                             {t.id === "quotas" && quotaLevel !== "ok" && (
                               <span
                                 data-testid="quota-dot"
@@ -917,9 +1020,10 @@ export default function AdminPage() {
               );
             })}
           </div>
+        </div>
         </aside>
 
-        <main className="flex-1 min-w-0 py-8">
+        <main className="flex-1 min-w-0 py-8" onMouseDownCapture={closeSidebarNow} onFocusCapture={closeSidebarNow}>
         {tab !== "maintenance" && <MaintenanceBanner status={maintenance} onOpen={() => goTo("technique", "maintenance")} />}
 
         {tab !== "quotas" && <QuotaBanner status={quota} onOpen={() => goTo("technique", "quotas")} />}
@@ -943,6 +1047,18 @@ export default function AdminPage() {
               </button>
             </div>
 
+            {/* ZENORIA_HOME_5D2_V1 : filtre de stock venu de l'Accueil */}
+            {stockFilter && !productsLoading && (
+              <div data-testid="stock-filter-banner" className="mb-4 flex flex-wrap items-center gap-3 rounded-xl bg-[#f5edf1] px-4 py-2.5 text-[13px] text-[#54434c]">
+                <span>
+                  Filtre : <b>{STOCK_FILTER_LABELS[stockFilter] || stockFilter}</b> · {visibleProducts.length} collection{visibleProducts.length > 1 ? "s" : ""}
+                  {visibleProducts.length === 0 && " : aucune collection ne correspond."}
+                </span>
+                <button type="button" onClick={() => setStockFilter("")} data-testid="stock-filter-clear" className="text-[#8f6075] underline">
+                  Afficher toutes les collections
+                </button>
+              </div>
+            )}
             {productsLoading ? (
               <p className="text-sm text-[#8b737e]">Chargement des collections...</p>
             ) : (
@@ -960,7 +1076,7 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {products.map((p) => (
+                    {visibleProducts.map((p) => (
                       <tr key={p.id} className="border-t border-[#eee2e5]">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
@@ -979,7 +1095,7 @@ export default function AdminPage() {
                                 const st = pieceStateFor(p.id, pieceHolds).state;
                                 return (
                                   <span className={"inline-block mt-1 rounded-full px-2 py-0.5 text-[10px] " + (st === "sold" ? "bg-[#eeeaec] text-[#6b5f66]" : st === "reserved" ? "bg-amber-50 text-amber-800" : "bg-[#f7efdf] text-[#8a6116]")} data-testid="unique-badge">
-                                    {pieceBadgeLabel(st)}
+                                    {pieceBadgeLabel(st)}{stockFilter === "reserved" && st === "reserved" ? " · " + formatOrderReference(holdOrders[pieceStateFor(p.id, pieceHolds).orderId] || { id: pieceStateFor(p.id, pieceHolds).orderId }) : ""}
                                   </span>
                                 );
                               })()}
@@ -1101,6 +1217,7 @@ export default function AdminPage() {
 
         {tab === "familles" && <AdminFamilies status={familiesStatus} products={products} onProductsChanged={loadProducts} />}
         {tab === "promos" && <AdminBanners promoCodes={promoCodes} onCodesChanged={loadPromoCodes} siteMode={maintenanceActive && maintenance.row ? maintenance.row.mode : "off"} />}
+        {tab === "tableau" && <AdminHome counters={counters} onGo={goTo} onOpenStock={openStock} />} {/* ZENORIA_HOME_5D_V1 */}
         {tab === "connexions" && <AdminConnections />}
 
         {tab === "site" && <AdminSiteMedia />}

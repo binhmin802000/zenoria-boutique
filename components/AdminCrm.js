@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"; // ZENORIA_NAV_5H_V1 : useRef
 // ZENORIA_ADMIN_NAV_5A_V1 : AdminBilling et AdminPaymentMethods sont affichés dans le groupe Réglages (pages/admin.js)
 import { RefreshCw, FileDown } from "lucide-react"; // ZENORIA_INVOICE_STEP3B_V1
 import { supabase, getMediaUrl } from "@/lib/supabase";
@@ -9,6 +9,8 @@ import { parisDay, parisDayDiff, addDaysToParisDay } from "@/lib/dates"; // ZENO
 // ZENORIA_FLAGGED_5E_V1 : signalement des comptes à 3 annulations par la cliente sur 30 jours
 import { useFlaggedAccounts } from "@/lib/flaggedAccounts";
 import FlaggedBadge from "@/components/FlaggedBadge";
+// ZENORIA_HOME_5D_V1 : l'Accueil ouvre cet écran avec un filtre déjà choisi
+import { peekOrdersHandoff, clearOrdersHandoff } from "@/lib/adminCounters";
 
 // ZENORIA_INVOICE_STEP3B_V1 : télécharge la facture PDF d'une commande depuis l'admin (même route que l'espace cliente ;
 // issue_invoice_for_order autorise un compte administrateur à générer la facture de n'importe quelle commande).
@@ -740,10 +742,29 @@ export function AdminOrders() {
   const [datePreset, setDatePreset] = useState("all"); // "today" | "7d" | "30d" | "custom" | "all"
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-    const [includeTestData, setIncludeTestData] = useState(false);
+    const [includeTestData, setIncludeTestData] = useState(() => {
+    const h = peekOrdersHandoff(); // ZENORIA_HOME_5D_V1
+    return Boolean(h && h.includeTest);
+  });
     const [graceDays, setGraceDays] = useState(DEFAULT_BANK_TRANSFER.grace_days);
-  const [statusFilter, setStatusFilter] = useState("all"); // ZENORIA_ORDERS_5B_V1
+  useEffect(() => {
+    clearOrdersHandoff(); // ZENORIA_HOME_5D_V1 : le filtre venu de l'Accueil n'est utilisé qu'à l'ouverture
+  }, []);
+  const [statusFilter, setStatusFilter] = useState(() => {
+    const h = peekOrdersHandoff();
+    return h && h.filter ? h.filter : "all";
+  }); // ZENORIA_ORDERS_5B_V1
   const flaggedAccounts = useFlaggedAccounts(orders); // ZENORIA_FLAGGED_5E_V1
+  // ZENORIA_NAV_5H_V1 : quand un filtre est choisi (bloc du parcours ou tuile de l'Accueil), la page se cale sur le parcours des commandes
+  const ordersFlowRef = useRef(null);
+  useEffect(() => {
+    if (statusFilter === "all") return undefined;
+    const t = setTimeout(() => {
+      const el = ordersFlowRef.current;
+      if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+    return () => clearTimeout(t);
+  }, [statusFilter]);
   const [view, setView] = useState("list"); // ZENORIA_ORDERS_6A_V1 : "list" (commandes) ou "history" (historique des actions)
 
   const load = useCallback(async () => {
@@ -959,7 +980,8 @@ export function AdminOrders() {
           </div>
         </div>
       </div>
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-3">
+      {/* ZENORIA_NAV_5H_V1 : période sur une ligne (la date de fin reste avec la date de début), recherche en dessous, à gauche */}
+        <div className="flex flex-col items-start gap-3 mb-3">
         <div className="flex flex-wrap items-center gap-2">
           {[
             ["today", "Aujourd'hui"],
@@ -978,7 +1000,7 @@ export function AdminOrders() {
             </button>
           ))}
           <span className="text-[#d9c5cc]">|</span>
-          <input
+          <span className="inline-flex items-center gap-2 whitespace-nowrap" data-testid="orders-date-range"><input
             type="date"
             value={dateFrom}
             onChange={(e) => { setDatePreset("custom"); setDateFrom(e.target.value); }}
@@ -994,7 +1016,7 @@ export function AdminOrders() {
             data-testid="date-to"
             aria-label="Date de fin"
             className="rounded-full border border-[#eadfe4] bg-white px-3 h-8 text-xs outline-none focus:border-[#8f6075]"
-          />
+          /></span>
         </div>
         <input
           type="search"
@@ -1006,7 +1028,7 @@ export function AdminOrders() {
           className="w-full lg:w-80 rounded-full border border-[#eadfe4] bg-white px-4 h-10 text-sm outline-none focus:border-[#8f6075]"
         />
       </div>
-      <div className="rounded-2xl bg-white border border-[#eee2e5] px-4 py-3.5 mb-4" data-testid="orders-flow">
+      <div className="rounded-2xl bg-white border border-[#eee2e5] px-4 py-3.5 mb-4" ref={ordersFlowRef} style={{ scrollMarginTop: 84 }} data-testid="orders-flow">
         <div className="text-xs font-medium text-[#8b737e] mb-2">Parcours des commandes (période choisie, date de commande)</div>
         <div className="flex gap-px rounded-lg overflow-hidden">
           {segments.map((s) => (

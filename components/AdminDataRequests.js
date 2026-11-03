@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { ShieldCheck, Download, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import StatCards from "@/components/StatCards"; // ZENORIA_BANNERS_5F1_V1
+import { RGPD_LEGAL_DAYS, RGPD_ALERT_DAYS } from "@/lib/adminCounters";
 
 function formatDateTime(value) {
   if (!value) return "";
@@ -74,8 +76,22 @@ export default function AdminDataRequests({ onPendingCountChange }) {
 
   const pending = rows.filter((r) => r.status === "pending");
   const done = rows.filter((r) => r.status !== "pending");
+  // ZENORIA_BANNERS_5F1_V1 : ancienneté de la plus ancienne demande en attente (en jours), même règle que l'Accueil
+  const oldestDays = pending.length ? Math.max(...pending.map((r) => Math.max(0, Math.floor((Date.now() - new Date(r.requested_at).getTime()) / 86400000)))) : 0;
+  const lateRequests = pending.length > 0 && oldestDays >= RGPD_ALERT_DAYS;
 
   return (
+    <>
+      {/* ZENORIA_BANNERS_5F1_V1 : bandeau de chiffres */}
+      <StatCards
+        testId="rgpd-cards"
+        className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-5"
+        cards={[
+          { key: "pending", value: loading ? "—" : pending.length, label: "demandes en attente", tone: lateRequests ? "red" : "" },
+          { key: "oldest", value: loading ? "—" : pending.length ? oldestDays + " j" : "—", label: "la plus ancienne (délai : " + RGPD_LEGAL_DAYS + " jours)", tone: lateRequests ? "red" : "" },
+          { key: "done", value: loading ? "—" : done.length, label: "demandes traitées" },
+        ]}
+      />
     <div className="rounded-2xl border border-[#eadfe4] bg-white p-5">
       <div className="flex items-center gap-2 mb-1">
         <ShieldCheck size={18} className="text-[#8f6075]" />
@@ -135,5 +151,6 @@ export default function AdminDataRequests({ onPendingCountChange }) {
         </>
       )}
     </div>
+    </>
   );
 }

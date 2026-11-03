@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Star, RefreshCw, MessageCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import StatCards from "@/components/StatCards"; // ZENORIA_BANNERS_5F1_V1
 import { REVIEWS_RULES, REFUSAL_REASONS, reviewErrorMessage } from "@/lib/reviewsSettings";
 
 // ============================================================
@@ -95,7 +96,8 @@ export default function AdminReviews() {
     const pub = rows.filter((r) => r.status === "published" && !r.is_test);
     const avg = pub.length >= REVIEWS_RULES.minReviewsForAverage ? (pub.reduce((s, r) => s + r.rating, 0) / pub.length).toFixed(1).replace(".", ",") : "—";
     const count = (s) => rows.filter((r) => r.status === s).length;
-    return { pending: pending.length, late: late.length, published: pub.length, avg, count };
+    const oldestDays = pending.length ? Math.max(...pending.map((r) => businessDaysSince(r.created_at))) : 0; // ZENORIA_BANNERS_5F1_V1
+    return { pending: pending.length, late: late.length, published: pub.length, avg, count, oldestDays };
   }, [rows]);
 
   const list = rows.filter((r) => r.status === filter);
@@ -142,19 +144,17 @@ export default function AdminReviews() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
-        {[
-          [stats.pending, "en attente"],
-          [stats.late, `en retard (> ${REVIEWS_RULES.moderationDays} jours ouvrés)`],
-          [stats.published, "publiés (hors tests)"],
-          [stats.avg, `note moyenne${stats.avg === "—" ? ` (dès ${REVIEWS_RULES.minReviewsForAverage} avis)` : ""}`],
-        ].map(([v, l], i) => (
-          <div key={i} className={`rounded-2xl bg-white border p-4 ${i === 1 && stats.late > 0 ? "border-red-200" : "border-[#eee2e5]"}`}>
-            <div className={`font-serif text-2xl ${i === 1 && stats.late > 0 ? "text-red-600" : "text-[#412f3b]"}`}>{v}</div>
-            <div className="text-[11px] text-[#8b737e] leading-4">{l}</div>
-          </div>
-        ))}
-      </div>
+      {/* ZENORIA_BANNERS_5F1_V1 : cartes cliquables (En attente / en retard -> En attente ; publiés -> Publiés) */}
+      <StatCards
+        testId="reviews-cards"
+        className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5"
+        cards={[
+          { key: "pending", value: stats.pending, label: "en attente", sub: stats.pending > 0 ? "le plus ancien : " + stats.oldestDays + " jour" + (stats.oldestDays > 1 ? "s" : "") + " ouvré" + (stats.oldestDays > 1 ? "s" : "") : "", onClick: () => { setFilter("pending"); setRefuseId(null); setReplyId(null); }, active: filter === "pending" },
+          { key: "late", value: stats.late, label: `en retard (> ${REVIEWS_RULES.moderationDays} jours ouvrés)`, tone: stats.late > 0 ? "red" : "", onClick: () => { setFilter("pending"); setRefuseId(null); setReplyId(null); } },
+          { key: "published", value: stats.published, label: "publiés (hors tests)", onClick: () => { setFilter("published"); setRefuseId(null); setReplyId(null); }, active: filter === "published" },
+          { key: "avg", value: stats.avg, label: `note moyenne${stats.avg === "—" ? ` (dès ${REVIEWS_RULES.minReviewsForAverage} avis)` : ""}` },
+        ]}
+      />
 
       <div className="flex flex-wrap gap-2 mt-5" role="tablist">
         {FILTERS.map((f) => (

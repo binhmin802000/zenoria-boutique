@@ -27,6 +27,7 @@ import { Star as ReviewsTabIcon } from "lucide-react";
 // ZENORIA_HOME_5D_V1 : Accueil (tableau de bord) et compteurs du menu
 import { Home as HomeIcon, LayoutDashboard } from "lucide-react";
 import AdminHome from "@/components/AdminHome";
+import StatCards from "@/components/StatCards"; // ZENORIA_BANNERS_5F1_V1
 import { useAdminCounters, stockFilterMatches, STOCK_FILTER_LABELS } from "@/lib/adminCounters"; // ZENORIA_HOME_5D2_V1
 import { ADMIN_NAV, DEFAULT_NAV, parseAdminHash, buildAdminHash, isAuthCallbackHash, technicalAlertLevel } from "@/lib/adminNav";
 import { worstLevel } from "@/lib/quota";
@@ -1047,6 +1048,28 @@ export default function AdminPage() {
               </button>
             </div>
 
+            {/* ZENORIA_BANNERS_5F1_V1 : bandeau de chiffres (mêmes règles et mêmes chiffres que les tuiles de l'Accueil) ; un clic filtre la liste */}
+            {(() => {
+              const count = (k) => products.filter((p) => stockFilterMatches(k, p, pieceHolds)).length;
+              const uniqueStates = products.filter((p) => stockFilterMatches("unique", p, pieceHolds)).map((p) => pieceStateFor(p.id, pieceHolds).state);
+              const toggle = (k) => setStockFilter(stockFilter === k ? "" : k);
+              const v = (n) => (productsLoading ? "—" : n);
+              return (
+                <>
+                  <StatCards
+                    testId="products-cards"
+                    className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-2"
+                    cards={[
+                      { key: "out", value: v(count("out")), label: "Bijoux épuisés", sub: "visibles sur le site, stock à 0", tone: !productsLoading && count("out") > 0 ? "red" : "", onClick: () => toggle("out"), active: stockFilter === "out" },
+                      { key: "last", value: v(count("last")), label: "Dernier exemplaire", sub: "stock à 1", onClick: () => toggle("last"), active: stockFilter === "last" },
+                      { key: "reserved", value: v(count("reserved")), label: "Pièces uniques réservées", sub: "en cours de commande", onClick: () => toggle("reserved"), active: stockFilter === "reserved" },
+                      { key: "unique", value: v(uniqueStates.filter((s) => s === "available").length + " / " + uniqueStates.filter((s) => s === "sold").length), label: "Pièces uniques (disponibles / vendues)", sub: "bijoux en ligne", onClick: () => toggle("unique"), active: stockFilter === "unique" },
+                    ]}
+                  />
+                  <p className="text-[11px] leading-4 text-[#8b737e] mb-5">Seuls les bijoux visibles sur le site sont comptés. Un clic sur une carte filtre la liste ; un second clic retire le filtre.</p>
+                </>
+              );
+            })()}
             {/* ZENORIA_HOME_5D2_V1 : filtre de stock venu de l'Accueil */}
             {stockFilter && !productsLoading && (
               <div data-testid="stock-filter-banner" className="mb-4 flex flex-wrap items-center gap-3 rounded-xl bg-[#f5edf1] px-4 py-2.5 text-[13px] text-[#54434c]">

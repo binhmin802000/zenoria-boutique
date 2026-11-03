@@ -3,6 +3,9 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw, FileDown } from "lucide-react"; // ZENORIA_INVOICE_STEP3B_V1
 import { supabase, getMediaUrl } from "@/lib/supabase";
 import { parseBankTransfer, BANK_TRANSFER_KEY, DEFAULT_BANK_TRANSFER, autoCancelAt, isAutoCancelAlert, formatAutoCancel } from "@/lib/paymentSettings"; // ZENORIA_ADMIN_TRANSFER_V1 · ZENORIA_AUTO_CANCEL_UI_V1
+// ZENORIA_ORDERS_5B5_V1 : imports regroupés en tête de fichier
+import { orderStatusInfo, formatOrderPrice, formatOrderReference } from "@/lib/orderDisplay"; // ZENORIA_ACCOUNT_STEP13_V1
+import { parisDay, parisDayDiff, addDaysToParisDay } from "@/lib/dates"; // ZENORIA_ORDER_DATES_V1
 
 // ZENORIA_INVOICE_STEP3B_V1 : télécharge la facture PDF d'une commande depuis l'admin (même route que l'espace cliente ;
 // issue_invoice_for_order autorise un compte administrateur à générer la facture de n'importe quelle commande).
@@ -32,7 +35,6 @@ async function downloadInvoiceAdmin(orderId, onError) {
     onError("Impossible de générer la facture pour le moment.");
   }
 }
-import { orderStatusInfo, formatOrderPrice, formatOrderReference } from "@/lib/orderDisplay"; // ZENORIA_ACCOUNT_STEP13_V1
 
 // ============================================================
 // GROUPE « CRM » de l'administration (/admin)
@@ -44,7 +46,6 @@ import { orderStatusInfo, formatOrderPrice, formatOrderReference } from "@/lib/o
 //  - AdminOrders : les commandes (l'ancien écran « À venir », CrmRoadmap, est supprimé au lot 5a).
 // ============================================================
 
-import { parisDay, parisDayDiff, addDaysToParisDay } from "@/lib/dates"; // ZENORIA_ORDER_DATES_V1
 const TIME_ZONE = "Europe/Paris";
 
 function formatDateTime(value) {
@@ -226,9 +227,11 @@ export function CrmAccounts() {
 
 // ============================================================
 // AdminOrders : liste des commandes passees sur le site (orders, order_items).
-// LECTURE SEULE : aucune ecriture n'est possible depuis cet ecran. Les commandes
-// sont creees automatiquement par le webhook de paiement Stripe
-// (pages/api/webhooks/stripe.js), jamais a la main.
+// ZENORIA_ORDERS_5B5_V1 : commentaire mis à jour (l'écran n'est plus en lecture seule).
+// Les commandes par carte sont créées automatiquement par le webhook de paiement Stripe
+// (pages/api/webhooks/stripe.js), jamais à la main. Depuis cet écran, l'administration peut :
+//  - pour un virement : confirmer l'encaissement, prolonger l'échéance ou annuler (TransferPanel) ;
+//  - pour une commande payée : la marquer expédiée ou livrée, et télécharger la facture.
 // ============================================================
 
 // ZENORIA_ACCOUNT_STEP13_V1 : ORDER_STATUS_LABELS, formatOrderPrice et formatOrderReference sont désormais
@@ -660,13 +663,6 @@ export function AdminOrders() {
     });
   }, [orders, includeTestData, dateFrom, dateTo]);
 
-  const stats = useMemo(() => {
-    const paid = filteredOrders.filter((o) => o.status === "paid" || o.status === "shipped" || o.status === "delivered");
-    const revenue = paid.reduce((s, o) => s + Number(o.total || 0), 0);
-    const monthAgo = Date.now() - 30 * 24 * 3600 * 1000;
-    const recent = filteredOrders.filter((o) => o.created_at && new Date(o.created_at).getTime() >= monthAgo).length;
-    return { total: filteredOrders.length, paid: paid.length, revenue, recent };
-  }, [filteredOrders]);
 
   const q = query.trim().toLowerCase();
     const visible = filteredOrders.filter((o) => {
@@ -700,8 +696,6 @@ export function AdminOrders() {
     // ZENORIA_ORDERS_5B_V1 : alertes, parcours et chiffre d'affaires à la date d'encaissement
   const baseOrders = orders.filter((o) => includeTestData || !o.is_test);
   const alertCount = baseOrders.filter((o) => matchesStatus(o, "alert", graceDays)).length;
-  const waitingTransfer = baseOrders.filter((o) => o.status === "pending_transfer").length;
-  const toShip = baseOrders.filter((o) => o.status === "paid").length;
   const segments = ORDER_SEGMENTS.map((s) => ({ ...s, count: filteredOrders.filter((o) => matchesStatus(o, s.key, graceDays)).length })); // ZENORIA_ORDERS_5B2_V1 : les 5 états sont toujours affichés, même à 0
   const cashed = baseOrders.filter((o) => ["paid", "shipped", "delivered"].includes(o.status) && o.paid_at);
   const revenueCashed = cashed

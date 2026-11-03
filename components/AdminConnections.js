@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 // ZENORIA_FLAGGED_5E_V1 : signalement des comptes à 3 annulations par la cliente sur 30 jours
 import { useFlaggedAccounts } from "@/lib/flaggedAccounts";
 import FlaggedBadge from "@/components/FlaggedBadge";
+import StatCards from "@/components/StatCards"; // ZENORIA_BANNERS_5F1_V1
 
 // ============================================================
 // ONGLET « CONNEXIONS » de l'administration (/admin)
@@ -67,6 +68,7 @@ export default function AdminConnections() {
   const [history, setHistory] = useState([]);
   const [maxRows, setMaxRows] = useState(50);
   const flagged = useFlaggedAccounts(accounts); // ZENORIA_FLAGGED_5E_V1
+  const [onlyFlagged, setOnlyFlagged] = useState(false); // ZENORIA_BANNERS_5F1_V1 : filtre « comptes à surveiller »
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -102,6 +104,10 @@ export default function AdminConnections() {
     };
   }, [accounts]);
 
+  // ZENORIA_BANNERS_5F1_V1
+  const flaggedCount = accounts.filter((a) => flagged.has(a.account_id)).length;
+  const filterFlagged = onlyFlagged && flaggedCount > 0;
+  const shownAccounts = filterFlagged ? accounts.filter((a) => flagged.has(a.account_id)) : accounts;
   const cards = [
     { label: "Comptes", value: stats.total },
     { label: "Comptes confirmés", value: stats.confirmed },
@@ -128,17 +134,27 @@ export default function AdminConnections() {
       {error && <div className="mb-5 rounded-xl bg-red-50 text-red-600 px-4 py-3 text-sm">{error}</div>}
 
       {/* Chiffres de synthèse */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-        {cards.map((c) => (
-          <div key={c.label} className="rounded-2xl bg-white border border-[#eee2e5] px-4 py-4">
-            <div className="font-serif text-3xl text-[#8f6075]">{loading ? "…" : c.value}</div>
-            <div className="text-xs text-[#756a70] mt-1">{c.label}</div>
-          </div>
-        ))}
-      </div>
+      <StatCards
+        testId="connections-cards"
+        className={"grid grid-cols-2 gap-3 mb-8 " + (flaggedCount > 0 ? "lg:grid-cols-5" : "lg:grid-cols-4")}
+        cards={[
+          ...cards.map((c) => ({ key: c.label, value: loading ? "…" : c.value, label: c.label })),
+          ...(flaggedCount > 0 ? [{ key: "flagged", value: flaggedCount, label: "Comptes à surveiller", sub: "3 annulations ou plus sur 30 jours", tone: "red", onClick: () => setOnlyFlagged(!filterFlagged), active: filterFlagged }] : []),
+        ]}
+      />
 
       {/* Comptes */}
       <h2 className="font-serif text-xl mb-3">Comptes</h2>
+      {filterFlagged && (
+        <div data-testid="flagged-filter-banner" className="mb-3 flex flex-wrap items-center gap-3 rounded-xl bg-[#f5edf1] px-4 py-2.5 text-[13px] text-[#54434c]">
+          <span>
+            Filtre : <b>Comptes à surveiller</b> · {shownAccounts.length} compte{shownAccounts.length > 1 ? "s" : ""}
+          </span>
+          <button type="button" onClick={() => setOnlyFlagged(false)} data-testid="flagged-filter-clear" className="text-[#8f6075] underline">
+            Afficher tous les comptes
+          </button>
+        </div>
+      )}
       <div className="bg-white rounded-2xl border border-[#eee2e5] overflow-x-auto mb-10">
         <table className="w-full min-w-[640px] text-sm">
           <thead>
@@ -158,7 +174,7 @@ export default function AdminConnections() {
                 </td>
               </tr>
             )}
-            {accounts.map((a) => (
+            {shownAccounts.map((a) => (
               <tr key={a.account_id} className="border-t border-[#eee2e5]">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">

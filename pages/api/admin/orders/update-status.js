@@ -1,4 +1,5 @@
 // ZENORIA_API_ADMIN_ORDER_STATUS_V2
+// ZENORIA_ORDER_ACTOR_5G_V1 : l'auteur (e-mail de l'administratrice connectee) est enregistre dans order_status_history, pour l'expedition et la livraison.
 // ============================================================
 // pages/api/admin/orders/update-status.js
 //
@@ -143,6 +144,7 @@ export default async function handler(req, res) {
         order_id: id,
         status: "shipped",
         note: "Expédiée via " + carrier + ", suivi : " + trimmedTracking + ".",
+        actor_email: admin.email || null, // ZENORIA_ORDER_ACTOR_5G_V1 : auteur de l'expédition (compte administrateur connecté)
       });
       if (historyErr) {
         console.error("[admin-order-status] échec order_status_history (ship) :", historyErr.message);
@@ -171,6 +173,7 @@ export default async function handler(req, res) {
       order_id: id,
       status: "delivered",
       note: "Marquée comme livrée manuellement depuis l'administration.",
+      actor_email: admin.email || null, // ZENORIA_ORDER_ACTOR_5G_V1 : auteur de la livraison (compte administrateur connecté)
     });
     if (historyErr) {
       console.error("[admin-order-status] échec order_status_history (deliver) :", historyErr.message);

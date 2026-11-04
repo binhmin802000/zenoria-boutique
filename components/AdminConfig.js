@@ -10,6 +10,7 @@ import ConfigLog from "@/components/ConfigLog";
 import FlagControl from "@/components/ConfigSwitch";
 import { useConfigToggle } from "@/lib/configToggle";
 import SensitiveSwitch from "@/components/SensitiveSwitch"; // ZENORIA_CONFIG_C3B_V1
+import { setVatEnabled } from "@/lib/billingActions"; // ZENORIA_CONFIG_C3C_V1
 import { setPaymentMethod, TransferNotReadyError } from "@/lib/paymentActions";
 import { parsePaymentMethods, parseBankTransfer } from "@/lib/paymentSettings";
 
@@ -140,6 +141,11 @@ export default function AdminConfig({ onGo, maintenance }) {
   // "Moyens de paiement" (AdminPaymentMethods.js), via la fonction partagée setPaymentMethod
   // (lib/paymentActions.js). Confirmation "BINHEMI" gérée par SensitiveSwitch lui-même.
   const handleSensitiveConfirm = async (id, next) => {
+    if (id === "vat") { // ZENORIA_CONFIG_C3C_V1
+      await setVatEnabled(next);
+      cfg.reload();
+      return;
+    }
     if (id === "stripe" || id === "transfer") {
       const currentMethods = parsePaymentMethods(cfg.rows.payment_methods ? cfg.rows.payment_methods.value : null);
       const savedBank = parseBankTransfer(cfg.rows.bank_transfer ? cfg.rows.bank_transfer.value : null);

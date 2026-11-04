@@ -1,4 +1,5 @@
 // components/SensitiveSwitch.js
+// ZENORIA_CONFIG_C3B_LAYOUT_V1
 // ZENORIA_CONFIG_C3A_V1
 //
 // Interrupteur "sensible" pour l'onglet Configuration (lot C3).
@@ -82,7 +83,7 @@ export default function SensitiveSwitch({
 
   return (
     <div
-      className="rounded-xl border border-[#e7d9e2] bg-white p-4"
+      className="w-full min-w-0 max-w-full whitespace-normal break-words text-left rounded-xl border border-[#e7d9e2] bg-white p-4"
       data-testid={`sensitive-switch-${id}`}
     >
       <div className="flex items-start justify-between gap-4">
@@ -123,7 +124,7 @@ export default function SensitiveSwitch({
               className="mt-0.5 shrink-0 text-amber-600"
               aria-hidden="true"
             />
-            <div className="flex-1">
+            <div className="min-w-0 flex-1">
               <p className="text-sm text-[#3b2b39]">
                 Vous allez {nextValue ? "activer" : "désactiver"} «{" "}
                 <strong>{label}</strong> ».

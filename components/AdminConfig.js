@@ -6,6 +6,9 @@ import { isMaintenanceActive } from "@/components/AdminMaintenance";
 import { useSiteConfig, buildConfigOverview, setSiteMediaTarget } from "@/lib/configOverview"; // ZENORIA_CONFIG_C1B_V1
 // ZENORIA_CONFIG_C5_V1 : historique des changements de réglages
 import ConfigLog from "@/components/ConfigLog";
+// ZENORIA_CONFIG_C2_V1 : interrupteurs simples
+import FlagControl from "@/components/ConfigSwitch";
+import { useConfigToggle } from "@/lib/configToggle";
 
 const TONES = { ok: "text-emerald-700", warn: "text-amber-800", crit: "text-red-600 font-medium" };
 
@@ -17,13 +20,13 @@ function flagClass(f) {
 }
 
 // Affichage seul (testable sans réseau)
-export function ConfigView({ sections, loaded, loading, error, onGo, onReload }) {
+export function ConfigView({ sections, loaded, loading, error, onGo, onReload, onToggle, busyId, notice }) { // ZENORIA_CONFIG_C2_V1
   return (
     <div data-testid="admin-config">
       <div className="flex justify-between items-center mb-5 gap-3">
         <div>
           <h1 className="font-serif text-2xl">Configuration du site</h1>
-          <p className="text-sm text-[#8b737e]">L&apos;état de chaque réglage. Lecture seule : chaque réglage se modifie sur son écran (lien « Modifier »).</p>
+          <p className="text-sm text-[#8b737e]">L&apos;état de chaque réglage. La livraison offerte, les avis et les canaux de contact se basculent ici ; le reste se modifie sur son écran (lien « Modifier »).</p>
         </div>
         <button
           type="button"
@@ -47,6 +50,16 @@ export function ConfigView({ sections, loaded, loading, error, onGo, onReload })
         </p>
       ) : null}
 
+      {/* ZENORIA_CONFIG_C2_V1 : résultat de la dernière bascule */}
+      {notice ? (
+        <div
+          role={notice.type === "error" ? "alert" : "status"}
+          data-testid="config-notice"
+          className={"mb-5 rounded-xl px-4 py-3 text-[13px] border " + (notice.type === "error" ? "bg-red-50 border-red-200 text-red-700" : notice.type === "warn" ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-emerald-50 border-emerald-200 text-emerald-800")}
+        >
+          {notice.text}
+        </div>
+      ) : null}
       {loaded && !error ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" data-testid="config-grid">
           {sections.map((s) => (
@@ -82,12 +95,7 @@ export function ConfigView({ sections, loaded, loading, error, onGo, onReload })
                   </div>
                   <div className="shrink-0 text-right">
                     {it.flag !== undefined ? (
-                      <span
-                        data-state={it.flag === true ? "on" : it.flag === false ? "off" : "unknown"}
-                        className={"inline-block rounded-full px-2.5 py-0.5 text-xs " + flagClass(it.flag)}
-                      >
-                        {flagLabel(it.flag)}
-                      </span>
+                      <FlagControl it={it} busyId={busyId} onToggle={onToggle} />
                     ) : (
                       <span className={"text-[13px] " + (it.missing ? "text-[#8b737e] italic" : TONES[it.tone] || "text-[#54434c]")}>{it.text}</span>
                     )}
@@ -104,6 +112,7 @@ export function ConfigView({ sections, loaded, loading, error, onGo, onReload })
 
 export default function AdminConfig({ onGo, maintenance }) {
   const cfg = useSiteConfig();
+  const toggle = useConfigToggle(cfg.rows, cfg.reload); // ZENORIA_CONFIG_C2_V1
   const m = maintenance || {};
   const maint = {
     loading: Boolean(m.loading),
@@ -114,7 +123,7 @@ export default function AdminConfig({ onGo, maintenance }) {
   const sections = buildConfigOverview({ rows: cfg.rows, meta: cfg.meta, maintenance: maint });
   return (
     <>
-      <ConfigView sections={sections} loaded={cfg.loaded} loading={cfg.loading} error={cfg.error} onGo={onGo} onReload={cfg.reload} />
+      <ConfigView sections={sections} loaded={cfg.loaded} loading={cfg.loading} error={cfg.error} onGo={onGo} onReload={cfg.reload} onToggle={toggle.run} busyId={toggle.busyId} notice={toggle.notice} />
       {/* ZENORIA_CONFIG_C5_V1 */}
       {cfg.loaded && !cfg.error ? <ConfigLog refreshKey={cfg.rows} /> : null}
     </>

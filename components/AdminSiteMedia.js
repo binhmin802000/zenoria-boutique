@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react"; // ZENORIA_CONFIG_C1B_V1 : useRef
 import { Upload, Film, Trash2, RefreshCw } from "lucide-react";
 import {
   supabase,
@@ -24,6 +24,8 @@ import AdminLegalPages from "@/components/AdminLegalPages"; // ZENORIA_STORY_REV
 import AdminSiteTexts from "@/components/AdminSiteTexts";
 import AdminCgv from "@/components/AdminCgv";
 import AdminAccordionSection from "@/components/AdminAccordionSection";
+// ZENORIA_CONFIG_C1B_V1 : section visée par un lien de l'onglet Accueil › Configuration
+import { peekSiteMediaTarget, clearSiteMediaTarget } from "@/lib/configOverview";
 
 // ============================================================
 // ONGLET « CONTENU DU SITE » de l'administration (/admin)
@@ -111,8 +113,20 @@ function friendlyError(err) {
 }
 
 export default function AdminSiteMedia() {
-  const [openGroup, setOpenGroup] = useState("vitrine");
+  const targetRef = useRef(peekSiteMediaTarget()); // ZENORIA_CONFIG_C1B_V1 : section à ouvrir (lien de Configuration), sinon « Vitrine & ambiance »
+  const [openGroup, setOpenGroup] = useState(targetRef.current || "vitrine");
   const toggleGroup = (id) => setOpenGroup((prev) => (prev === id ? null : id));
+  // ZENORIA_CONFIG_C1B_V1 : la cible n'est utilisée qu'à l'ouverture ; la page défile ensuite jusqu'à la section visée
+  useEffect(() => {
+    const target = targetRef.current;
+    clearSiteMediaTarget();
+    if (!target) return undefined;
+    const timer = setTimeout(() => {
+      const el = document.querySelector('[data-config-anchor="' + target + '"]');
+      if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, []);
   const [rows, setRows] = useState({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -327,6 +341,7 @@ export default function AdminSiteMedia() {
         })}
       </div>
 
+      <div data-config-anchor="vitrine" style={{ scrollMarginTop: 84 }}>
       <AdminAccordionSection
         id="vitrine"
         title="Vitrine & ambiance"
@@ -337,7 +352,9 @@ export default function AdminSiteMedia() {
         <AdminSeasonFx />
         <AdminRingAnimation />
       </AdminAccordionSection>
+      </div>
 
+      <div data-config-anchor="textes-legal" style={{ scrollMarginTop: 84 }}>
       <AdminAccordionSection
         id="textes-legal"
         title="Textes & légal"
@@ -349,7 +366,9 @@ export default function AdminSiteMedia() {
         <AdminSiteTexts />
         <AdminCgv />
       </AdminAccordionSection>
+      </div>
 
+      <div data-config-anchor="vente-livraison" style={{ scrollMarginTop: 84 }}>
       <AdminAccordionSection
         id="vente-livraison"
         title="Vente & livraison"
@@ -359,7 +378,9 @@ export default function AdminSiteMedia() {
       >
         <AdminShipping />
       </AdminAccordionSection>
+      </div>
 
+      <div data-config-anchor="contact" style={{ scrollMarginTop: 84 }}>
       <AdminAccordionSection
         id="contact"
         title="Contact"
@@ -369,6 +390,7 @@ export default function AdminSiteMedia() {
       >
         <AdminContact />
       </AdminAccordionSection>
+      </div>
 
       {/* ZENORIA_ACCOUNT_STEP12_V1 : CADRAGE DU BANDEAU DE L'ESPACE CLIENTE (21:9) */}
       {wideRequest && (

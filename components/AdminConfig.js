@@ -3,7 +3,7 @@
 import React from "react";
 import { RefreshCw } from "lucide-react";
 import { isMaintenanceActive } from "@/components/AdminMaintenance";
-import { useSiteConfig, buildConfigOverview } from "@/lib/configOverview";
+import { useSiteConfig, buildConfigOverview, setSiteMediaTarget } from "@/lib/configOverview"; // ZENORIA_CONFIG_C1B_V1
 
 const TONES = { ok: "text-emerald-700", warn: "text-amber-800", crit: "text-red-600 font-medium" };
 
@@ -53,14 +53,21 @@ export function ConfigView({ sections, loaded, loading, error, onGo, onReload })
                 <h2 className="font-serif text-lg">{s.title}</h2>
                 <button
                   type="button"
-                  onClick={() => onGo(s.link.group, s.link.tab)}
+                  onClick={() => {
+                    setSiteMediaTarget(s.link.anchor || null); // ZENORIA_CONFIG_C1B_V1 : ouvre la bonne section de « Contenu du site »
+                    onGo(s.link.group, s.link.tab);
+                  }}
                   data-testid={"config-link-" + s.id}
+                  title={s.link.where ? "Ouvre " + s.link.where : undefined}
                   className="text-xs text-[#8f6075] underline shrink-0"
                 >
                   Modifier ›
                 </button>
               </div>
-              <div className="text-[11px] text-[#8b737e] mb-1.5">{s.keys}</div>
+              <div className="text-[11px] text-[#8b737e] mb-1.5">
+                {s.keys}
+                {s.link.where ? " · " + s.link.where : ""}
+              </div>
               {s.items.map((it) => (
                 <div
                   key={it.id}

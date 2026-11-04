@@ -27,6 +27,9 @@ import { Star as ReviewsTabIcon } from "lucide-react";
 // ZENORIA_HOME_5D_V1 : Accueil (tableau de bord) et compteurs du menu
 import { Home as HomeIcon, LayoutDashboard } from "lucide-react";
 import AdminHome from "@/components/AdminHome";
+// ZENORIA_CONFIG_C1_V1 : onglet Accueil › Configuration (lecture seule)
+import AdminConfig from "@/components/AdminConfig";
+import { ToggleRight } from "lucide-react";
 import StatCards from "@/components/StatCards"; // ZENORIA_BANNERS_5F1_V1
 import { useAdminCounters, stockFilterMatches, STOCK_FILTER_LABELS } from "@/lib/adminCounters"; // ZENORIA_HOME_5D2_V1
 import { ADMIN_NAV, DEFAULT_NAV, parseAdminHash, buildAdminHash, isAuthCallbackHash, technicalAlertLevel } from "@/lib/adminNav";
@@ -156,6 +159,7 @@ function formatEUR(n) {
 const GROUP_ICONS = { accueil: HomeIcon, produits: Package, crm: Users, reglages: SlidersHorizontal, technique: Settings }; // ZENORIA_HOME_5D_V1
 const TAB_ICONS = {
   tableau: LayoutDashboard, // ZENORIA_HOME_5D_V1
+  configuration: ToggleRight, // ZENORIA_CONFIG_C1_V1
   avis: ReviewsTabIcon,
   collections: Package,
   familles: Palette,
@@ -1241,6 +1245,7 @@ export default function AdminPage() {
         {tab === "familles" && <AdminFamilies status={familiesStatus} products={products} onProductsChanged={loadProducts} />}
         {tab === "promos" && <AdminBanners promoCodes={promoCodes} onCodesChanged={loadPromoCodes} siteMode={maintenanceActive && maintenance.row ? maintenance.row.mode : "off"} />}
         {tab === "tableau" && <AdminHome counters={counters} onGo={goTo} onOpenStock={openStock} />} {/* ZENORIA_HOME_5D_V1 */}
+        {tab === "configuration" && <AdminConfig onGo={goTo} maintenance={maintenance} />} {/* ZENORIA_CONFIG_C1_V1 */}
         {tab === "connexions" && <AdminConnections />}
 
         {tab === "site" && <AdminSiteMedia />}

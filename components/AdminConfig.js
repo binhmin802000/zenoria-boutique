@@ -9,6 +9,9 @@ import ConfigLog from "@/components/ConfigLog";
 // ZENORIA_CONFIG_C2_V1 : interrupteurs simples
 import FlagControl from "@/components/ConfigSwitch";
 import { useConfigToggle } from "@/lib/configToggle";
+import SensitiveSwitch from "@/components/SensitiveSwitch"; // ZENORIA_CONFIG_C3B_V1
+import { setPaymentMethod, TransferNotReadyError } from "@/lib/paymentActions";
+import { parsePaymentMethods, parseBankTransfer } from "@/lib/paymentSettings";
 
 const TONES = { ok: "text-emerald-700", warn: "text-amber-800", crit: "text-red-600 font-medium" };
 
@@ -20,7 +23,7 @@ function flagClass(f) {
 }
 
 // Affichage seul (testable sans réseau)
-export function ConfigView({ sections, loaded, loading, error, onGo, onReload, onToggle, busyId, notice }) { // ZENORIA_CONFIG_C2_V1
+export function ConfigView({ sections, loaded, loading, error, onGo, onReload, onToggle, busyId, notice, onSensitiveConfirm }) { // ZENORIA_CONFIG_C2_V1
   return (
     <div data-testid="admin-config">
       <div className="flex justify-between items-center mb-5 gap-3">
@@ -95,7 +98,18 @@ export function ConfigView({ sections, loaded, loading, error, onGo, onReload, o
                   </div>
                   <div className="shrink-0 text-right">
                     {it.flag !== undefined ? (
-                      <FlagControl it={it} busyId={busyId} onToggle={onToggle} />
+                      it.sensitive ? (
+                        <SensitiveSwitch
+                          id={it.id}
+                          label={it.label}
+                          checked={it.flag === true}
+                          disabled={it.flag === null}
+                          warningText={it.warningText}
+                          onConfirm={(next) => onSensitiveConfirm(it.id, next)}
+                        />
+                      ) : (
+                        <FlagControl it={it} busyId={busyId} onToggle={onToggle} />
+                      )
                     ) : (
                       <span className={"text-[13px] " + (it.missing ? "text-[#8b737e] italic" : TONES[it.tone] || "text-[#54434c]")}>{it.text}</span>
                     )}
@@ -121,9 +135,40 @@ export default function AdminConfig({ onGo, maintenance }) {
     active: m.row ? isMaintenanceActive(m.row, Date.now()) : false,
   };
   const sections = buildConfigOverview({ rows: cfg.rows, meta: cfg.meta, maintenance: maint });
+
+  // ZENORIA_CONFIG_C3B_V1 : Stripe et Virement passent par le même garde-fou que la carte
+  // "Moyens de paiement" (AdminPaymentMethods.js), via la fonction partagée setPaymentMethod
+  // (lib/paymentActions.js). Confirmation "BINHEMI" gérée par SensitiveSwitch lui-même.
+  const handleSensitiveConfirm = async (id, next) => {
+    if (id === "stripe" || id === "transfer") {
+      const currentMethods = parsePaymentMethods(cfg.rows.payment_methods ? cfg.rows.payment_methods.value : null);
+      const savedBank = parseBankTransfer(cfg.rows.bank_transfer ? cfg.rows.bank_transfer.value : null);
+      const field = id === "stripe" ? "stripe_enabled" : "transfer_enabled";
+      try {
+        await setPaymentMethod(currentMethods, savedBank, field, next);
+        cfg.reload();
+      } catch (err) {
+        throw err instanceof TransferNotReadyError ? err : new Error((err && err.message) || "Échec de l'enregistrement.");
+      }
+      return;
+    }
+    throw new Error("Réglage non pris en charge.");
+  };
+
   return (
     <>
-      <ConfigView sections={sections} loaded={cfg.loaded} loading={cfg.loading} error={cfg.error} onGo={onGo} onReload={cfg.reload} onToggle={toggle.run} busyId={toggle.busyId} notice={toggle.notice} />
+      <ConfigView
+        sections={sections}
+        loaded={cfg.loaded}
+        loading={cfg.loading}
+        error={cfg.error}
+        onGo={onGo}
+        onReload={cfg.reload}
+        onToggle={toggle.run}
+        busyId={toggle.busyId}
+        notice={toggle.notice}
+        onSensitiveConfirm={handleSensitiveConfirm}
+      />
       {/* ZENORIA_CONFIG_C5_V1 */}
       {cfg.loaded && !cfg.error ? <ConfigLog refreshKey={cfg.rows} /> : null}
     </>

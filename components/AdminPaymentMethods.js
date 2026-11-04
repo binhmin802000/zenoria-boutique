@@ -23,6 +23,7 @@ import {
   formatIban,
   normalizeIban,
 } from "@/lib/paymentSettings";
+import { setPaymentMethod } from "@/lib/paymentActions"; // ZENORIA_CONFIG_C3B_V1
 
 // ============================================================
 // CARTE « MOYENS DE PAIEMENT » (Admin › CRM › Commandes) — ZENORIA_PAYMENT_STEP2_V1
@@ -159,14 +160,7 @@ export default function AdminPaymentMethods() {
     }
     setBusy(true);
     try {
-      const value = {
-        stripe_enabled: field === "stripe_enabled" ? next : savedMethods.stripe_enabled,
-        transfer_enabled: field === "transfer_enabled" ? next : savedMethods.transfer_enabled,
-      };
-      const { error: err } = await supabase
-        .from(SITE_SETTINGS_TABLE)
-        .upsert({ key: PAYMENT_METHODS_KEY, value }, { onConflict: "key" });
-      if (err) throw err;
+      await setPaymentMethod(savedMethods, savedBank, field, next); // ZENORIA_CONFIG_C3B_V1 : fonction partagée avec l'onglet Configuration
       setToast(
         field === "stripe_enabled"
           ? (next ? "Carte bancaire réactivée." : "Carte bancaire désactivée pour les prochaines commandes.")

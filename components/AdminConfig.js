@@ -96,7 +96,7 @@ export function ConfigView({ sections, loaded, loading, error, onGo, onReload, o
                     <div className="font-medium">{it.label}</div>
                     {it.sub ? <div className="text-[11px] text-[#8b737e]">{it.sub}</div> : null}
                   </div>
-                  <div className="shrink-0 text-right">
+                  <div className={it.sensitive ? "min-w-0 w-80 max-w-[65%] text-left" : "shrink-0 text-right"}>
                     {it.flag !== undefined ? (
                       it.sensitive ? (
                         <SensitiveSwitch

@@ -1,4 +1,5 @@
 // components/SensitiveSwitch.js
+// ZENORIA_CONFIG_C3B_KNOB_V1
 // ZENORIA_CONFIG_C3B_LAYOUT_V1
 // ZENORIA_CONFIG_C3A_V1
 //
@@ -109,8 +110,8 @@ export default function SensitiveSwitch({
           } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
         >
           <span
-            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-              checked ? "translate-x-5" : "translate-x-0.5"
+            className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+              checked ? "translate-x-5" : "translate-x-0"
             }`}
           />
         </button>

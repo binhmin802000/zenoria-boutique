@@ -4,6 +4,8 @@ import React from "react";
 import { RefreshCw } from "lucide-react";
 import { isMaintenanceActive } from "@/components/AdminMaintenance";
 import { useSiteConfig, buildConfigOverview, setSiteMediaTarget } from "@/lib/configOverview"; // ZENORIA_CONFIG_C1B_V1
+// ZENORIA_CONFIG_C5_V1 : historique des changements de réglages
+import ConfigLog from "@/components/ConfigLog";
 
 const TONES = { ok: "text-emerald-700", warn: "text-amber-800", crit: "text-red-600 font-medium" };
 
@@ -110,5 +112,11 @@ export default function AdminConfig({ onGo, maintenance }) {
     active: m.row ? isMaintenanceActive(m.row, Date.now()) : false,
   };
   const sections = buildConfigOverview({ rows: cfg.rows, meta: cfg.meta, maintenance: maint });
-  return <ConfigView sections={sections} loaded={cfg.loaded} loading={cfg.loading} error={cfg.error} onGo={onGo} onReload={cfg.reload} />;
+  return (
+    <>
+      <ConfigView sections={sections} loaded={cfg.loaded} loading={cfg.loading} error={cfg.error} onGo={onGo} onReload={cfg.reload} />
+      {/* ZENORIA_CONFIG_C5_V1 */}
+      {cfg.loaded && !cfg.error ? <ConfigLog refreshKey={cfg.rows} /> : null}
+    </>
+  );
 }

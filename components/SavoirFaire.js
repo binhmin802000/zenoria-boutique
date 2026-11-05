@@ -40,7 +40,7 @@ export default function SavoirFaire({ product, media, accent, texts = DEFAULT_TE
   const heartColor = /^#[0-9a-fA-F]{6}$/.test(accent || "") ? accent : "#8f6075";
 
   return (
-    <section id="savoir-faire" className="bg-[#fbf8f4] py-24">
+    <section id="savoir-faire" className="bg-[#fbf8f4] py-24 scroll-mt-20">
       <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-14 items-center">
         {/* Visuel */}
         <motion.div

@@ -41,7 +41,7 @@ export default function Footer({ seasons = [], seasonsOnClick = null, logoMode =
     (contactSettings.signal.enabled && contactSettings.signal.value.trim());
 
   return (
-    <footer className="bg-[#2f252d] text-white/70 py-12">
+    <footer id="contact" className="bg-[#2f252d] text-white/70 py-12">
       <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-4 gap-9">
         <div>
           <CrystalLogo mode={logoMode} compact={logoCompact} dark={logoDark} />

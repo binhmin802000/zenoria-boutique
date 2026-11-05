@@ -1053,7 +1053,7 @@ export default function ZenoriaShop() {
         </section>
         {/* LES SAISONS (familles) : quatre cartes lues dans la base, avec l'animation saisonnière discrète */}
         {familiesReady && (
-          <section id="seasons" className="relative overflow-hidden">
+          <section id="seasons" className="relative overflow-hidden scroll-mt-20">
             <div className="relative max-w-7xl mx-auto px-6 py-20">
               <div className="text-center mb-10">
                 <div className="text-xs tracking-[.3em] text-[#9c7285] uppercase mb-3">{siteTexts.seasons_eyebrow}</div>
@@ -1100,7 +1100,7 @@ export default function ZenoriaShop() {
           </section>
         )}
         {/* COLLECTIONS / CATALOGUE */}
-        <section id="collections" className="py-20 bg-white">
+        <section id="collections" className="py-20 bg-white scroll-mt-20">
           <div className="max-w-7xl mx-auto px-6">
             <div className="flex justify-between items-end mb-9">
               <div>
@@ -1275,7 +1275,7 @@ export default function ZenoriaShop() {
         {/* SAVOIR-FAIRE */}
         <SavoirFaire product={products[0]} media={siteMedia.savoir_faire_photo} accent={(families.find((f) => f.key === fxSeason) || {}).accent} texts={siteTexts} />
         {/* PHILOSOPHIE */}
-        <section id="philosophie" className="grid grid-cols-1 lg:grid-cols-2 min-h-[540px]">
+        <section id="philosophie" className="grid grid-cols-1 lg:grid-cols-2 min-h-[540px] scroll-mt-20">
           <div className="bg-gradient-to-br from-[#d8c4d9] via-[#f5e8e6] to-[#dbc9a9] grid grid-cols-1 place-items-center p-6 sm:p-12">
             <div className="w-80 max-w-full aspect-square rounded-full border border-white/60 bg-white/30 shadow-2xl grid place-items-center">
               <CrystalLogo mode={logo} />
@@ -1322,7 +1322,7 @@ export default function ZenoriaShop() {
           </div>
         </section>
         {/* NEWSLETTER */}
-        <section id="contact" className="bg-[#d9c5cc] py-16">
+        <section id="newsletter" className="bg-[#d9c5cc] py-16">
           <div className="max-w-5xl mx-auto px-6 text-center">
             <div className="text-xs tracking-[.3em] uppercase mb-3">Le cercle Zenoria</div>
             <h2 className="font-serif text-4xl mb-4">Recevez nos nouveautés</h2>

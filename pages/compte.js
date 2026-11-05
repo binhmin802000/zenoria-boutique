@@ -7,6 +7,7 @@ import { getAvailability, pieceStateMap, stockStateMap } from "@/lib/shopUtils";
 import { autoCancelAt, isAutoCancelAlert, formatAutoCancel, DEFAULT_BANK_TRANSFER } from "@/lib/paymentSettings"; // ZENORIA_AUTO_CANCEL_UI_V1
 import AccountProfileSection from "@/components/AccountProfileSection";
 import Head from "next/head";
+import SiteHeader from "@/components/SiteHeader"; // ZENORIA_SITE_HEADER_H4
 import { Home, Package, Star, Heart, UserCog, ShieldCheck, LogOut, Truck, ChevronLeft, FileDown, AlertTriangle } from "lucide-react"; // ZENORIA_INVOICE_STEP3_V1
 import { supabase as supabaseForInvoice } from "@/lib/supabase"; // ZENORIA_INVOICE_STEP3_V1
 import { supabase, getMediaUrl, SITE_MEDIA_TABLE, SITE_SLOT_ACCOUNT_HERO } from "@/lib/supabase";
@@ -755,12 +756,7 @@ export default function Compte() {
         <meta name="robots" content="noindex, nofollow" />
       </Head>
 
-      <header className="border-b border-[#eadfe4] bg-[#fbf8f4]/95">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <a href="/" className="font-serif text-xl tracking-[.22em] text-[#412f3b]">ZENORIA</a>
-          <a href="/" className="text-sm text-[#8f6075] underline">Retour à la boutique</a>
-        </div>
-      </header>
+      <SiteHeader logoHref="/" showSearch={false} showAccount={false} showCart={false} onFavClick={() => go("favoris")} />
 
       {!user ? (
         <main className="max-w-6xl mx-auto px-6 py-24 text-center text-sm text-[#8b737e]" data-testid="account-loading">
@@ -807,7 +803,7 @@ export default function Compte() {
 
           <div className="grid lg:grid-cols-[230px_1fr] gap-6">
             {/* MENU : à gauche sur ordinateur, onglets défilants sur mobile */}
-            <nav aria-label="Rubriques de mon compte" className="lg:self-start lg:sticky lg:top-4">
+            <nav aria-label="Rubriques de mon compte" className="lg:self-start lg:sticky lg:top-24">
               <div className="flex lg:flex-col gap-1.5 overflow-x-auto lg:overflow-visible rounded-full lg:rounded-2xl bg-white border border-[#eadfe4] p-1.5 lg:p-2.5">
                 {visible.map((s) => {
                   const Icon = s.icon;

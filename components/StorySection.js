@@ -41,7 +41,7 @@ export default function StorySection({ texts }) {
   }, []);
 
   return (
-    <section id="notre-histoire" ref={ref} data-testid="story-section" className="max-w-3xl mx-auto px-6 py-20 scroll-mt-24 text-center">
+    <section id="notre-histoire" ref={ref} data-testid="story-section" className="max-w-3xl mx-auto px-6 py-20 scroll-mt-20 text-center">
       {t.story_eyebrow && <p className="text-xs uppercase tracking-[.25em] text-[#b48a5a]">{t.story_eyebrow}</p>}
       <h2 className="font-serif text-4xl text-[#412f3b] mt-3">{t.story_title}</h2>
       <p className="font-serif text-lg leading-8 text-[#412f3b] mt-6">

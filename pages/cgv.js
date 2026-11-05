@@ -1,6 +1,7 @@
 // ZENORIA_CGV_V1
 import React, { useEffect, useState } from "react";
 import Head from "next/head";
+import SiteHeader from "@/components/SiteHeader"; // ZENORIA_SITE_HEADER_H3
 import { supabase } from "@/lib/supabase";
 import { fetchCgvText } from "@/lib/cgvSettings";
 
@@ -82,12 +83,7 @@ export default function Cgv() {
         <title>Conditions générales de vente – Zenoria</title>
         <meta name="robots" content="noindex" />
       </Head>
-      <header className="border-b border-[#eadfe4] bg-[#fbf8f4]/95">
-        <div className="max-w-3xl mx-auto px-6 h-16 flex items-center justify-between">
-          <a href="/"><img src="/images/logo-facture.png" alt="Zenoria" className="h-9 w-auto" /></a>
-          <a href="/" className="text-sm text-[#8f6075] underline">Retour à la boutique</a>
-        </div>
-      </header>
+      <SiteHeader logoHref="/" showSearch={false} showAccount={false} showFavorites={false} showCart={false} />
       <main className="max-w-3xl mx-auto px-6 py-12">
         <h1 className="font-serif text-4xl text-[#412f3b]">Conditions générales de vente</h1>
         {updatedAt && (

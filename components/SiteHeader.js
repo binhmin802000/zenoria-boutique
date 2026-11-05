@@ -89,6 +89,7 @@ export default function SiteHeader({
   onLogout,
   favCount = 0,
   onFavClick,
+  showCart = true, // ZENORIA_SITE_HEADER_H3
   cartCount = 0,
   onCartClick,
   logoMode = 1,
@@ -164,6 +165,7 @@ export default function SiteHeader({
             )}
           </Button>
           )}
+          {showCart && (
           <Button variant="ghost" size="icon" onClick={onCartClick} className="relative" aria-label="Ouvrir le panier" data-testid="header-cart">
             <ShoppingBag size={19} />
             {cartCount > 0 && (
@@ -172,6 +174,7 @@ export default function SiteHeader({
               </span>
             )}
           </Button>
+          )}
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={toggleMenu}>
             {isOpen ? <X /> : <Menu />}
           </Button>

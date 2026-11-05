@@ -942,6 +942,34 @@ export default function ZenoriaShop() {
         setTimeout(scrollToCatalogue, 80);
       }
       handled = true;
+    } else if (["collections", "seasons", "savoir-faire", "philosophie", "contact", "notre-histoire"].includes(hash.slice(1))) {
+      // ZENORIA_ANCHORS_V2 : « /#section » venu d'une autre page (le quiz). Le navigateur defile au chargement, quand l'accueil est encore
+      // incomplet : la cible bouge ensuite. On defile donc ici, une fois le catalogue charge, puis encore apres 350 ms et 900 ms pour
+      // suivre les images qui s'affichent. Le moindre geste de la visiteuse (molette, toucher, clavier, clic) arrete ces rappels.
+      const wanted = hash.slice(1);
+      const goToSection = () => {
+        if (wanted === "notre-histoire") {
+          window.dispatchEvent(new Event(OPEN_STORY_EVENT));
+          return;
+        }
+        // « Les saisons » n'existe que si les familles sont lues : sinon on va au catalogue
+        const el = document.getElementById(wanted) || (wanted === "seasons" ? document.getElementById("collections") : null);
+        if (el) el.scrollIntoView({ behavior: "auto", block: "start" });
+      };
+      let stopped = false;
+      const userEvents = ["wheel", "touchstart", "keydown", "mousedown"];
+      const stopFollowing = () => {
+        stopped = true;
+        userEvents.forEach((ev) => window.removeEventListener(ev, stopFollowing));
+      };
+      userEvents.forEach((ev) => window.addEventListener(ev, stopFollowing, { passive: true }));
+      [0, 350, 900].forEach((ms) =>
+        setTimeout(() => {
+          if (!stopped) goToSection();
+          if (ms === 900) stopFollowing();
+        }, ms)
+      );
+      handled = true;
     }
     if (handled) {
       try {

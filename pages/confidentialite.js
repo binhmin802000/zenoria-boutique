@@ -1,5 +1,6 @@
 import React from "react";
 import Head from "next/head";
+import SiteHeader from "@/components/SiteHeader"; // ZENORIA_SITE_HEADER_H3
 
 // ============================================================
 // PAGE « POLITIQUE DE CONFIDENTIALITÉ » — /confidentialite
@@ -30,12 +31,7 @@ export default function Confidentialite() {
         <meta name="robots" content="noindex" />
       </Head>
 
-      <header className="border-b border-[#eadfe4] bg-[#fbf8f4]/95">
-        <div className="max-w-3xl mx-auto px-6 h-16 flex items-center justify-between">
-          <a href="/"><img src="/images/logo-facture.png" alt="Zenoria" className="h-9 w-auto" /></a>
-          <a href="/" className="text-sm text-[#8f6075] underline">Retour à la boutique</a>
-        </div>
-      </header>
+      <SiteHeader logoHref="/" showSearch={false} showAccount={false} showFavorites={false} showCart={false} />
 
       <main className="max-w-3xl mx-auto px-6 py-12">
         <h1 className="font-serif text-4xl text-[#412f3b]">Politique de confidentialité</h1>

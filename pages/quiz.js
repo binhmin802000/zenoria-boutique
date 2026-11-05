@@ -5,7 +5,8 @@ import { DEFAULT_SHIPPING, fetchShippingSetting } from "@/lib/shippingSettings";
 import { useSiteStatus } from "@/lib/siteStatus";
 import MediaGuard from "@/components/MediaGuard";
 import BannerBar from "@/components/BannerBar";
-import { QuizHeader, ShippingStrip } from "@/components/QuizChrome";
+import { ShippingStrip } from "@/components/QuizChrome";
+import SiteHeader from "@/components/SiteHeader"; // ZENORIA_SITE_HEADER_H2
 import Footer from "@/components/Footer";
 import QuizSteps from "@/components/QuizSteps";
 import QuizResult from "@/components/QuizResult";
@@ -311,7 +312,15 @@ export default function QuizPage() {
 
       {currentBanner && <BannerBar banner={currentBanner} nowMs={nowMs} onClose={closeBanner} onButton={handleBannerButton} />}
       <ShippingStrip setting={shippingCfg} />
-      <QuizHeader cartCount={cartCount} onCartClick={openCart} />
+      <SiteHeader
+        current="quiz"
+        logoHref="/"
+        showSearch={false}
+        showAccount={false}
+        showFavorites={false}
+        cartCount={cartCount}
+        onCartClick={openCart}
+      />
 
       <main className="max-w-6xl mx-auto px-5 sm:px-6 py-10 md:py-14">
         {!showResult && (

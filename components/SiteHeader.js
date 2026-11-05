@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react"; // ZENORIA_SITE_HEADER_H2
 import { Search, User, Heart, ShoppingBag, Menu, X, Settings, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CrystalLogo from "@/components/CrystalLogo";
@@ -75,7 +75,9 @@ export default function SiteHeader({
   onStory,
   showSeasons = true,
   showSearch = true,
-  menuOpen = false,
+  showAccount = true,
+  showFavorites = true,
+  menuOpen,
   onMenuToggle,
   onMenuClose,
   user = null,
@@ -93,8 +95,17 @@ export default function SiteHeader({
   logoHref = null,
 }) {
   const items = NAV.filter((n) => !n.seasonsOnly || showSeasons);
+  // Menu mobile : pilote par la page quand elle fournit onMenuToggle (accueil), sinon gere par le composant (quiz, pages simples)
+  const [innerMenu, setInnerMenu] = useState(false);
+  const controlled = typeof onMenuToggle === "function";
+  const isOpen = controlled ? Boolean(menuOpen) : innerMenu;
+  const toggleMenu = controlled ? onMenuToggle : () => setInnerMenu((o) => !o);
   const closeMenu = () => {
-    if (onMenuClose) onMenuClose();
+    if (controlled) {
+      if (onMenuClose) onMenuClose();
+    } else {
+      setInnerMenu(false);
+    }
   };
   const logo = <CrystalLogo compact mode={logoMode} />;
   return (
@@ -119,6 +130,7 @@ export default function SiteHeader({
             </Button>
           )}
           {/* Compte utilisateur */}
+          {showAccount && (
           <div className="relative hidden sm:block">
             <Button variant="ghost" size="icon" onClick={onAccountClick}>
               <User size={19} />
@@ -141,6 +153,8 @@ export default function SiteHeader({
               </div>
             )}
           </div>
+          )}
+          {showFavorites && (
           <Button variant="ghost" size="icon" onClick={onFavClick} className="relative hidden sm:inline-flex" aria-label="Voir mes favoris">
             <Heart size={19} />
             {favCount > 0 && (
@@ -149,6 +163,7 @@ export default function SiteHeader({
               </span>
             )}
           </Button>
+          )}
           <Button variant="ghost" size="icon" onClick={onCartClick} className="relative" aria-label="Ouvrir le panier" data-testid="header-cart">
             <ShoppingBag size={19} />
             {cartCount > 0 && (
@@ -157,26 +172,29 @@ export default function SiteHeader({
               </span>
             )}
           </Button>
-          <Button variant="ghost" size="icon" className="lg:hidden" onClick={onMenuToggle}>
-            {menuOpen ? <X /> : <Menu />}
+          <Button variant="ghost" size="icon" className="lg:hidden" onClick={toggleMenu}>
+            {isOpen ? <X /> : <Menu />}
           </Button>
         </div>
       </div>
-      {menuOpen && (
+      {isOpen && (
         <div className="lg:hidden px-6 pb-5 flex flex-col gap-3 text-sm">
           {items.map((item) => (
-            <NavItem key={item.key} item={item} mobile current={current} onSection={onSection} onStory={onStory} onMenuClose={onMenuClose} />
+            <NavItem key={item.key} item={item} mobile current={current} onSection={onSection} onStory={onStory} onMenuClose={closeMenu} />
           ))}
-          <button
-            onClick={() => {
-              if (onFavClick) onFavClick();
-              closeMenu();
-            }}
-            className="text-left"
-          >
-            Mes favoris{favCount > 0 ? " (" + favCount + ")" : ""}
-          </button>
-          {!authLoading &&
+          {showFavorites && (
+            <button
+              onClick={() => {
+                if (onFavClick) onFavClick();
+                closeMenu();
+              }}
+              className="text-left"
+            >
+              Mes favoris{favCount > 0 ? " (" + favCount + ")" : ""}
+            </button>
+          )}
+          {showAccount &&
+            !authLoading &&
             (user ? (
               <>
                 {isAdmin && (

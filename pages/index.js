@@ -26,6 +26,7 @@ import TransferInstructions from "@/components/TransferInstructions"; // ZENORIA
 import FavoriteButton from "@/components/FavoriteButton";
 import CrystalLogo from "@/components/CrystalLogo";
 import Footer from "@/components/Footer";
+import SiteHeader from "@/components/SiteHeader"; // ZENORIA_SITE_HEADER_V1
 import {
   readLocalFavorites,
   toggleLocalFavorite,
@@ -976,113 +977,32 @@ export default function ZenoriaShop() {
       <div className="bg-[#342434] text-white/85 text-[11px] py-2 px-4 text-center tracking-wide">
         {shippingStripText(shippingCfg)}
       </div>
-      <header className="sticky top-0 z-40 bg-[#fbf8f4]/95 backdrop-blur border-b border-[#eadfe4]">
-        <div className="max-w-7xl mx-auto px-5 h-20 flex items-center justify-between">
-          <CrystalLogo compact mode={logo} />
-          <nav className="hidden lg:flex gap-7 text-sm">
-            <button onClick={() => scrollToSection("collections")} className="hover:text-[#8f6075]">Bijoux</button>
-            {familiesReady && <button onClick={() => scrollToSection("seasons")} className="hover:text-[#8f6075]">Les saisons</button>}
-            <button onClick={() => scrollToSection("savoir-faire")} className="hover:text-[#8f6075]">Savoir-faire</button>
-            <button onClick={() => window.dispatchEvent(new Event(OPEN_STORY_EVENT))} data-testid="nav-histoire" className="hover:text-[#8f6075]">Notre histoire</button>
-            <button onClick={() => scrollToSection("philosophie")} className="hover:text-[#8f6075]">Notre philosophie</button>
-            <a href="/quiz" data-testid="nav-quiz" className="hover:text-[#8f6075]">Quiz</a>
-            <button onClick={() => scrollToSection("contact")} className="hover:text-[#8f6075]">Contact</button>
-          </nav>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon"><Search size={19} /></Button>
-            {/* Compte utilisateur */}
-            <div className="relative hidden sm:block">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  if (user) {
-                    setAccountMenuOpen(!accountMenuOpen);
-                  } else {
-                    setAuthModalOpen(true);
-                  }
-                }}
-              >
-                <User size={19} />
-              </Button>
-              {user && accountMenuOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-[#eadfe4] p-4 z-50">
-                  <div className="text-xs text-[#9a7384] uppercase tracking-widest mb-1">Connecté(e) en tant que</div>
-                  <div className="text-sm font-medium truncate mb-3">{user.email}</div>
-                  {isAdmin && (
-                    <a
-                      href="/admin"
-                      className="flex items-center gap-2 text-sm text-[#8f6075] hover:text-[#71485b] mb-2"
-                    >
-                      <Settings size={16} /> Administration
-                    </a>
-                  )}
-                  {/* ZENORIA_ACCOUNT_STEP11_V1 : espace cliente */}
-                  <a href="/compte" data-testid="menu-account-link" className="flex items-center gap-2 text-sm text-[#8f6075] hover:text-[#71485b] mb-2">
-                    <User size={16} /> Mon compte
-                  </a>
-
-                  <button
-                    onClick={handleLogout}
-                    className="flex items-center gap-2 text-sm text-[#8f6075] hover:text-[#71485b]"
-                  >
-                    <LogOut size={16} /> Se déconnecter
-                  </button>
-                </div>
-              )}
-            </div>
-            <Button variant="ghost" size="icon" onClick={() => setFavPanelOpen(true)} className="relative hidden sm:inline-flex" aria-label="Voir mes favoris">
-              <Heart size={19} />
-              {favIds.length > 0 && (
-                <span className="absolute right-0 top-0 h-5 min-w-5 px-1 rounded-full bg-[#9a667c] text-white text-[10px] grid place-items-center">
-                  {favIds.length}
-                </span>
-              )}
-            </Button>
-            <Button variant="ghost" size="icon" onClick={() => setCartOpen(true)} className="relative" aria-label="Ouvrir le panier">
-              <ShoppingBag size={19} />
-              {cartCount > 0 && (
-                <span className="absolute right-0 top-0 h-5 min-w-5 px-1 rounded-full bg-[#9a667c] text-white text-[10px] grid place-items-center">
-                  {cartCount}
-                </span>
-              )}
-            </Button>
-            <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMenu(!menu)}>
-              {menu ? <X /> : <Menu />}
-            </Button>
-          </div>
-        </div>
-        {menu && (
-          <div className="lg:hidden px-6 pb-5 flex flex-col gap-3 text-sm">
-            <button onClick={() => { scrollToSection("collections"); setMenu(false); }} className="text-left">Bijoux</button>
-            {familiesReady && <button onClick={() => { scrollToSection("seasons"); setMenu(false); }} className="text-left">Les saisons</button>}
-            <button onClick={() => { scrollToSection("savoir-faire"); setMenu(false); }} className="text-left">Savoir-faire</button>
-            <button onClick={() => { window.dispatchEvent(new Event(OPEN_STORY_EVENT)); setMenu(false); }} data-testid="nav-histoire-mobile" className="text-left">Notre histoire</button>
-            <button onClick={() => { scrollToSection("philosophie"); setMenu(false); }} className="text-left">Notre philosophie</button>
-            <a href="/quiz" data-testid="nav-quiz-mobile" onClick={() => setMenu(false)} className="text-left">Quiz</a>
-            <button onClick={() => { scrollToSection("contact"); setMenu(false); }} className="text-left">Contact</button>
-            <button onClick={() => { setFavPanelOpen(true); setMenu(false); }} className="text-left">
-              Mes favoris{favIds.length > 0 ? ` (${favIds.length})` : ""}
-            </button>
-            {!authLoading && (
-              user ? (
-                <>
-                  {isAdmin && <a href="/admin" className="text-left text-[#8f6075]">Administration</a>}
-                  <a href="/compte" className="text-left text-[#8f6075]">Mon compte</a>
-
-                  <button onClick={() => { handleLogout(); setMenu(false); }} className="text-left text-[#8f6075]">
-                    Se déconnecter ({user.email})
-                  </button>
-                </>
-              ) : (
-                <button onClick={() => { setAuthModalOpen(true); setMenu(false); }} className="text-left text-[#8f6075]">
-                  Connexion / Créer un compte
-                </button>
-              )
-            )}
-          </div>
-        )}
-      </header>
+      <SiteHeader
+        onSection={scrollToSection}
+        onStory={() => window.dispatchEvent(new Event(OPEN_STORY_EVENT))}
+        showSeasons={familiesReady}
+        menuOpen={menu}
+        onMenuToggle={() => setMenu(!menu)}
+        onMenuClose={() => setMenu(false)}
+        user={user}
+        isAdmin={isAdmin}
+        authLoading={authLoading}
+        accountMenuOpen={accountMenuOpen}
+        onAccountClick={() => {
+          if (user) {
+            setAccountMenuOpen(!accountMenuOpen);
+          } else {
+            setAuthModalOpen(true);
+          }
+        }}
+        onLogin={() => setAuthModalOpen(true)}
+        onLogout={handleLogout}
+        favCount={favIds.length}
+        onFavClick={() => setFavPanelOpen(true)}
+        cartCount={cartCount}
+        onCartClick={() => setCartOpen(true)}
+        logoMode={logo}
+      />
       <main>
         {/* HERO */}
         <section className="relative overflow-hidden min-h-[670px] flex items-center bg-[radial-gradient(circle_at_75%_40%,#ead5ee_0%,#fbf6f0_38%,#f0dbd4_70%,#dfc1c8_100%)]">

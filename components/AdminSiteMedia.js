@@ -18,6 +18,7 @@ import PhotoCropper from "@/components/PhotoCropper";
 import VideoCropper from "@/components/VideoCropper";
 import AdminSeasonFx from "@/components/AdminSeasonFx";
 import AdminRingAnimation from "@/components/AdminRingAnimation";
+import AdminGridOrder from "@/components/AdminGridOrder"; // ZENORIA_GRID_ORDER_V3
 import AdminShipping from "@/components/AdminShipping";
 import AdminContact from "@/components/AdminContact";
 import AdminLegalPages from "@/components/AdminLegalPages"; // ZENORIA_STORY_REVIEWS_V1
@@ -345,12 +346,13 @@ export default function AdminSiteMedia() {
       <AdminAccordionSection
         id="vitrine"
         title="Vitrine & ambiance"
-        count={2}
+        count={3}
         isOpen={openGroup === "vitrine"}
         onToggle={toggleGroup}
       >
         <AdminSeasonFx />
         <AdminRingAnimation />
+        <AdminGridOrder />
       </AdminAccordionSection>
       </div>
 

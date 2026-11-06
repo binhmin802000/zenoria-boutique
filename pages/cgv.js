@@ -5,6 +5,8 @@ import SiteHeader from "@/components/SiteHeader"; // ZENORIA_SITE_HEADER_H3
 import { supabase } from "@/lib/supabase";
 import { fetchCgvText } from "@/lib/cgvSettings";
 import { readLocalFavorites } from "@/lib/favorites";
+import { fetchAccountHref, DEFAULT_ACCOUNT_HREF, safeLocalStorage } from "@/lib/accountLink"; // ZENORIA_ACCOUNT_PANIER_V1
+import { cartCount as readCartCount } from "@/lib/quizState";
 
 // ============================================================
 // PAGE « CONDITIONS GÉNÉRALES DE VENTE » — /cgv
@@ -67,6 +69,8 @@ export default function Cgv() {
   const [text, setText] = useState("");
   const [updatedAt, setUpdatedAt] = useState(null);
   const [favCount, setFavCount] = useState(0);
+  const [accountHref, setAccountHref] = useState(DEFAULT_ACCOUNT_HREF);
+  const [cartCount, setCartCount] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -81,6 +85,16 @@ export default function Cgv() {
   useEffect(() => {
     setFavCount(readLocalFavorites().length);
   }, []);
+  useEffect(() => {
+    let alive = true;
+    fetchAccountHref(supabase).then((href) => {
+      if (alive) setAccountHref(href);
+    });
+    setCartCount(readCartCount(safeLocalStorage()));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#fbf8f4] text-[#342b32]">
@@ -91,11 +105,14 @@ export default function Cgv() {
       <SiteHeader
         logoHref="/"
         showSearch={false}
-        showAccount={false}
+        showAccount={true}
+        onAccountClick={() => window.location.assign(accountHref)}
         showFavorites={true}
-        showCart={false}
         favCount={favCount}
         onFavClick={() => window.location.assign("/#favoris")}
+        showCart={true}
+        cartCount={cartCount}
+        onCartClick={() => window.location.assign("/#panier")}
       />
       <main className="max-w-3xl mx-auto px-6 py-12">
         <h1 className="font-serif text-4xl text-[#412f3b]">Conditions générales de vente</h1>

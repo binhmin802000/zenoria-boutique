@@ -8,6 +8,7 @@ import BannerBar from "@/components/BannerBar";
 import { ShippingStrip } from "@/components/QuizChrome";
 import SiteHeader from "@/components/SiteHeader"; // ZENORIA_SITE_HEADER_H2
 import { readLocalFavorites } from "@/lib/favorites"; // ZENORIA_FAVORIS_V1
+import { DEFAULT_ACCOUNT_HREF } from "@/lib/accountLink"; // ZENORIA_ACCOUNT_PANIER_V1
 import Footer from "@/components/Footer";
 import QuizSteps from "@/components/QuizSteps";
 import QuizResult from "@/components/QuizResult";
@@ -65,6 +66,7 @@ export default function QuizPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [cartCount, setCartCount] = useState(0);
   const [favCount, setFavCount] = useState(0);
+  const [accountHref, setAccountHref] = useState(DEFAULT_ACCOUNT_HREF);
   const [toast, setToast] = useState(null);
   const [sheet, setSheet] = useState(null); // { product, why } : la fiche ouverte par « Voir la bague », sans quitter le quiz
   const [cartAsk, setCartAsk] = useState(false); // la question « revenir au quiz après le panier ? »
@@ -138,6 +140,7 @@ export default function QuizPage() {
       try {
         const { data } = await supabase.auth.getSession();
         const u = data && data.session ? data.session.user : null;
+        if (active) setAccountHref(u ? "/compte" : DEFAULT_ACCOUNT_HREF);
         if (!u) return;
         const { data: row } = await supabase.from("admin_users").select("user_id").eq("user_id", u.id).maybeSingle();
         if (active) setIsAdmin(Boolean(row));
@@ -319,7 +322,8 @@ export default function QuizPage() {
         current="quiz"
         logoHref="/"
         showSearch={false}
-        showAccount={false}
+        showAccount={true}
+        onAccountClick={() => window.location.assign(accountHref)}
         showFavorites={true}
         favCount={favCount}
         onFavClick={() => window.location.assign("/#favoris")}

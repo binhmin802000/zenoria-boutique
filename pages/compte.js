@@ -719,6 +719,11 @@ export default function Compte() {
       return 0;
     }
   };
+  // ZENORIA_ACCOUNT_PANIER_V1 : badge du panier dans le header partage
+  const [headerCartCount, setHeaderCartCount] = useState(0);
+  useEffect(() => {
+    setHeaderCartCount(readCartCount());
+  }, []);
   const finishLogout = async (mode) => {
     setLogoutAsk(false);
     try {
@@ -756,7 +761,15 @@ export default function Compte() {
         <meta name="robots" content="noindex, nofollow" />
       </Head>
 
-      <SiteHeader logoHref="/" showSearch={false} showAccount={false} showCart={false} onFavClick={() => go("favoris")} />
+      <SiteHeader
+        logoHref="/"
+        showSearch={false}
+        showAccount={true}
+        onFavClick={() => go("favoris")}
+        showCart={true}
+        cartCount={headerCartCount}
+        onCartClick={() => window.location.assign("/#panier")}
+      />
 
       {!user ? (
         <main className="max-w-6xl mx-auto px-6 py-24 text-center text-sm text-[#8b737e]" data-testid="account-loading">

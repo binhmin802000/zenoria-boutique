@@ -36,6 +36,7 @@ import {
   mergeLocalFavoritesIntoAccount,
 } from "@/lib/favorites";
 import { formatPrice, getAvailability, pieceStateMap, maxQtyFor, stockStateMap } from "@/lib/shopUtils"; // ZENORIA_STOCK_UI3_V1
+import { gridOrderIds, applyIdOrder } from "@/lib/gridOrder"; // ZENORIA_GRID_ORDER_V2
 import { parseCartReturnHash, encodeResultHash } from "@/lib/quizState";
 import {
   visibleFamilies, buildSeasonCards, buildFamilyChips, filterByFamily, productLabel, familyOfProduct,
@@ -230,6 +231,7 @@ function PieceUnavailableNotice({ contactSettings, names }) {
 export default function ZenoriaShop() {
   // --- Catalogue et codes promo, chargés depuis Supabase ---
   const [products, setProducts] = useState([]);
+  const [gridOrder, setGridOrder] = useState(null); // ZENORIA_GRID_ORDER_V2 : ordre (liste d'identifiants) de la grille, calcule une seule fois au chargement du catalogue
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [promoCodes, setPromoCodes] = useState({});
   // Médias dédiés gérés depuis /admin (onglet « Contenu du site ») : { hero_video, savoir_faire_photo }
@@ -351,6 +353,16 @@ export default function ZenoriaShop() {
       const availMapAtLoad = availRes && !availRes.error && Array.isArray(availRes.data) ? stockStateMap(availRes.data) : null;
       const loadedProducts = !prodErr && prodData ? prodData.map(mapDbProduct).map((p) => ({ ...p, pieceState: pieceMapAtLoad.get(p.id) || null, available: availMapAtLoad && availMapAtLoad.has(p.id) ? availMapAtLoad.get(p.id) : null })) : [];
       setProducts(loadedProducts);
+      // ZENORIA_GRID_ORDER_V2 : ordre de la grille « Nos créations », calculé UNE fois ici. Réglage par défaut (le réglage d'administration viendra au lot R3) :
+      // aléatoire, renouvelé chaque jour à 3 h (heure de Paris), bagues commandables d'abord. Les mises à jour de stock faites ensuite
+      // changent les pastilles, jamais les positions. products reste dans l'ordre de la base (visuel d'en-tête et Savoir-faire lisent products[0]).
+      let gridIds = null;
+      try {
+        gridIds = gridOrderIds(loadedProducts, { setting: null, nowMs: Date.now(), isOrderable: (p) => getAvailability(p).orderable });
+      } catch (e) {
+        gridIds = null; // calcul impossible : la grille garde l'ordre de la base
+      }
+      setGridOrder(gridIds);
       const promoMap = {};
       (promoData || []).forEach((p) => {
         promoMap[p.code] = { type: p.type, value: Number(p.value), label: p.label };
@@ -876,7 +888,9 @@ export default function ZenoriaShop() {
     chooseFamily(selectedFamily === key ? null : key);
     scrollToCatalogue();
   };
-  const filteredProducts = selectedFamily ? filterByFamily(products, families, selectedFamily) : products;
+  // ZENORIA_GRID_ORDER_V2 : seule la grille lit cette liste ordonnée ; products n'est jamais réordonné
+  const gridProducts = useMemo(() => applyIdOrder(products, gridOrder), [products, gridOrder]);
+  const filteredProducts = selectedFamily ? filterByFamily(gridProducts, families, selectedFamily) : gridProducts;
   const selectedFamilyData = selectedFamily ? families.find((f) => f.key === selectedFamily) || null : null;
   // Saison animée : réglage de l'administration, ou clic de la visiteuse, ou saison du moment
   // Le réglage de l'administration est lu avant tout affichage de l'animation (catalogLoading), pour qu'une animation désactivée ou forcée ne clignote pas au chargement.

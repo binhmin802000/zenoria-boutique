@@ -4,6 +4,7 @@ import Head from "next/head";
 import SiteHeader from "@/components/SiteHeader"; // ZENORIA_SITE_HEADER_H3
 import { supabase } from "@/lib/supabase";
 import { fetchCgvText } from "@/lib/cgvSettings";
+import { readLocalFavorites } from "@/lib/favorites";
 
 // ============================================================
 // PAGE « CONDITIONS GÉNÉRALES DE VENTE » — /cgv
@@ -65,6 +66,7 @@ export default function Cgv() {
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState("");
   const [updatedAt, setUpdatedAt] = useState(null);
+  const [favCount, setFavCount] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -76,6 +78,9 @@ export default function Cgv() {
     });
     return () => { alive = false; };
   }, []);
+  useEffect(() => {
+    setFavCount(readLocalFavorites().length);
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#fbf8f4] text-[#342b32]">
@@ -83,7 +88,15 @@ export default function Cgv() {
         <title>Conditions générales de vente – Zenoria</title>
         <meta name="robots" content="noindex" />
       </Head>
-      <SiteHeader logoHref="/" showSearch={false} showAccount={false} showFavorites={false} showCart={false} />
+      <SiteHeader
+        logoHref="/"
+        showSearch={false}
+        showAccount={false}
+        showFavorites={true}
+        showCart={false}
+        favCount={favCount}
+        onFavClick={() => window.location.assign("/#favoris")}
+      />
       <main className="max-w-3xl mx-auto px-6 py-12">
         <h1 className="font-serif text-4xl text-[#412f3b]">Conditions générales de vente</h1>
         {updatedAt && (

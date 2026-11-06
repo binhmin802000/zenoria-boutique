@@ -970,6 +970,10 @@ export default function ZenoriaShop() {
         }, ms)
       );
       handled = true;
+    } else if (hash === "#favoris") {
+      // ZENORIA_FAVORIS_V1 : « /#favoris » venu d'une autre page (quiz, pages legales) ouvre le panneau des favoris de l'accueil
+      setFavPanelOpen(true);
+      handled = true;
     }
     if (handled) {
       try {

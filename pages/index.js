@@ -37,6 +37,7 @@ import {
 } from "@/lib/favorites";
 import { formatPrice, getAvailability, pieceStateMap, maxQtyFor, stockStateMap } from "@/lib/shopUtils"; // ZENORIA_STOCK_UI3_V1
 import { gridOrderIds, applyIdOrder } from "@/lib/gridOrder"; // ZENORIA_GRID_ORDER_V2
+import { GRID_ORDER_KEY } from "@/lib/gridOrderSettings"; // ZENORIA_GRID_ORDER_V3
 import { parseCartReturnHash, encodeResultHash } from "@/lib/quizState";
 import {
   visibleFamilies, buildSeasonCards, buildFamilyChips, filterByFamily, productLabel, familyOfProduct,
@@ -344,7 +345,7 @@ export default function ZenoriaShop() {
         supabase.from("site_media").select("*"),
         optionalQuery(supabase.from("families").select("*").order("sort_order", { ascending: true })),
         optionalQuery(supabase.from("banners").select("*")),
-        optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").in("key", [SEASON_FX_KEY, SHIPPING_KEY, SITE_TEXTS_KEY, CONTACT_KEY, REVIEWS_KEY, PAYMENT_METHODS_KEY])),
+        optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").in("key", [SEASON_FX_KEY, SHIPPING_KEY, SITE_TEXTS_KEY, CONTACT_KEY, REVIEWS_KEY, PAYMENT_METHODS_KEY, GRID_ORDER_KEY])),
         optionalQuery(supabase.rpc("public_piece_states")), // ZENORIA_STOCK_UI2_V1
         optionalQuery(supabase.rpc("public_stock_states")), // ZENORIA_STOCK_UI3_V1
       ]);
@@ -353,12 +354,13 @@ export default function ZenoriaShop() {
       const availMapAtLoad = availRes && !availRes.error && Array.isArray(availRes.data) ? stockStateMap(availRes.data) : null;
       const loadedProducts = !prodErr && prodData ? prodData.map(mapDbProduct).map((p) => ({ ...p, pieceState: pieceMapAtLoad.get(p.id) || null, available: availMapAtLoad && availMapAtLoad.has(p.id) ? availMapAtLoad.get(p.id) : null })) : [];
       setProducts(loadedProducts);
-      // ZENORIA_GRID_ORDER_V2 : ordre de la grille « Nos créations », calculé UNE fois ici. Réglage par défaut (le réglage d'administration viendra au lot R3) :
-      // aléatoire, renouvelé chaque jour à 3 h (heure de Paris), bagues commandables d'abord. Les mises à jour de stock faites ensuite
+      // ZENORIA_GRID_ORDER_V2 : ordre de la grille « Nos créations », calculé UNE fois ici. Réglage lu dans la ligne « grid_order » de site_settings (ZENORIA_GRID_ORDER_V3) :
+      // aléatoire (renouvelé à 3 h, heure de Paris, tous les N jours) ou manuel ; ligne absente ou illisible : aléatoire, chaque jour. Bagues commandables d'abord. Les mises à jour de stock faites ensuite
       // changent les pastilles, jamais les positions. products reste dans l'ordre de la base (visuel d'en-tête et Savoir-faire lisent products[0]).
       let gridIds = null;
       try {
-        gridIds = gridOrderIds(loadedProducts, { setting: null, nowMs: Date.now(), isOrderable: (p) => getAvailability(p).orderable });
+        const gridRow = fxRes && Array.isArray(fxRes.data) ? fxRes.data.find((r) => r.key === GRID_ORDER_KEY) || null : null;
+        gridIds = gridOrderIds(loadedProducts, { setting: gridRow ? gridRow.value : null, nowMs: Date.now(), isOrderable: (p) => getAvailability(p).orderable });
       } catch (e) {
         gridIds = null; // calcul impossible : la grille garde l'ordre de la base
       }

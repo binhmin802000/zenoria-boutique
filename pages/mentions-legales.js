@@ -1,7 +1,8 @@
 // ZENORIA_MENTIONS_LEGALES_V1
-import React from "react";
+import React, { useState, useEffect } from "react"; // ZENORIA_FAVORIS_V1
 import Head from "next/head";
 import SiteHeader from "@/components/SiteHeader"; // ZENORIA_SITE_HEADER_H3
+import { readLocalFavorites } from "@/lib/favorites";
 
 // ============================================================
 // PAGE « MENTIONS LÉGALES & CGV » — /mentions-legales
@@ -22,6 +23,10 @@ const Section = ({ id, title, children }) => (
 );
 
 export default function MentionsLegales() {
+  const [favCount, setFavCount] = useState(0);
+  useEffect(() => {
+    setFavCount(readLocalFavorites().length);
+  }, []);
   return (
     <div className="min-h-screen bg-[#fbf8f4] text-[#342b32]">
       <Head>
@@ -29,7 +34,15 @@ export default function MentionsLegales() {
         <meta name="robots" content="noindex" />
       </Head>
 
-      <SiteHeader logoHref="/" showSearch={false} showAccount={false} showFavorites={false} showCart={false} />
+      <SiteHeader
+        logoHref="/"
+        showSearch={false}
+        showAccount={false}
+        showFavorites={true}
+        showCart={false}
+        favCount={favCount}
+        onFavClick={() => window.location.assign("/#favoris")}
+      />
 
       <main className="max-w-3xl mx-auto px-6 py-12">
         <h1 className="font-serif text-4xl text-[#412f3b]">Mentions légales</h1>

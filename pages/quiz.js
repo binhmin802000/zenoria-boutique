@@ -7,6 +7,7 @@ import MediaGuard from "@/components/MediaGuard";
 import BannerBar from "@/components/BannerBar";
 import { ShippingStrip } from "@/components/QuizChrome";
 import SiteHeader from "@/components/SiteHeader"; // ZENORIA_SITE_HEADER_H2
+import { readLocalFavorites } from "@/lib/favorites"; // ZENORIA_FAVORIS_V1
 import Footer from "@/components/Footer";
 import QuizSteps from "@/components/QuizSteps";
 import QuizResult from "@/components/QuizResult";
@@ -63,6 +64,7 @@ export default function QuizPage() {
   const [nowMs, setNowMs] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [cartCount, setCartCount] = useState(0);
+  const [favCount, setFavCount] = useState(0);
   const [toast, setToast] = useState(null);
   const [sheet, setSheet] = useState(null); // { product, why } : la fiche ouverte par « Voir la bague », sans quitter le quiz
   const [cartAsk, setCartAsk] = useState(false); // la question « revenir au quiz après le panier ? »
@@ -92,6 +94,7 @@ export default function QuizPage() {
       setShowResult(true);
     }
     setCartCount(readCartCount(getLocalStorage()));
+    setFavCount(readLocalFavorites().length);
     setNowMs(Date.now());
     setClosedBanners(readClosedKeys(getSessionStorage()));
     setHydrated(true);
@@ -317,7 +320,9 @@ export default function QuizPage() {
         logoHref="/"
         showSearch={false}
         showAccount={false}
-        showFavorites={false}
+        showFavorites={true}
+        favCount={favCount}
+        onFavClick={() => window.location.assign("/#favoris")}
         cartCount={cartCount}
         onCartClick={openCart}
       />

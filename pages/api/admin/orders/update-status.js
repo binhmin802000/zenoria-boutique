@@ -145,6 +145,7 @@ export default async function handler(req, res) {
         status: "shipped",
         note: "Expédiée via " + carrier + ", suivi : " + trimmedTracking + ".",
         actor_email: admin.email || null, // ZENORIA_ORDER_ACTOR_5G_V1 : auteur de l'expédition (compte administrateur connecté)
+        customer_visible: true, // ZENORIA_FIX_TRACKING_VISIBLE_V1 : sans ce champ, l'etape "Expediee" ne s'affichait jamais dans l'espace cliente
       });
       if (historyErr) {
         console.error("[admin-order-status] échec order_status_history (ship) :", historyErr.message);
@@ -174,6 +175,7 @@ export default async function handler(req, res) {
       status: "delivered",
       note: "Marquée comme livrée manuellement depuis l'administration.",
       actor_email: admin.email || null, // ZENORIA_ORDER_ACTOR_5G_V1 : auteur de la livraison (compte administrateur connecté)
+      customer_visible: true, // ZENORIA_FIX_TRACKING_VISIBLE_V1 : sans ce champ, l'etape "Livree" ne s'affichait jamais dans l'espace cliente
     });
     if (historyErr) {
       console.error("[admin-order-status] échec order_status_history (deliver) :", historyErr.message);

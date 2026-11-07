@@ -147,7 +147,7 @@ export default function Footer({ seasons = [], seasonsOnClick = null, logoMode =
         </div>
       </div>
       <div className="max-w-7xl mx-auto px-6 mt-10 pt-6 border-t border-white/10 text-xs">
-        <div>Photos et vidéos © 2026 Zenoria, reproduction interdite sans autorisation. Prototype e-commerce.</div>
+        <div>Photos et vidéos © 2026 Zenoria, reproduction interdite sans autorisation.</div> {/* ZENORIA_FOOTER_NOPROTO_V1 : mention retiree */}
         <div className="mt-2 text-[11px] text-white/50">
           Swarovski® est une marque de son propriétaire. Zenoria est une marque indépendante, non affiliée à Swarovski.
         </div>

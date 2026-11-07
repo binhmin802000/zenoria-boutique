@@ -246,6 +246,8 @@ function OrderDetail({ order, contactCfg, questionOpen, setQuestionOpen, onBack,
   const [cancelNote, setCancelNote] = useState("");
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelError, setCancelError] = useState("");
+  const [deliverBusy, setDeliverBusy] = useState(false); // ZENORIA_CUSTOMER_CONFIRM_DELIVERY_V1
+  const [deliverError, setDeliverError] = useState(""); // ZENORIA_CUSTOMER_CONFIRM_DELIVERY_V1
   useEffect(() => {
     if (!isTransfer) { setEvents([]); return undefined; }
     let alive = true;
@@ -267,6 +269,19 @@ function OrderDetail({ order, contactCfg, questionOpen, setQuestionOpen, onBack,
       setCancelError("Impossible d'annuler la commande pour le moment. Réessayez, ou contactez-nous.");
     }
     setCancelBusy(false);
+  };
+  // ZENORIA_CUSTOMER_CONFIRM_DELIVERY_V1 : confirmation de réception par la cliente (uniquement depuis "shipped")
+  const confirmDelivery = async () => {
+    setDeliverBusy(true);
+    setDeliverError("");
+    try {
+      const { error: err } = await supabase.rpc("customer_confirm_delivery", { p_order_id: order.id });
+      if (err) throw err;
+      if (onOrderChanged) onOrderChanged();
+    } catch (err) {
+      setDeliverError("Impossible de confirmer la réception pour le moment. Réessayez, ou contactez-nous.");
+    }
+    setDeliverBusy(false);
   };
   return (
     <div data-testid={`order-detail-${order.id}`}>
@@ -298,6 +313,22 @@ function OrderDetail({ order, contactCfg, questionOpen, setQuestionOpen, onBack,
         <div className="mt-4 rounded-xl bg-[#fbf7f9] px-4 py-3 flex items-center gap-2 text-sm text-[#54434c]">
           <Truck size={16} className="text-[#8f6075]" /> {order.carrier}
           {order.tracking_number && <span className="text-[#8b737e]">· suivi {order.tracking_number}</span>}
+        </div>
+      )}
+
+      {/* ZENORIA_CUSTOMER_CONFIRM_DELIVERY_V1 : bouton visible uniquement si la commande est expédiée mais pas encore livrée */}
+      {order.status === "shipped" && (
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={confirmDelivery}
+            disabled={deliverBusy}
+            data-testid="confirm-delivery"
+            className="rounded-full border border-[#8f6075] text-[#8f6075] hover:bg-[#8f6075] hover:text-white text-xs font-medium px-4 h-9 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {deliverBusy ? "Confirmation…" : "Confirmer la réception"}
+          </button>
+          {deliverError && <p className="mt-2 text-[12px] text-red-600">{deliverError}</p>}
         </div>
       )}
 

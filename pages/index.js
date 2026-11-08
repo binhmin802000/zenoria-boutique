@@ -129,6 +129,7 @@ function HeroVideo({ path, fallback }) {
   }
   return (
     <div className="relative w-full h-full rounded-full overflow-hidden bg-black">
+      {/* ZENORIA_PRELOAD_VIDEOS_V1 : preload metadata pour reduire le cached egress sans bloquer l'autoplay */}
       <video
         key={src}
         src={src}
@@ -136,6 +137,7 @@ function HeroVideo({ path, fallback }) {
         loop
         muted
         playsInline
+        preload="metadata"
         onError={() => setFailed(true)}
         className="w-full h-full object-cover object-center"
       />

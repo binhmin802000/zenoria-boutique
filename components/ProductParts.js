@@ -21,6 +21,7 @@ export function RingVisual({ product, large = false, circle = false, video = fal
   if (circle && video && videoSrc && !imgError) {
     return (
       <div className="relative w-full h-full rounded-full overflow-hidden bg-black">
+        {/* ZENORIA_PRELOAD_VIDEOS_V1 : preload metadata pour reduire le cached egress sans bloquer l'autoplay */}
         <video
           key={videoSrc}
           src={videoSrc}
@@ -28,6 +29,7 @@ export function RingVisual({ product, large = false, circle = false, video = fal
           loop
           muted
           playsInline
+          preload="metadata"
           onError={() => setImgError(true)}
           className="w-full h-full object-cover object-center"
         />
@@ -290,6 +292,7 @@ export function ProductMedia({ product, initialMode = "video" }) {
     <div>
       <div className="relative overflow-hidden h-[360px] bg-black">
         {mode === "video" && hasVideo ? (
+          // ZENORIA_PRELOAD_VIDEOS_V1 : preload metadata, chargee seulement a l'ouverture de la fiche produit
           <video
             key={videoSrc}
             src={videoSrc}
@@ -298,6 +301,7 @@ export function ProductMedia({ product, initialMode = "video" }) {
             muted
             playsInline
             controls
+            preload="metadata"
             onError={() => setVideoError(true)}
             className="w-full h-full object-cover object-center"
           />

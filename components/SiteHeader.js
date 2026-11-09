@@ -2,6 +2,7 @@ import React, { useState } from "react"; // ZENORIA_SITE_HEADER_H2
 import { Search, User, Heart, ShoppingBag, Menu, X, Settings, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CrystalLogo from "@/components/CrystalLogo";
+import InstallButton from "@/components/InstallButton"; // ZENORIA_INSTALL_BUTTON_V1
 
 // ============================================================
 // EN-TETE PARTAGE DU SITE - ZENORIA_SITE_HEADER_V1
@@ -125,6 +126,8 @@ export default function SiteHeader({
           ))}
         </nav>
         <div className="flex items-center gap-2">
+          {/* ZENORIA_INSTALL_BUTTON_V1 : mis en évidence, première position pour une bonne visibilité */}
+          <InstallButton />
           {showSearch && (
             <Button variant="ghost" size="icon">
               <Search size={19} />

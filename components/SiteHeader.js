@@ -74,7 +74,7 @@ export default function SiteHeader({
   onSection,
   onStory,
   showSeasons = true,
-  showSearch = true,
+  showSearch = false, // ZENORIA_REMOVE_SEARCH_V1 : loupe retiree de toutes les pages (reversible : remettre true)
   showAccount = true,
   showFavorites = true,
   menuOpen,

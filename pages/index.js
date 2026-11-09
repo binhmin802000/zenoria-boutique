@@ -45,6 +45,7 @@ import {
 } from "@/lib/seasons";
 import { pickPublicBanner, bannerKey, readClosedKeys, writeClosedKeys, getSessionStorage } from "@/lib/publicBanner";
 import { SITE_SETTINGS_TABLE, SEASON_FX_KEY, parseSeasonFxSetting, pickFxSeason } from "@/lib/siteSettings";
+import { NEWSLETTER_KEY, DEFAULT_NEWSLETTER, parseNewsletterSetting } from "@/lib/newsletterSettings"; // ZENORIA_NEWSLETTER_V1
 import { SHIPPING_KEY, DEFAULT_SHIPPING, parseShippingSetting, shippingStripText } from "@/lib/shippingSettings";
 import { round2, effectivePrice, computeTotals } from "@/lib/cartTotals"; // ZENORIA_SHIPPING_RULE_V1 : calcul du panier = source unique
 import { PAYMENT_METHODS_KEY, DEFAULT_PAYMENT_METHODS, parsePaymentMethods } from "@/lib/paymentSettings";
@@ -260,6 +261,7 @@ export default function ZenoriaShop() {
   const [cgvAccepted, setCgvAccepted] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState(null);
   const [paymentMethodsCfg, setPaymentMethodsCfg] = useState(DEFAULT_PAYMENT_METHODS);
+  const [newsletterCfg, setNewsletterCfg] = useState(DEFAULT_NEWSLETTER); // ZENORIA_NEWSLETTER_V1
   const [paymentMethodsLoaded, setPaymentMethodsLoaded] = useState(false);
   useEffect(() => {
     if (!paymentMethodsLoaded) return; // quand les deux modes sont proposes, la cliente choisit elle-meme
@@ -347,7 +349,7 @@ export default function ZenoriaShop() {
         supabase.from("site_media").select("*"),
         optionalQuery(supabase.from("families").select("*").order("sort_order", { ascending: true })),
         optionalQuery(supabase.from("banners").select("*")),
-        optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").in("key", [SEASON_FX_KEY, SHIPPING_KEY, SITE_TEXTS_KEY, CONTACT_KEY, REVIEWS_KEY, PAYMENT_METHODS_KEY, GRID_ORDER_KEY])),
+        optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").in("key", [SEASON_FX_KEY, SHIPPING_KEY, SITE_TEXTS_KEY, CONTACT_KEY, REVIEWS_KEY, PAYMENT_METHODS_KEY, GRID_ORDER_KEY, NEWSLETTER_KEY])),
         optionalQuery(supabase.rpc("public_piece_states")), // ZENORIA_STOCK_UI2_V1
         optionalQuery(supabase.rpc("public_stock_states")), // ZENORIA_STOCK_UI3_V1
       ]);
@@ -397,6 +399,9 @@ export default function ZenoriaShop() {
       // Avis clientes : ligne absente ou illisible -> désactivé (lien de la charte masqué)
       const reviewsRow = settingRows.find((r) => r.key === REVIEWS_KEY) || null;
       setReviewsCfg(parseReviewsSetting(reviewsRow ? reviewsRow.value : null));
+      // ZENORIA_NEWSLETTER_V1 : ligne absente ou illisible -> désactivé (section masquée par défaut)
+      const newsletterRow = settingRows.find((r) => r.key === NEWSLETTER_KEY) || null;
+      setNewsletterCfg(parseNewsletterSetting(newsletterRow ? newsletterRow.value : null));
       setContactSettings(parseContactSetting(contactRow ? contactRow.value : null));
       // Textes : si la ligne n'existe pas encore, le site garde ses textes d'origine
       setSiteTexts(resolveSiteTexts(textRow ? textRow.value : null));
@@ -1371,7 +1376,8 @@ export default function ZenoriaShop() {
             </div>
           </div>
         </section>
-        {/* NEWSLETTER */}
+        {/* ZENORIA_NEWSLETTER_V1 : section affichée seulement si activée dans Accueil > Configuration */}
+        {newsletterCfg.enabled && (
         <section id="newsletter" className="bg-[#d9c5cc] py-16">
           <div className="max-w-5xl mx-auto px-6 text-center">
             <div className="text-xs tracking-[.3em] uppercase mb-3">Le cercle Zenoria</div>
@@ -1383,6 +1389,7 @@ export default function ZenoriaShop() {
             </div>
           </div>
         </section>
+        )}
       </main>
       <Footer
         seasons={seasonCards}

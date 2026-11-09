@@ -1351,8 +1351,6 @@ export default function ZenoriaShop() {
         </section>
         {/* NOTRE HISTOIRE : textes modifiables dans /admin > Contenu du site > Textes du site */}
         <StorySection texts={siteTexts} />
-        {/* AVIS CLIENTES : visibles si l'interrupteur est sur ON, ou en aperçu pour l'administration */}
-        {(reviewsCfg.enabled || isAdmin) && <ReviewsSection reviewsCfg={reviewsCfg} isAdmin={isAdmin} products={products} />}
         {/* QUIZ COULEURS (invitation) : la page du quiz est /quiz */}
         <section id="quiz" className="max-w-6xl mx-auto px-6 py-20">
           <div className="rounded-[2.5rem] p-8 md:p-12 grid lg:grid-cols-[1.2fr_.8fr] gap-10 items-center" style={{ background: "linear-gradient(120deg,#eee3f5,#f6e3df)" }}>
@@ -1376,6 +1374,8 @@ export default function ZenoriaShop() {
             </div>
           </div>
         </section>
+        {/* AVIS CLIENTES : visibles si l'interrupteur est sur ON, ou en aperçu pour l'administration */}
+        {(reviewsCfg.enabled || isAdmin) && <ReviewsSection reviewsCfg={reviewsCfg} isAdmin={isAdmin} products={products} />}
         {/* ZENORIA_NEWSLETTER_V1 : section affichée seulement si activée dans Accueil > Configuration */}
         {newsletterCfg.enabled && (
         <section id="newsletter" className="bg-[#d9c5cc] py-16">

@@ -19,6 +19,7 @@
 
 import Stripe from "stripe";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { isTestOrderMode } from "@/lib/testMode"; // ZENORIA_TEST_MODE_WEBHOOK_V1 : même règle unique que checkout.js et checkout-transfer.js
 
 export const config = {
   api: {
@@ -196,7 +197,7 @@ export default async function handler(req, res) {
           user_id: metadataUserId,
           guest_email: customer.email || null,
           status: "paid",
-          is_test: event.livemode === false,
+          is_test: isTestOrderMode(), // ZENORIA_TEST_MODE_WEBHOOK_V1 : règle unique avec checkout.js/checkout-transfer.js, plutôt que event.livemode
           subtotal: Number(meta.subtotal || 0),
           discount: Number(meta.discount || 0),
           shipping: Number(meta.shipping || 0),

@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- ZENORIA_YINYANG_V1_STARS : anneau remplace par une ronde d'etoiles (16), "ZENORIA" en bas -->
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b2b39"/>
+      <stop offset="100%" stop-color="#2a1f28"/>
+    </linearGradient>
+    <linearGradient id="goldSwirl" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f3e3c2"/>
+      <stop offset="100%" stop-color="#d8b36d"/>
+    </linearGradient>
+    <linearGradient id="violetSwirl" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9b6980"/>
+      <stop offset="100%" stop-color="#5b3a4d"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="url(#bg)"/>
+
+  <!-- ronde de 16 etoiles dorees, sur le meme cercle (centre 256,205 rayon 150) que l'ancien anneau -->
+  <g fill="#d8b36d">
+    <path d="M 406.0 196.0 L 408.3 202.7 L 415.0 205.0 L 408.3 207.3 L 406.0 214.0 L 403.7 207.3 L 397.0 205.0 L 403.7 202.7 Z"/>
+    <path d="M 394.6 253.4 L 396.9 260.1 L 403.6 262.4 L 396.9 264.7 L 394.6 271.4 L 392.2 264.7 L 385.6 262.4 L 392.2 260.1 Z"/>
+    <path d="M 362.1 302.1 L 364.4 308.7 L 371.1 311.1 L 364.4 313.4 L 362.1 320.1 L 359.7 313.4 L 353.1 311.1 L 359.7 308.7 Z"/>
+    <path d="M 313.4 334.6 L 315.7 341.2 L 322.4 343.6 L 315.7 345.9 L 313.4 352.6 L 311.1 345.9 L 304.4 343.6 L 311.1 341.2 Z"/>
+    <path d="M 256.0 346.0 L 258.3 352.7 L 265.0 355.0 L 258.3 357.3 L 256.0 364.0 L 253.7 357.3 L 247.0 355.0 L 253.7 352.7 Z"/>
+    <path d="M 198.6 334.6 L 200.9 341.2 L 207.6 343.6 L 200.9 345.9 L 198.6 352.6 L 196.3 345.9 L 189.6 343.6 L 196.3 341.2 Z"/>
+    <path d="M 149.9 302.1 L 152.3 308.7 L 158.9 311.1 L 152.3 313.4 L 149.9 320.1 L 147.6 313.4 L 140.9 311.1 L 147.6 308.7 Z"/>
+    <path d="M 117.4 253.4 L 119.8 260.1 L 126.4 262.4 L 119.8 264.7 L 117.4 271.4 L 115.1 264.7 L 108.4 262.4 L 115.1 260.1 Z"/>
+    <path d="M 106.0 196.0 L 108.3 202.7 L 115.0 205.0 L 108.3 207.3 L 106.0 214.0 L 103.7 207.3 L 97.0 205.0 L 103.7 202.7 Z"/>
+    <path d="M 117.4 138.6 L 119.8 145.3 L 126.4 147.6 L 119.8 149.9 L 117.4 156.6 L 115.1 149.9 L 108.4 147.6 L 115.1 145.3 Z"/>
+    <path d="M 149.9 89.9 L 152.3 96.6 L 158.9 98.9 L 152.3 101.3 L 149.9 107.9 L 147.6 101.3 L 140.9 98.9 L 147.6 96.6 Z"/>
+    <path d="M 198.6 57.4 L 200.9 64.1 L 207.6 66.4 L 200.9 68.8 L 198.6 75.4 L 196.3 68.8 L 189.6 66.4 L 196.3 64.1 Z"/>
+    <path d="M 256.0 46.0 L 258.3 52.7 L 265.0 55.0 L 258.3 57.3 L 256.0 64.0 L 253.7 57.3 L 247.0 55.0 L 253.7 52.7 Z"/>
+    <path d="M 313.4 57.4 L 315.7 64.1 L 322.4 66.4 L 315.7 68.8 L 313.4 75.4 L 311.1 68.8 L 304.4 66.4 L 311.1 64.1 Z"/>
+    <path d="M 362.1 89.9 L 364.4 96.6 L 371.1 98.9 L 364.4 101.3 L 362.1 107.9 L 359.7 101.3 L 353.1 98.9 L 359.7 96.6 Z"/>
+    <path d="M 394.6 138.6 L 396.9 145.3 L 403.6 147.6 L 396.9 149.9 L 394.6 156.6 L 392.2 149.9 L 385.6 147.6 L 392.2 145.3 Z"/>
+  </g>
+
+  <!-- yin-yang (identique a la version 1 validee) -->
+  <g transform="translate(256,205) scale(0.76)">
+    <circle cx="0" cy="0" r="150" fill="url(#violetSwirl)"/>
+    <path d="M0,-150 A150,150 0 0 1 0,150 A75,75 0 0 1 0,0 A75,75 0 0 0 0,-150 Z" fill="url(#goldSwirl)"/>
+    <path d="M0,-150 A150,150 0 0 1 0,150 A75,75 0 0 1 0,0 A75,75 0 0 0 0,-150 Z" fill="none" stroke="#2a1f28" stroke-width="2.6" opacity="0.4"/>
+    <circle cx="0" cy="0" r="150" fill="none" stroke="#2a1f28" stroke-width="2.6" opacity="0.4"/>
+    <circle cx="0" cy="-75" r="25" fill="url(#violetSwirl)"/>
+    <circle cx="0" cy="75" r="25" fill="url(#goldSwirl)"/>
+  </g>
+
+  <!-- texte "ZENORIA" droit, en bas -->
+  <text x="256" y="430" font-family="DejaVu Serif" font-size="56" font-weight="bold"
+        letter-spacing="6" fill="#f6ead0" text-anchor="middle">ZENORIA</text>
+</svg>

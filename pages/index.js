@@ -1050,6 +1050,7 @@ export default function ZenoriaShop() {
             setAuthModalOpen(true);
           }
         }}
+        onAccountMenuClose={() => setAccountMenuOpen(false)} // ZENORIA_ACCOUNT_MENU_CLOSE_PROP_V1 : ferme le menu au clic en dehors
         onLogin={() => setAuthModalOpen(true)}
         onLogout={handleLogout}
         favCount={favIds.length}

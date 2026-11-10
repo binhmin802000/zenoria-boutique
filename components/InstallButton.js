@@ -58,12 +58,12 @@ export default function InstallButton({ className = "" }) {
       data-testid="install-app-button"
       aria-label="Installer l'application Zenoria"
       className={
-        "inline-flex items-center gap-1.5 rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-3.5 h-9 text-xs font-medium transition shadow-sm " +
+        "flex flex-col items-center justify-center gap-0.5 rounded-xl bg-[#8f6075] hover:bg-[#71485b] text-white w-12 h-12 text-[9px] leading-none font-medium transition shadow-sm " + // ZENORIA_INSTALL_BUTTON_VERTICAL_V1
         className
       }
     >
       <Download size={15} />
-      <span className="hidden xl:inline">Installer l&apos;app</span> {/* ZENORIA_FIX_HEADER_OVERLAP_V1 : texte masqué entre sm: et xl:, pour laisser de la place au menu */}
+      <span>Installer</span> {/* ZENORIA_INSTALL_BUTTON_VERTICAL_V1 : disposition verticale, toujours visible, sans elargir la largeur */}
     </button>
   );
 }

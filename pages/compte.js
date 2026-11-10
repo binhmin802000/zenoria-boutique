@@ -822,6 +822,8 @@ export default function Compte() {
               Photo entière calée à droite ; zone du bijou intacte ; fondu progressif vers la gauche ;
               fond champagne + halo chaud ; voile limité à la zone du texte.
               Image modifiable dans Admin › Contenu du site (emplacement account_hero). */}
+          {/* ZENORIA_COMPTE_LAYOUT_FIX_V1 : conteneur commun bandeau + zone du dessous, recouvert par l'animation */}
+          <div className="relative">
           <section
             data-testid="account-hero"
             className="relative rounded-[1.5rem] overflow-hidden h-[220px] sm:h-[240px] flex items-center mb-6 border border-[#efe2d6]"
@@ -859,14 +861,19 @@ export default function Compte() {
           {nowMs !== null && (() => {
             const fxSeason = pickFxSeason(fxSetting, resolveFxSeason(fxSetting, null, new Date(nowMs)));
             return fxSeason ? (
-              <div aria-hidden="true" className="relative h-14 sm:h-16 overflow-hidden rounded-xl mb-6">
-                <SeasonFx season={fxSeason} />
-              </div>
+              <>
+                {/* ZENORIA_COMPTE_LAYOUT_FIX_V1 : zone de respiration sous le bandeau, recouverte elle aussi par l'animation */}
+                <div aria-hidden="true" className="h-10 sm:h-12" />
+                <div aria-hidden="true" className="absolute inset-0 overflow-hidden rounded-[1.5rem] pointer-events-none">
+                  <SeasonFx season={fxSeason} />
+                </div>
+              </>
             ) : null;
           })()}
+          </div>
 
-          <div className="grid lg:grid-cols-[230px_1fr] gap-6">
-            {/* MENU : à gauche sur ordinateur, onglets défilants sur mobile */}
+          <div className="grid grid-cols-1 lg:grid-cols-[230px_1fr] gap-6">
+            {/* MENU : à gauche sur ordinateur, onglets défilants sur mobile. ZENORIA_COMPTE_LAYOUT_FIX_V1 : grid-cols-1 empeche la barre d'onglets d'elargir la page sur mobile */}
             <nav aria-label="Rubriques de mon compte" className="lg:self-start lg:sticky lg:top-24">
               <div className="flex lg:flex-col gap-1.5 overflow-x-auto lg:overflow-visible rounded-full lg:rounded-2xl bg-white border border-[#eadfe4] p-1.5 lg:p-2.5">
                 {visible.map((s) => {

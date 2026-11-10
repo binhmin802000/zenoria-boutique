@@ -1,4 +1,4 @@
-import React, { useState } from "react"; // ZENORIA_SITE_HEADER_H2
+import React, { useState, useEffect, useRef } from "react"; // ZENORIA_SITE_HEADER_H2, ZENORIA_ACCOUNT_MENU_OUTSIDE_CLICK_V1 : useEffect/useRef pour la fermeture au clic extérieur
 import { Search, User, Heart, ShoppingBag, Menu, X, Settings, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CrystalLogo from "@/components/CrystalLogo";
@@ -86,6 +86,7 @@ export default function SiteHeader({
   authLoading = false,
   accountMenuOpen = false,
   onAccountClick,
+  onAccountMenuClose, // ZENORIA_ACCOUNT_MENU_OUTSIDE_CLICK_V1 : optionnelle, appelée au clic en dehors du menu compte
   onLogin,
   onLogout,
   favCount = 0,
@@ -109,6 +110,23 @@ export default function SiteHeader({
       setInnerMenu(false);
     }
   };
+
+  // ZENORIA_ACCOUNT_MENU_OUTSIDE_CLICK_V1 : ferme le menu compte au clic (ou au focus clavier) en dehors de sa zone
+  const accountMenuRef = useRef(null);
+  useEffect(() => {
+    if (!accountMenuOpen || !onAccountMenuClose) return undefined;
+    const handlePointerDown = (e) => {
+      if (accountMenuRef.current && !accountMenuRef.current.contains(e.target)) {
+        onAccountMenuClose();
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+    };
+  }, [accountMenuOpen, onAccountMenuClose]);
   const logo = <CrystalLogo compact mode={logoMode} />;
   return (
     <header className="sticky top-0 z-40 bg-[#fbf8f4]/95 backdrop-blur border-b border-[#eadfe4]">
@@ -135,7 +153,7 @@ export default function SiteHeader({
           )}
           {/* Compte utilisateur */}
           {showAccount && (
-          <div className="relative hidden sm:block">
+          <div className="relative hidden sm:block" ref={accountMenuRef}> {/* ZENORIA_ACCOUNT_MENU_OUTSIDE_CLICK_V1 */}
             <Button variant="ghost" size="icon" onClick={onAccountClick}>
               <User size={19} />
             </Button>

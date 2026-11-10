@@ -686,7 +686,7 @@ export default function AdminPage() {
       return;
     }
 
-    setToast(productForm.id ? "Collection mise à jour." : "Collection créée.");
+    setToast(productForm.id ? "Bijou mis à jour." : "Bijou créé."); // ZENORIA_RENAME_COLLECTION_BIJOU_V1
     setProductForm(null);
     loadProducts();
   };
@@ -699,7 +699,7 @@ export default function AdminPage() {
       return;
     }
     if (!error) {
-      setToast("Collection supprimée.");
+      setToast("Bijou supprimé."); // ZENORIA_RENAME_COLLECTION_BIJOU_V1
       loadProducts();
     }
   };
@@ -1041,14 +1041,14 @@ export default function AdminPage() {
           <>
             <div className="flex justify-between items-center mb-5">
               <div>
-                <h1 className="font-serif text-2xl">Collections</h1>
-                <p className="text-sm text-[#8b737e]">{products.length} collection{products.length > 1 ? "s" : ""} au catalogue</p>
+                <h1 className="font-serif text-2xl">Bijoux</h1> {/* ZENORIA_RENAME_COLLECTION_BIJOU_V1 */}
+                <p className="text-sm text-[#8b737e]">{products.length} bijou{products.length > 1 ? "x" : ""} au catalogue</p> {/* ZENORIA_RENAME_COLLECTION_BIJOU_V1 */}
               </div>
               <button
                 onClick={openNewProduct}
                 className="flex items-center gap-1.5 rounded-full bg-[#8f6075] hover:bg-[#71485b] text-white px-4 h-10 text-sm"
               >
-                <Plus size={16} /> Nouvelle collection
+                <Plus size={16} /> Nouveau bijou {/* ZENORIA_RENAME_COLLECTION_BIJOU_V1 */}
               </button>
             </div>
 
@@ -1093,7 +1093,7 @@ export default function AdminPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-[#f5edf1] text-left text-[#8b737e]">
-                      <th className="px-4 py-3 font-medium">Collection</th>
+                      <th className="px-4 py-3 font-medium">Bijou</th> {/* ZENORIA_RENAME_COLLECTION_BIJOU_V1 */}
                       <th className="px-4 py-3 font-medium hidden md:table-cell">Famille</th>
                       <th className="px-4 py-3 font-medium">Prix</th>
                       <th className="px-4 py-3 font-medium">Stock</th>
@@ -1293,7 +1293,7 @@ export default function AdminPage() {
           <div className="fixed z-40 inset-x-4 top-[4%] max-w-2xl mx-auto bg-white rounded-[2rem] shadow-2xl max-h-[92vh] overflow-y-auto">
             <form onSubmit={saveProduct} className="p-7">
               <div className="flex justify-between items-start mb-5">
-                <h2 className="font-serif text-2xl">{productForm.id ? "Modifier la collection" : "Nouvelle collection"}</h2>
+                <h2 className="font-serif text-2xl">{productForm.id ? "Modifier le bijou" : "Nouveau bijou"}</h2> {/* ZENORIA_RENAME_COLLECTION_BIJOU_V1 */}
                 <button type="button" onClick={closeProductForm} className="h-9 w-9 grid place-items-center rounded-full hover:bg-[#f0e6ea]"><X size={18} /></button>
               </div>
 

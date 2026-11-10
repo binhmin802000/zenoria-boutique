@@ -120,7 +120,7 @@ export default function SiteHeader({
         ) : (
           logo
         )}
-        <nav className="hidden lg:flex gap-7 text-sm">
+        <nav className="hidden lg:flex gap-4 xl:gap-7 text-sm"> {/* ZENORIA_FIX_HEADER_OVERLAP_V1 : espacement resserré entre lg: et xl:, pour laisser de la place au bouton d'installation */}
           {items.map((item) => (
             <NavItem key={item.key} item={item} current={current} onSection={onSection} onStory={onStory} />
           ))}

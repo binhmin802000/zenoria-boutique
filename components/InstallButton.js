@@ -63,7 +63,7 @@ export default function InstallButton({ className = "" }) {
       }
     >
       <Download size={15} />
-      <span className="hidden sm:inline">Installer l&apos;app</span>
+      <span className="hidden xl:inline">Installer l&apos;app</span> {/* ZENORIA_FIX_HEADER_OVERLAP_V1 : texte masqué entre sm: et xl:, pour laisser de la place au menu */}
     </button>
   );
 }

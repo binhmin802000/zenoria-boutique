@@ -65,8 +65,8 @@ export default async function handler(req, res) {
     const pdfBuffer = await generateInvoicePdf({
       invoice: { ...invoice, order_reference: orderReference },
       orderItems: itemsRes.data || [],
-      carrier: invoice.delivery_carrier || null, // ZENORIA_INVOICE_DELIVERY_LOGO_V1
-      trackingNumber: invoice.delivery_tracking_number || null,
+      carrier: invoice.delivery_carrier === "En main propre" ? null : invoice.delivery_carrier || null, // ZENORIA_INVOICE_DELIVERY_LOGO_V1
+      trackingNumber: invoice.delivery_carrier === "En main propre" ? null : invoice.delivery_tracking_number || null, // ZENORIA_HAND_DELIVERY_V1 : la note d'une remise en main propre n'est pas un numero de suivi
     });
 
     res.setHeader("Content-Type", "application/pdf");

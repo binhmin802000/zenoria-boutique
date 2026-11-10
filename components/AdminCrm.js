@@ -713,7 +713,8 @@ export function AdminOrders() {
     const t = setTimeout(() => setAdminNotice(""), 8000);
     return () => clearTimeout(t);
   }, [adminNotice]);
-  const CARRIERS = ["Colissimo", "Mondial Relay", "Chronopost", "DPD", "Colis Privé"];
+  const CARRIERS = ["Colissimo", "Mondial Relay", "Chronopost", "DPD", "Colis Privé", "En main propre"]; // ZENORIA_HAND_DELIVERY_V1
+  const HAND_CARRIER = "En main propre"; // ZENORIA_HAND_DELIVERY_V1
 
   const updateOrderStatus = async (orderId, action, extra) => {
     setShippingBusyId(orderId);
@@ -1166,9 +1167,13 @@ export function AdminOrders() {
                         {!["paid", "shipped", "delivered"].includes(o.status) && (
                           <p data-testid="shipping-locked" className="text-[12px] text-[#8b737e] mb-2">L&apos;expédition sera possible une fois la commande payée.</p>
                         )}
-                        {o.tracking_number ? (
+                        {o.carrier ? ( /* ZENORIA_HAND_DELIVERY_V1 : le bloc suit le transporteur (toujours renseigne), pas la note/numero (facultatif en main propre) */
                           <p className="text-[13px] text-[#54434c] leading-5 mb-2">
-                            {o.carrier} · Suivi : <strong>{o.tracking_number}</strong>
+                            {o.carrier === HAND_CARRIER ? (
+                              <>{o.carrier}{o.tracking_number && <> · Note : <strong>{o.tracking_number}</strong></>}</>
+                            ) : (
+                              <>{o.carrier} · Suivi : <strong>{o.tracking_number}</strong></>
+                            )}
                             {o.shipped_at && <span className="text-[#8b737e]"> · expédiée le {formatDateTime(o.shipped_at)}</span>}
                           </p>
                         ) : (
@@ -1185,7 +1190,8 @@ export function AdminOrders() {
                             </select>
                             <input
                               type="text"
-                              placeholder="Numéro de suivi"
+                              placeholder={((shippingDraft[o.id] || {}).carrier || CARRIERS[0]) === HAND_CARRIER ? "Note (facultatif, visible par la cliente)" : "Numéro de suivi"}
+                              maxLength={((shippingDraft[o.id] || {}).carrier || CARRIERS[0]) === HAND_CARRIER ? 200 : 60}
                               value={(shippingDraft[o.id] || {}).trackingNumber || ""}
                               onChange={(e) => setShippingDraft((prev) => ({ ...prev, [o.id]: { ...prev[o.id], trackingNumber: e.target.value } }))}
                               data-testid="shipping-tracking-number"
@@ -1196,7 +1202,7 @@ export function AdminOrders() {
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
-                            disabled={shippingBusyId === o.id || Boolean(o.tracking_number) || !["paid", "shipped"].includes(o.status)}
+                            disabled={shippingBusyId === o.id || Boolean(o.carrier) || !["paid", "shipped"].includes(o.status)}
                             onClick={() => {
                               const draft = shippingDraft[o.id] || {};
                               updateOrderStatus(o.id, "ship", {

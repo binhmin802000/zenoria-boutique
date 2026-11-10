@@ -33,7 +33,9 @@
 // ============================================================
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-const ALLOWED_CARRIERS = ["Colissimo", "Mondial Relay", "Chronopost", "DPD", "Colis Privé"];
+const HAND_CARRIER = "En main propre"; // ZENORIA_HAND_DELIVERY_V1
+const MAX_HAND_NOTE_LENGTH = 200; // ZENORIA_HAND_DELIVERY_V1 : longueur max de la note (facultative) d'une remise en main propre
+const ALLOWED_CARRIERS = ["Colissimo", "Mondial Relay", "Chronopost", "DPD", "Colis Privé", HAND_CARRIER];
 const SHIPPABLE_FROM = ["paid", "shipped"];
 const DELIVERABLE_FROM = ["paid", "shipped"];
 const MAX_TRACKING_LENGTH = 60;
@@ -112,10 +114,10 @@ export default async function handler(req, res) {
       if (!ALLOWED_CARRIERS.includes(carrier)) {
         return res.status(400).json({ ok: false, error: "transporteur invalide" });
       }
-      if (!trimmedTracking) {
+      if (!trimmedTracking && carrier !== HAND_CARRIER) { // ZENORIA_HAND_DELIVERY_V1 : la note est facultative en main propre
         return res.status(400).json({ ok: false, error: "numéro de suivi requis" });
       }
-      if (trimmedTracking.length > MAX_TRACKING_LENGTH) {
+      if (trimmedTracking.length > (carrier === HAND_CARRIER ? MAX_HAND_NOTE_LENGTH : MAX_TRACKING_LENGTH)) {
         return res.status(400).json({ ok: false, error: "numéro de suivi trop long" });
       }
 
@@ -125,7 +127,7 @@ export default async function handler(req, res) {
         .update({
           status: "shipped",
           carrier,
-          tracking_number: trimmedTracking,
+          tracking_number: trimmedTracking || null, // ZENORIA_HAND_DELIVERY_V1 : note vide en main propre -> NULL
           shipped_at: new Date().toISOString(),
         })
         .eq("id", id)
@@ -143,7 +145,7 @@ export default async function handler(req, res) {
       const { error: historyErr } = await supabaseAdmin.from("order_status_history").insert({
         order_id: id,
         status: "shipped",
-        note: "Expédiée via " + carrier + ", suivi : " + trimmedTracking + ".",
+        note: carrier === HAND_CARRIER ? "Remise en main propre" + (trimmedTracking ? " : " + trimmedTracking : "") + "." : "Expédiée via " + carrier + ", suivi : " + trimmedTracking + ".",
         actor_email: admin.email || null, // ZENORIA_ORDER_ACTOR_5G_V1 : auteur de l'expédition (compte administrateur connecté)
         customer_visible: true, // ZENORIA_FIX_TRACKING_VISIBLE_V1 : sans ce champ, l'etape "Expediee" ne s'affichait jamais dans l'espace cliente
       });

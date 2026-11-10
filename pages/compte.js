@@ -9,7 +9,7 @@ import AccountProfileSection from "@/components/AccountProfileSection";
 import Head from "next/head";
 import SiteHeader from "@/components/SiteHeader"; // ZENORIA_SITE_HEADER_H4
 import SeasonFx from "@/components/SeasonFx"; // ZENORIA_COMPTE_SEASON_FX_V1
-import { Home, Package, Star, Heart, UserCog, ShieldCheck, LogOut, Truck, ChevronLeft, FileDown, AlertTriangle } from "lucide-react"; // ZENORIA_INVOICE_STEP3_V1
+import { Home, Package, Star, Heart, UserCog, ShieldCheck, LogOut, Truck, Hand as HandIcon, ChevronLeft, FileDown, AlertTriangle } from "lucide-react"; // ZENORIA_INVOICE_STEP3_V1
 import { supabase as supabaseForInvoice } from "@/lib/supabase"; // ZENORIA_INVOICE_STEP3_V1
 import { supabase, getMediaUrl, SITE_MEDIA_TABLE, SITE_SLOT_ACCOUNT_HERO } from "@/lib/supabase";
 import { SITE_SETTINGS_TABLE, SEASON_FX_KEY, parseSeasonFxSetting, pickFxSeason } from "@/lib/siteSettings"; // ZENORIA_COMPTE_SEASON_FX_V1
@@ -313,8 +313,8 @@ function OrderDetail({ order, contactCfg, questionOpen, setQuestionOpen, onBack,
 
       {order.carrier && (
         <div className="mt-4 rounded-xl bg-[#fbf7f9] px-4 py-3 flex items-center gap-2 text-sm text-[#54434c]">
-          <Truck size={16} className="text-[#8f6075]" /> {order.carrier}
-          {order.tracking_number && <span className="text-[#8b737e]">· suivi {order.tracking_number}</span>}
+          {order.carrier === "En main propre" ? <HandIcon size={16} className="text-[#8f6075]" /> : <Truck size={16} className="text-[#8f6075]" />} {order.carrier === "En main propre" ? "Remise en main propre" : order.carrier} {/* ZENORIA_HAND_DELIVERY_V1 */}
+          {order.tracking_number && <span className="text-[#8b737e] min-w-0 break-words">· {order.carrier === "En main propre" ? "" : "suivi "}{order.tracking_number}</span>}
         </div>
       )}
 

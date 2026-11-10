@@ -8,13 +8,15 @@ import { autoCancelAt, isAutoCancelAlert, formatAutoCancel, DEFAULT_BANK_TRANSFE
 import AccountProfileSection from "@/components/AccountProfileSection";
 import Head from "next/head";
 import SiteHeader from "@/components/SiteHeader"; // ZENORIA_SITE_HEADER_H4
+import SeasonFx from "@/components/SeasonFx"; // ZENORIA_COMPTE_SEASON_FX_V1
 import { Home, Package, Star, Heart, UserCog, ShieldCheck, LogOut, Truck, ChevronLeft, FileDown, AlertTriangle } from "lucide-react"; // ZENORIA_INVOICE_STEP3_V1
 import { supabase as supabaseForInvoice } from "@/lib/supabase"; // ZENORIA_INVOICE_STEP3_V1
 import { supabase, getMediaUrl, SITE_MEDIA_TABLE, SITE_SLOT_ACCOUNT_HERO } from "@/lib/supabase";
-import { SITE_SETTINGS_TABLE } from "@/lib/siteSettings";
+import { SITE_SETTINGS_TABLE, SEASON_FX_KEY, parseSeasonFxSetting, pickFxSeason } from "@/lib/siteSettings"; // ZENORIA_COMPTE_SEASON_FX_V1
 import { fetchReviewsSetting, DEFAULT_REVIEWS, REVIEWS_RULES, REFUSAL_REASONS, reviewErrorMessage } from "@/lib/reviewsSettings";
 import { CONTACT_KEY, DEFAULT_CONTACT, parseContactSetting, buildMailtoLink, buildWhatsAppLink, buildSignalLink } from "@/lib/contactSettings";
 import { CUSTOMER_VISIBLE_STATUSES, TRACKING_STEPS, orderStatusInfo, formatOrderPrice, formatOrderReference } from "@/lib/orderDisplay";
+import { resolveFxSeason } from "@/lib/seasons"; // ZENORIA_COMPTE_SEASON_FX_V1
 
 // ============================================================
 // PAGE « MON COMPTE » — /compte (espace cliente)
@@ -425,6 +427,11 @@ export default function Compte() {
   const [reviewsCfg, setReviewsCfg] = useState(DEFAULT_REVIEWS);
   const [section, setSection] = useState("accueil");
   const [heroUrl, setHeroUrl] = useState(DEFAULT_HERO);
+  // ZENORIA_COMPTE_SEASON_FX_V1 : reglage lu dans site_settings (meme cle que l'accueil) ; nowMs rempli seulement
+  // apres l'affichage, pour que le rendu du serveur ne depende jamais de l'heure (hydratation stable).
+  const [fxSetting, setFxSetting] = useState(() => parseSeasonFxSetting(null));
+  const [nowMs, setNowMs] = useState(null);
+  useEffect(() => { setNowMs(Date.now()); }, []);
 
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [orders, setOrders] = useState([]);
@@ -481,15 +488,18 @@ export default function Compte() {
         return;
       }
       setUser(u);
-      const [adm, cfg, hero] = await Promise.all([
+      const [adm, cfg, hero, fx] = await Promise.all([
         supabase.from("admin_users").select("user_id").eq("user_id", u.id).maybeSingle(),
         fetchReviewsSetting(supabase),
         supabase.from(SITE_MEDIA_TABLE).select("path").eq("slot", SITE_SLOT_ACCOUNT_HERO).maybeSingle(),
+        supabase.from(SITE_SETTINGS_TABLE).select("value").eq("key", SEASON_FX_KEY).maybeSingle(), // ZENORIA_COMPTE_SEASON_FX_V1
       ]);
       if (!alive) return;
       setIsAdmin(Boolean(adm && !adm.error && adm.data));
       setReviewsCfg(cfg);
       if (hero && !hero.error && hero.data && hero.data.path) setHeroUrl(getMediaUrl(hero.data.path, "site"));
+      // ZENORIA_COMPTE_SEASON_FX_V1 : ligne absente ou illisible -> réglage par défaut (automatique), comme sur l'accueil
+      setFxSetting(parseSeasonFxSetting(fx && !fx.error && fx.data ? fx.data.value : null));
     });
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_OUT" || !session) {
@@ -844,6 +854,16 @@ export default function Compte() {
               <p className="text-[11px] sm:text-sm text-[#705e68] truncate" title={user.email}>{user.email}</p>
             </div>
           </section>
+
+          {/* ZENORIA_COMPTE_SEASON_FX_V1 : meme reglage admin que l'accueil (Contenu du site > Vitrine & ambiance) */}
+          {nowMs !== null && (() => {
+            const fxSeason = pickFxSeason(fxSetting, resolveFxSeason(fxSetting, null, new Date(nowMs)));
+            return fxSeason ? (
+              <div aria-hidden="true" className="relative h-14 sm:h-16 overflow-hidden rounded-xl mb-6">
+                <SeasonFx season={fxSeason} />
+              </div>
+            ) : null;
+          })()}
 
           <div className="grid lg:grid-cols-[230px_1fr] gap-6">
             {/* MENU : à gauche sur ordinateur, onglets défilants sur mobile */}

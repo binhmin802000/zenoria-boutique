@@ -822,11 +822,9 @@ export default function Compte() {
               Photo entière calée à droite ; zone du bijou intacte ; fondu progressif vers la gauche ;
               fond champagne + halo chaud ; voile limité à la zone du texte.
               Image modifiable dans Admin › Contenu du site (emplacement account_hero). */}
-          {/* ZENORIA_COMPTE_LAYOUT_FIX_V1 : conteneur commun bandeau + zone du dessous, recouvert par l'animation */}
-          <div className="relative">
           <section
             data-testid="account-hero"
-            className="relative rounded-[1.5rem] overflow-hidden h-[220px] sm:h-[240px] flex items-center mb-6 border border-[#efe2d6]"
+            className="relative rounded-t-[1.5rem] overflow-hidden h-[244px] sm:h-[264px] flex items-center mb-0 border border-[#efe2d6]"
             style={{
               background: [
                 "radial-gradient(ellipse 34% 75% at 17% 45%, rgba(255,244,232,.85) 0%, rgba(255,244,232,0) 100%)",
@@ -849,6 +847,16 @@ export default function Compte() {
             <div aria-hidden="true" className="absolute inset-0 hidden sm:block" style={{ background: "linear-gradient(90deg, rgba(252,247,240,.6) 0%, rgba(250,243,234,.5) 22%, rgba(249,240,229,.18) 38%, rgba(249,240,229,0) 48%)" }} />
             <div aria-hidden="true" className="absolute inset-0 sm:hidden" style={{ background: "linear-gradient(90deg, rgba(252,247,240,.75) 0%, rgba(250,243,234,.55) 34%, rgba(249,240,229,.15) 50%, rgba(249,240,229,0) 58%)" }} />
 
+            {/* ZENORIA_COMPTE_HERO_FLUSH_V1 : animation saisonniere sur le bandeau (au-dessus de la photo, derriere le texte) ; meme reglage admin que l'accueil */}
+            {nowMs !== null && (() => {
+              const fxSeason = pickFxSeason(fxSetting, resolveFxSeason(fxSetting, null, new Date(nowMs)));
+              return fxSeason ? (
+                <div aria-hidden="true" className="absolute inset-0 pointer-events-none">
+                  <SeasonFx season={fxSeason} />
+                </div>
+              ) : null;
+            })()}
+
             <div className="relative pl-5 pr-3 sm:px-14 max-w-[56%] sm:max-w-md">
               <p className="text-[10px] sm:text-[11px] uppercase tracking-[.28em] text-[#b48a5a]">Mon compte</p>
               <h1 className="font-serif text-3xl sm:text-5xl text-[#4a3743] mt-1.5 leading-tight">Bonjour</h1>
@@ -857,25 +865,10 @@ export default function Compte() {
             </div>
           </section>
 
-          {/* ZENORIA_COMPTE_SEASON_FX_V1 : meme reglage admin que l'accueil (Contenu du site > Vitrine & ambiance) */}
-          {nowMs !== null && (() => {
-            const fxSeason = pickFxSeason(fxSetting, resolveFxSeason(fxSetting, null, new Date(nowMs)));
-            return fxSeason ? (
-              <>
-                {/* ZENORIA_COMPTE_LAYOUT_FIX_V1 : zone de respiration sous le bandeau, recouverte elle aussi par l'animation */}
-                <div aria-hidden="true" className="h-10 sm:h-12" />
-                <div aria-hidden="true" className="absolute inset-0 overflow-hidden rounded-[1.5rem] pointer-events-none">
-                  <SeasonFx season={fxSeason} />
-                </div>
-              </>
-            ) : null;
-          })()}
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-[230px_1fr] gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[230px_1fr] gap-0 lg:gap-6 -mt-px">
             {/* MENU : à gauche sur ordinateur, onglets défilants sur mobile. ZENORIA_COMPTE_LAYOUT_FIX_V1 : grid-cols-1 empeche la barre d'onglets d'elargir la page sur mobile */}
             <nav aria-label="Rubriques de mon compte" className="lg:self-start lg:sticky lg:top-24">
-              <div className="flex lg:flex-col gap-1.5 overflow-x-auto lg:overflow-visible rounded-full lg:rounded-2xl bg-white border border-[#eadfe4] p-1.5 lg:p-2.5">
+              <div className="flex lg:flex-col gap-1.5 overflow-x-auto lg:overflow-visible rounded-none lg:rounded-b-2xl bg-white border border-[#eadfe4] p-1.5 lg:p-2.5">
                 {visible.map((s) => {
                   const Icon = s.icon;
                   const on = current && current.id === s.id;
@@ -904,7 +897,7 @@ export default function Compte() {
             </nav>
 
             {/* CONTENU DE LA RUBRIQUE */}
-            <section data-testid={`account-section-${current ? current.id : "accueil"}`} className="rounded-2xl bg-white border border-[#eadfe4] p-6 min-h-[260px]">
+            <section data-testid={`account-section-${current ? current.id : "accueil"}`} className="rounded-t-none rounded-b-2xl bg-white border border-[#eadfe4] p-6 min-h-[260px] -mt-px lg:mt-0">
               {current && current.id === "accueil" && (
                 <div data-testid="section-accueil">
                   <h2 className="font-serif text-2xl text-[#412f3b] mb-4">Accueil</h2>

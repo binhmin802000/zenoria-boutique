@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import Head from "next/head";
-import { Plus, Pencil, Trash2, X, LogOut, Tag, Package, ArrowLeft, Upload, Film, Users, Sparkles, Gauge, Wrench, Activity, Settings, LogIn, Clock, Palette, ShoppingBag, ChevronDown, ChevronLeft, ChevronRight, ShieldCheck, CreditCard, FileText, SlidersHorizontal } from "lucide-react"; // ZENORIA_ADMIN_NAV_5A_V1 : icônes du groupe Réglages
+import { Plus, Pencil, Trash2, X, LogOut, Tag, Package, ArrowLeft, Upload, Film, Users, Sparkles, Gauge, Wrench, Activity, Settings, LogIn, Clock, Palette, ShoppingBag, ChevronDown, ChevronLeft, ChevronRight, ShieldCheck, CreditCard, FileText, SlidersHorizontal, Menu } from "lucide-react"; // ZENORIA_ADMIN_NAV_5A_V1 : icônes du groupe Réglages, Menu ajouté par ZENORIA_ADMIN_MOBILE_MENU_V1
 import { supabase, getMediaUrl, uploadProductMedia, deleteProductMedia } from "@/lib/supabase";
 import AuthModal from "@/components/AuthModal";
 import AdminConnections from "@/components/AdminConnections";
@@ -191,7 +191,8 @@ export default function AdminPage() {
   // ZENORIA_NAV_5H_V1 : menu replié par défaut ; il se déplie au survol du bord gauche et se replie au clic. « Épinglé » = gardé ouvert en permanence.
   const [sidebarPinned, setSidebarPinned] = useState(false);
   const [sidebarHover, setSidebarHover] = useState(false);
-  const sidebarCollapsed = !(sidebarPinned || sidebarHover); // vrai quand seules les icônes sont affichées
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // ZENORIA_ADMIN_MOBILE_MENU_V1 : menu mobile (hamburger), independant du survol desktop
+  const sidebarCollapsed = !(sidebarPinned || sidebarHover || mobileMenuOpen); // vrai quand seules les icônes sont affichées
   const sidebarTimer = useRef(null);
   const queueSidebarOpen = () => {
     if (sidebarTimer.current) clearTimeout(sidebarTimer.current);
@@ -205,6 +206,7 @@ export default function AdminPage() {
     if (sidebarTimer.current) clearTimeout(sidebarTimer.current);
     sidebarTimer.current = null;
     setSidebarHover(false);
+    setMobileMenuOpen(false); // ZENORIA_ADMIN_MOBILE_MENU_V1
   };
   useEffect(() => {
     const onKey = (e) => {
@@ -212,6 +214,7 @@ export default function AdminPage() {
         if (sidebarTimer.current) clearTimeout(sidebarTimer.current);
         sidebarTimer.current = null;
         setSidebarHover(false);
+        setMobileMenuOpen(false); // ZENORIA_ADMIN_MOBILE_MENU_V1
       }
     };
     window.addEventListener("keydown", onKey);
@@ -858,6 +861,16 @@ export default function AdminPage() {
             <a href="/" className="h-9 w-9 grid place-items-center rounded-full hover:bg-[#f0e6ea]" aria-label="Retour au site">
               <ArrowLeft size={18} />
             </a>
+            {/* ZENORIA_ADMIN_MOBILE_MENU_V1 : bouton hamburger, visible uniquement sur mobile */}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((v) => !v)}
+              data-testid="mobile-menu-toggle"
+              aria-label={mobileMenuOpen ? "Fermer le menu" : "Ouvrir le menu"}
+              className="h-9 w-9 grid place-items-center rounded-full hover:bg-[#f0e6ea] sm:hidden"
+            >
+              <Menu size={18} />
+            </button>
             <div className="font-serif text-xl">Administration Zenoria</div>
           </div>
           <div className="flex items-center gap-4">
@@ -873,9 +886,10 @@ export default function AdminPage() {
         <aside
           data-testid="admin-sidebar-accordion"
           aria-label="Navigation de l'administration"
-          className={`shrink-0 sticky top-20 self-start z-20 ${sidebarPinned ? "w-60" : "w-14"}`}
+          className={`${mobileMenuOpen ? "fixed inset-0 z-50 bg-black/40" : "hidden"} sm:block sm:static sm:bg-transparent sm:z-20 sm:shrink-0 sm:sticky sm:top-20 sm:self-start ${sidebarPinned ? "sm:w-60" : "sm:w-14"}`} /* ZENORIA_ADMIN_MOBILE_MENU_V1 */
           onMouseEnter={queueSidebarOpen}
           onMouseLeave={queueSidebarClose}
+          onClick={(e) => { if (e.target === e.currentTarget) setMobileMenuOpen(false); }} // ZENORIA_ADMIN_MOBILE_MENU_V1 : clic sur le fond (mobile) ferme le menu
         >
           {/* ZENORIA_NAV_5H_V1 : zone sensible le long du bord gauche de l'écran (le menu s'y déplie) */}
           {!sidebarPinned && (

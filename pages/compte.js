@@ -1,5 +1,5 @@
 // ZENORIA_ACCOUNT_STEP11_V1 · ZENORIA_ACCOUNT_STEP12_V1 · ZENORIA_ACCOUNT_HERO_B_V1 · ZENORIA_ACCOUNT_STEP13_V1 · ZENORIA_ACCOUNT_STEP14_V1
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react"; // ZENORIA_ACCOUNT_NEWS_V2 : useRef
 import AccountDataSection from "@/components/AccountDataSection";
 import TransferInstructions from "@/components/TransferInstructions"; // ZENORIA_STEP3C2_V1
 import { CatalogWriteUs } from "@/components/ProductParts"; // ZENORIA_FAV_STOCK_V1
@@ -611,7 +611,17 @@ export default function Compte() {
     reviews: newsReviews,
     reviewsEnabled: showReviews,
     section,
+    openOrderId: selectedOrderId, // ZENORIA_ACCOUNT_NEWS_V2 : ouvrir le detail d'une commande marque ses evenements comme vus
   });
+  // ZENORIA_ACCOUNT_NEWS_V2 : a l'arrivee sur « Mes commandes », s'il n'y a du nouveau que sur UNE commande, son detail s'ouvre directement.
+  // Une seule fois par arrivee (armee quand on quitte la rubrique) : revenir a la liste ensuite ne rouvre rien.
+  const autoOpenArmed = useRef(true);
+  useEffect(() => {
+    if (section !== "commandes") { autoOpenArmed.current = true; return; }
+    if (!autoOpenArmed.current || ordersLoading || !newsReady || !accountNews.ready) return;
+    autoOpenArmed.current = false;
+    if (selectedOrderId === null && accountNews.newsOrderIds.length === 1) setSelectedOrderId(accountNews.newsOrderIds[0]);
+  }, [section, ordersLoading, newsReady, accountNews.ready, accountNews.newsOrderIds, selectedOrderId]);
 
   // Chargement de « Mes avis », à l'ouverture de la rubrique
   const loadReviews = useCallback(async () => {
@@ -1037,7 +1047,15 @@ export default function Compte() {
                                 <div className="text-sm font-medium truncate">Commande {o.reference}</div>
                                 <div className="text-xs text-[#8b737e]">Passée le {formatDate(o.created_at)} · {o.items.length} bijou{o.items.length > 1 ? "x" : ""} · {formatOrderPrice(o.total)}</div>
                               </div>
-                              <span className={`rounded-full px-3 py-1 text-xs whitespace-nowrap ${customerOrderBadge(o).className}`}>{customerOrderBadge(o).label}</span>
+                              <span className="flex flex-col items-end gap-1 shrink-0"> {/* ZENORIA_ACCOUNT_NEWS_V2 */}
+                                {accountNews.orderNews[String(o.id)] ? (
+                                  <span data-testid={`order-row-new-${o.id}`} className="rounded-full bg-[#c0392b] text-white text-[10px] font-medium leading-none px-2 py-1">
+                                    Nouveau
+                                    <span className="sr-only"> : {accountNews.orderNews[String(o.id)]} nouveauté{accountNews.orderNews[String(o.id)] > 1 ? "s" : ""}</span>
+                                  </span>
+                                ) : null}
+                                <span className={`rounded-full px-3 py-1 text-xs whitespace-nowrap ${customerOrderBadge(o).className}`}>{customerOrderBadge(o).label}</span>
+                              </span>
                             </button>
                           ))}
                         </div>
@@ -1147,6 +1165,9 @@ export default function Compte() {
                                 <div className="flex justify-between gap-2 items-start">
                                   <div className="min-w-0">
                                     <div className="font-serif text-base leading-tight truncate">{reviewProductName(r)}</div>
+                                    {accountNews.avisHighlight.includes(String(r.id)) && ( // ZENORIA_ACCOUNT_NEWS_V2
+                                      <span data-testid={`review-new-${r.id}`} className="inline-block mt-1 rounded-full bg-[#c0392b] text-white text-[10px] font-medium leading-none px-2 py-1">Nouveau</span>
+                                    )}
                                     <div className="mt-1"><Stars value={r.rating} /></div>
                                   </div>
                                   <div className="shrink-0 flex flex-col items-end gap-1">

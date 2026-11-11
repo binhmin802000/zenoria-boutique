@@ -18,6 +18,7 @@ import MediaGuard from "@/components/MediaGuard";
 import SavoirFaire from "@/components/SavoirFaire";
 import BannerBar from "@/components/BannerBar";
 import SeasonFx from "@/components/SeasonFx";
+import { DEFAULT_NEW_BADGE, isNewProduct } from "@/lib/newBadge"; // ZENORIA_NEW_BADGE_V1
 import SeasonIcon from "@/components/SeasonIcon";
 import Mannequin from "@/components/Mannequin";
 import { RingVisual, AvailabilityBadge, PriceTag, PieceUniqueNotice, CartLineNotice, CatalogWriteUs } from "@/components/ProductParts"; // ZENORIA_STOCK_UI2_V1
@@ -356,7 +357,7 @@ export default function ZenoriaShop() {
       if (!active) return;
       const pieceMapAtLoad = pieceStateMap(pieceRes && !pieceRes.error ? pieceRes.data : null);
       const availMapAtLoad = availRes && !availRes.error && Array.isArray(availRes.data) ? stockStateMap(availRes.data) : null;
-      const loadedProducts = !prodErr && prodData ? prodData.map(mapDbProduct).map((p) => ({ ...p, pieceState: pieceMapAtLoad.get(p.id) || null, available: availMapAtLoad && availMapAtLoad.has(p.id) ? availMapAtLoad.get(p.id) : null })) : [];
+      const loadedProducts = !prodErr && prodData ? prodData.map((row) => ({ ...mapDbProduct(row), createdAt: row.created_at /* ZENORIA_NEW_BADGE_V1 */ })).map((p) => ({ ...p, pieceState: pieceMapAtLoad.get(p.id) || null, available: availMapAtLoad && availMapAtLoad.has(p.id) ? availMapAtLoad.get(p.id) : null })) : [];
       setProducts(loadedProducts);
       // ZENORIA_GRID_ORDER_V2 : ordre de la grille « Nos créations », calculé UNE fois ici. Réglage lu dans la ligne « grid_order » de site_settings (ZENORIA_GRID_ORDER_V3) :
       // aléatoire (renouvelé à 3 h, heure de Paris, tous les N jours) ou manuel ; ligne absente ou illisible : aléatoire, chaque jour. Bagues commandables d'abord. Les mises à jour de stock faites ensuite
@@ -1227,6 +1228,12 @@ export default function ZenoriaShop() {
                       {p.isUnique === true && (
                         <span className="pointer-events-none absolute left-4 bottom-4 z-10 inline-flex items-center gap-1 rounded-full bg-white/85 backdrop-blur px-3 py-1 text-xs text-[#8f6075]">
                           ✦ Pièce unique
+                        </span>
+                      )}
+                      {/* ZENORIA_NEW_BADGE_V1 : badge « Nouveauté » (bas à droite) pendant la durée réglée après la création du bijou ; jamais cliquable : le clic ouvre la fiche */}
+                      {isNewProduct(p.createdAt, DEFAULT_NEW_BADGE, Date.now()) && (
+                        <span data-testid="new-badge" className="pointer-events-none absolute right-4 bottom-4 z-10 inline-flex items-center rounded-full bg-[#8f6075] px-3 py-1 text-xs font-medium text-white shadow-sm">
+                          Nouveauté
                         </span>
                       )}
                       <FavoriteButton

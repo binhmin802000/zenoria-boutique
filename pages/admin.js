@@ -1103,7 +1103,7 @@ export default function AdminPage() {
             {productsLoading ? (
               <p className="text-sm text-[#8b737e]">Chargement des collections...</p>
             ) : (
-              <div className="bg-white rounded-2xl border border-[#eee2e5] overflow-hidden">
+              <div className="bg-white rounded-2xl border border-[#eee2e5] overflow-x-auto" data-testid="products-table-scroll"> {/* ZENORIA_ADMIN_BIJOUX_SCROLL_V1 : le tableau defile horizontalement sur mobile (avant : overflow-hidden coupait les colonnes Statut et Actions) */}
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-[#f5edf1] text-left text-[#8b737e]">

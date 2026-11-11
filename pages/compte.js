@@ -568,7 +568,17 @@ export default function Compte() {
       const transferOrders = enriched.filter((o) => o.payment_method === "transfer");
       const cardFinished = enriched.filter((o) => o.payment_method !== "transfer" && CUSTOMER_VISIBLE_STATUSES.includes(o.status));
       const cardUnfinished = enriched.filter((o) => o.payment_method !== "transfer" && !CUSTOMER_VISIBLE_STATUSES.includes(o.status)).slice(0, 5);
-      setOrders([...transferOrders, ...cardFinished, ...cardUnfinished]);
+      // ZENORIA_COMPTE_ORDERS_SORT_V1 : un seul tri sur la liste finale (les 3 blocs ci-dessus ne sont tries que chacun de leur cote).
+      // Plus recente d'abord ; a date egale ou invalide, id decroissant. Les regles de visibilite ci-dessus sont inchangees.
+      const byNewest = (a, b) => {
+        const ta = Date.parse(a.created_at);
+        const tb = Date.parse(b.created_at);
+        const da = Number.isNaN(ta) ? -Infinity : ta;
+        const db = Number.isNaN(tb) ? -Infinity : tb;
+        if (da !== db) return db > da ? 1 : -1;
+        return Number(b.id) - Number(a.id);
+      };
+      setOrders([...transferOrders, ...cardFinished, ...cardUnfinished].sort(byNewest));
       setOrdersLoading(false);
     })();
     return () => { alive = false; };

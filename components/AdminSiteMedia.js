@@ -27,7 +27,7 @@ import AdminSiteTexts from "@/components/AdminSiteTexts";
 import AdminCgv from "@/components/AdminCgv";
 import AdminAccordionSection from "@/components/AdminAccordionSection";
 // ZENORIA_CONFIG_C1B_V1 : section visée par un lien de l'onglet Accueil › Configuration
-import { peekSiteMediaTarget, clearSiteMediaTarget } from "@/lib/configOverview";
+import { peekSiteMediaTarget, peekSiteMediaCard, clearSiteMediaTarget } from "@/lib/configOverview"; // ZENORIA_CONFIG_LINKS_V1
 
 // ============================================================
 // ONGLET « CONTENU DU SITE » de l'administration (/admin)
@@ -116,15 +116,18 @@ function friendlyError(err) {
 
 export default function AdminSiteMedia() {
   const targetRef = useRef(peekSiteMediaTarget()); // ZENORIA_CONFIG_C1B_V1 : section à ouvrir (lien de Configuration), sinon « Vitrine & ambiance »
+  const cardRef = useRef(peekSiteMediaCard()); // ZENORIA_CONFIG_LINKS_V1 : carte visee dans la section (Ordre des bijoux, Badge Nouveaute), sinon la section
   const [openGroup, setOpenGroup] = useState(targetRef.current || "vitrine");
   const toggleGroup = (id) => setOpenGroup((prev) => (prev === id ? null : id));
   // ZENORIA_CONFIG_C1B_V1 : la cible n'est utilisée qu'à l'ouverture ; la page défile ensuite jusqu'à la section visée
   useEffect(() => {
     const target = targetRef.current;
+    const card = cardRef.current; // ZENORIA_CONFIG_LINKS_V1
     clearSiteMediaTarget();
     if (!target) return undefined;
     const timer = setTimeout(() => {
-      const el = document.querySelector('[data-config-anchor="' + target + '"]');
+      const cardEl = card ? document.querySelector('[data-config-card="' + card + '"]') : null; // ZENORIA_CONFIG_LINKS_V1
+      const el = cardEl || document.querySelector('[data-config-anchor="' + target + '"]');
       if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 250);
     return () => clearTimeout(timer);
@@ -353,8 +356,12 @@ export default function AdminSiteMedia() {
       >
         <AdminSeasonFx />
         <AdminRingAnimation />
-        <AdminGridOrder />
-        <AdminNewBadge />
+        <div data-config-card="grid_order" style={{ scrollMarginTop: 84 }}> {/* ZENORIA_CONFIG_LINKS_V1 */}
+          <AdminGridOrder />
+        </div>
+        <div data-config-card="new_badge" style={{ scrollMarginTop: 84 }}> {/* ZENORIA_CONFIG_LINKS_V1 */}
+          <AdminNewBadge />
+        </div>
       </AdminAccordionSection>
       </div>
 

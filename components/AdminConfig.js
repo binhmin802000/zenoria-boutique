@@ -70,22 +70,25 @@ export function ConfigView({ sections, loaded, loading, error, onGo, onReload, o
             <section key={s.id} className="rounded-2xl bg-white border border-[#eee2e5] px-4 py-3.5" data-testid={"config-card-" + s.id}>
               <div className="flex justify-between items-baseline gap-3">
                 <h2 className="font-serif text-lg">{s.title}</h2>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSiteMediaTarget(s.link.anchor || null); // ZENORIA_CONFIG_C1B_V1 : ouvre la bonne section de « Contenu du site »
-                    onGo(s.link.group, s.link.tab);
-                  }}
-                  data-testid={"config-link-" + s.id}
-                  title={s.link.where ? "Ouvre " + s.link.where : undefined}
-                  className="text-xs text-[#8f6075] underline shrink-0"
-                >
-                  Modifier ›
-                </button>
+                {s.link ? ( /* ZENORIA_CONFIG_LINKS_V1 : pas de lien quand il n'y a aucun ecran dedie (Newsletter) */
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSiteMediaTarget(s.link.anchor || null, s.link.card || null); // ZENORIA_CONFIG_C1B_V1 : ouvre la bonne section de « Contenu du site » ; ZENORIA_CONFIG_LINKS_V1 : et la carte visee
+                      onGo(s.link.group, s.link.tab);
+                      if (!s.link.anchor && typeof window !== "undefined" && typeof window.scrollTo === "function") window.scrollTo({ top: 0, behavior: "smooth" }); // ZENORIA_CONFIG_LINKS_V1 : sans repere, on arrive en haut de l'onglet (et non sur son pied de page)
+                    }}
+                    data-testid={"config-link-" + s.id}
+                    title={s.link.where ? "Ouvre " + s.link.where : undefined}
+                    className="text-xs text-[#8f6075] underline shrink-0"
+                  >
+                    Modifier ›
+                  </button>
+                ) : null}
               </div>
               <div className="text-[11px] text-[#8b737e] mb-1.5">
                 {s.keys}
-                {s.link.where ? " · " + s.link.where : ""}
+                {s.link && s.link.where ? " · " + s.link.where : ""}
               </div>
               {s.items.map((it) => (
                 <div

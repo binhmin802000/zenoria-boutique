@@ -18,7 +18,7 @@ import MediaGuard from "@/components/MediaGuard";
 import SavoirFaire from "@/components/SavoirFaire";
 import BannerBar from "@/components/BannerBar";
 import SeasonFx from "@/components/SeasonFx";
-import { DEFAULT_NEW_BADGE, isNewProduct } from "@/lib/newBadge"; // ZENORIA_NEW_BADGE_V1
+import { DEFAULT_NEW_BADGE, NEW_BADGE_KEY, parseNewBadgeSetting, isNewProduct } from "@/lib/newBadge"; // ZENORIA_NEW_BADGE_V1
 import SeasonIcon from "@/components/SeasonIcon";
 import Mannequin from "@/components/Mannequin";
 import { RingVisual, AvailabilityBadge, PriceTag, PieceUniqueNotice, CartLineNotice, CatalogWriteUs } from "@/components/ProductParts"; // ZENORIA_STOCK_UI2_V1
@@ -263,6 +263,7 @@ export default function ZenoriaShop() {
   const [paymentMethod, setPaymentMethod] = useState(null);
   const [paymentMethodsCfg, setPaymentMethodsCfg] = useState(DEFAULT_PAYMENT_METHODS);
   const [newsletterCfg, setNewsletterCfg] = useState(DEFAULT_NEWSLETTER); // ZENORIA_NEWSLETTER_V1
+  const [newBadgeCfg, setNewBadgeCfg] = useState(DEFAULT_NEW_BADGE); // ZENORIA_NEW_BADGE_V2 : reglage du badge Nouveaute (admin : Contenu du site > Vitrine & ambiance)
   const [paymentMethodsLoaded, setPaymentMethodsLoaded] = useState(false);
   useEffect(() => {
     if (!paymentMethodsLoaded) return; // quand les deux modes sont proposes, la cliente choisit elle-meme
@@ -350,7 +351,7 @@ export default function ZenoriaShop() {
         supabase.from("site_media").select("*"),
         optionalQuery(supabase.from("families").select("*").order("sort_order", { ascending: true })),
         optionalQuery(supabase.from("banners").select("*")),
-        optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").in("key", [SEASON_FX_KEY, SHIPPING_KEY, SITE_TEXTS_KEY, CONTACT_KEY, REVIEWS_KEY, PAYMENT_METHODS_KEY, GRID_ORDER_KEY, NEWSLETTER_KEY])),
+        optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").in("key", [SEASON_FX_KEY, SHIPPING_KEY, SITE_TEXTS_KEY, CONTACT_KEY, REVIEWS_KEY, PAYMENT_METHODS_KEY, GRID_ORDER_KEY, NEWSLETTER_KEY, NEW_BADGE_KEY])),
         optionalQuery(supabase.rpc("public_piece_states")), // ZENORIA_STOCK_UI2_V1
         optionalQuery(supabase.rpc("public_stock_states")), // ZENORIA_STOCK_UI3_V1
       ]);
@@ -403,6 +404,9 @@ export default function ZenoriaShop() {
       // ZENORIA_NEWSLETTER_V1 : ligne absente ou illisible -> désactivé (section masquée par défaut)
       const newsletterRow = settingRows.find((r) => r.key === NEWSLETTER_KEY) || null;
       setNewsletterCfg(parseNewsletterSetting(newsletterRow ? newsletterRow.value : null));
+      // ZENORIA_NEW_BADGE_V2 : ligne absente ou illisible -> valeurs par defaut (active, 14 jours)
+      const newBadgeRow = settingRows.find((r) => r.key === NEW_BADGE_KEY) || null;
+      setNewBadgeCfg(parseNewBadgeSetting(newBadgeRow ? newBadgeRow.value : null));
       setContactSettings(parseContactSetting(contactRow ? contactRow.value : null));
       // Textes : si la ligne n'existe pas encore, le site garde ses textes d'origine
       setSiteTexts(resolveSiteTexts(textRow ? textRow.value : null));
@@ -1231,7 +1235,7 @@ export default function ZenoriaShop() {
                         </span>
                       )}
                       {/* ZENORIA_NEW_BADGE_V1 : badge « Nouveauté » (bas à droite) pendant la durée réglée après la création du bijou ; jamais cliquable : le clic ouvre la fiche */}
-                      {isNewProduct(p.createdAt, DEFAULT_NEW_BADGE, Date.now()) && (
+                      {isNewProduct(p.createdAt, newBadgeCfg, Date.now()) && (
                         <span data-testid="new-badge" className="pointer-events-none absolute right-4 bottom-4 z-10 inline-flex items-center rounded-full bg-[#8f6075] px-3 py-1 text-xs font-medium text-white shadow-sm">
                           Nouveauté
                         </span>

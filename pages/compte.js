@@ -441,6 +441,7 @@ export default function Compte() {
     const [ordersVersion, setOrdersVersion] = useState(0);
   const [graceDays, setGraceDays] = useState(DEFAULT_BANK_TRANSFER.grace_days); // ZENORIA_AUTO_CANCEL_UI_V1 // ZENORIA_STEP3C2_V1 : recharge apres annulation
   const [logoutAsk, setLogoutAsk] = useState(false); // fenetre "garder le panier ?" a la deconnexion
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false); // ZENORIA_COMPTE_HEADER_AUTH_V1 : menu « Connecté(e) en tant que » de l'en-tête (PC)
   const [logoutCartCount, setLogoutCartCount] = useState(0);
   useEffect(() => {
     if (!logoutAsk) return undefined;
@@ -816,6 +817,13 @@ export default function Compte() {
         logoHref="/"
         showSearch={false}
         showAccount={true}
+        user={user} // ZENORIA_COMPTE_HEADER_AUTH_V1 : sans user, le menu mobile affichait « Connexion / Créer un compte » même connectée
+        isAdmin={isAdmin}
+        authLoading={user === undefined}
+        accountMenuOpen={accountMenuOpen}
+        onAccountClick={() => setAccountMenuOpen((v) => !v)}
+        onAccountMenuClose={() => setAccountMenuOpen(false)}
+        onLogout={() => { setAccountMenuOpen(false); logout(); }}
         onFavClick={() => go("favoris")}
         showCart={true}
         cartCount={headerCartCount}

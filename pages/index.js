@@ -498,6 +498,9 @@ export default function ZenoriaShop() {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
         if (params.get("paiement") === "succes") {
+          // ZENORIA_CART_CLEAR_STRIPE_V1 : on efface aussi le panier ENREGISTRE. Sinon la lecture du panier (faite apres le chargement du catalogue)
+          // remettrait le panier qui vient d'etre paye. Une visite normale n'est pas concernee (ce bloc ne s'execute qu'au retour de Stripe).
+          try { window.localStorage.removeItem(CART_STORAGE_KEY); } catch (e) { /* stockage indisponible */ }
       try { window.sessionStorage.removeItem(PENDING_CHECKOUT_KEY); } catch (e) { /* stockage indisponible */ } // ZENORIA_STOCK_UI3_V1
       clearCart();
       setPaymentConfirmationOpen(true);

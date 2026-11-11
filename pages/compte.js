@@ -17,6 +17,7 @@ import { fetchReviewsSetting, DEFAULT_REVIEWS, REVIEWS_RULES, REFUSAL_REASONS, r
 import { CONTACT_KEY, DEFAULT_CONTACT, parseContactSetting, buildMailtoLink, buildWhatsAppLink, buildSignalLink } from "@/lib/contactSettings";
 import { CUSTOMER_VISIBLE_STATUSES, TRACKING_STEPS, orderStatusInfo, formatOrderPrice, formatOrderReference } from "@/lib/orderDisplay";
 import { resolveFxSeason } from "@/lib/seasons"; // ZENORIA_COMPTE_SEASON_FX_V1
+import { useAccountNews } from "@/lib/useAccountNews"; // ZENORIA_ACCOUNT_NEWS_V1
 
 // ============================================================
 // PAGE « MON COMPTE » — /compte (espace cliente)
@@ -439,6 +440,10 @@ export default function Compte() {
   const [contactCfg, setContactCfg] = useState(DEFAULT_CONTACT);
   const [questionOpenId, setQuestionOpenId] = useState(null);
     const [ordersVersion, setOrdersVersion] = useState(0);
+  // ZENORIA_ACCOUNT_NEWS_V1 : donnees des nouveautes (null = lecture non reussie)
+  const [newsRows, setNewsRows] = useState(null);
+  const [newsReviews, setNewsReviews] = useState(null);
+  const [newsReady, setNewsReady] = useState(false);
   const [graceDays, setGraceDays] = useState(DEFAULT_BANK_TRANSFER.grace_days); // ZENORIA_AUTO_CANCEL_UI_V1 // ZENORIA_STEP3C2_V1 : recharge apres annulation
   const [logoutAsk, setLogoutAsk] = useState(false); // fenetre "garder le panier ?" a la deconnexion
   const [accountMenuOpen, setAccountMenuOpen] = useState(false); // ZENORIA_COMPTE_HEADER_AUTH_V1 : menu « Connecté(e) en tant que » de l'en-tête (PC)
@@ -541,17 +546,25 @@ export default function Compte() {
       const list = (ordersRes && !ordersRes.error && ordersRes.data) || [];
       if (list.length === 0) {
         setOrders([]);
+        // ZENORIA_ACCOUNT_NEWS_V1 : aucune commande -> point de depart vide (sauf si la lecture des commandes a echoue)
+        if (ordersRes && !ordersRes.error) { setNewsRows([]); setNewsReviews([]); }
+        setNewsReady(true);
         setOrdersLoading(false);
         return;
       }
       const ids = list.map((o) => o.id);
-      const [itemsRes, historyRes] = await Promise.all([
+      const [itemsRes, historyRes, newsReviewsRes] = await Promise.all([
         supabase.from("order_items").select("order_id, product_id, product_name, product_price, qty").in("order_id", ids),
-        supabase.from("order_status_history").select("order_id, status, changed_at").in("order_id", ids).in("status", ["paid", "shipped", "delivered"]),
+        supabase.rpc("customer_account_news"), // ZENORIA_ACCOUNT_NEWS_V1 : fonction SQL (une cliente ne lit pas order_status_history en direct : la RLS est reservee a l administration)
+        supabase.from("reviews").select("id, status, reply, reply_at").in("order_id", ids), // ZENORIA_ACCOUNT_NEWS_V1 : lecture legere pour la pastille de Mes avis
       ]);
       if (!alive) return;
       const items = (itemsRes && !itemsRes.error && itemsRes.data) || [];
       const history = (historyRes && !historyRes.error && historyRes.data) || [];
+      // ZENORIA_ACCOUNT_NEWS_V1 : null si la lecture a echoue (le point de depart n est alors pas pose)
+      setNewsRows(historyRes && !historyRes.error && Array.isArray(historyRes.data) ? historyRes.data : null);
+      setNewsReviews(newsReviewsRes && !newsReviewsRes.error && Array.isArray(newsReviewsRes.data) ? newsReviewsRes.data : null);
+      setNewsReady(true);
       const productIds = Array.from(new Set(items.map((i) => i.product_id).filter((v) => v !== null && v !== undefined)));
       const prodRes = productIds.length
         ? await supabase.from("products").select("id, slug, photos, active").in("id", productIds)
@@ -562,7 +575,7 @@ export default function Compte() {
       const enriched = list.map((o) => {
         const oItems = items.filter((i) => i.order_id === o.id).map((i) => ({ ...i, product: i.product_id ? productsById[i.product_id] || null : null }));
         const steps = {};
-        history.filter((h) => h.order_id === o.id).forEach((h) => { steps[h.status] = h.changed_at; });
+        history.filter((h) => h.order_id === o.id && h.status !== "cancelled").forEach((h) => { steps[h.status] = h.changed_at; }); // ZENORIA_ACCOUNT_NEWS_V1 : la fonction renvoie aussi les annulations (comptees dans la pastille, pas dans le suivi)
         return { ...o, reference: formatOrderReference(o), items: oItems, steps };
       });
       // ZENORIA_STEP3C2_V1 : virement (tout statut) + commandes carte abouties + 5 dernieres commandes carte non abouties
@@ -589,6 +602,16 @@ export default function Compte() {
   const canUseReviews = Boolean(user) && showReviews;
   const starsOnly = reviewsCfg.mode === "stars";
   const reviewableCount = reviewItems.filter((r) => r.can_review).length;
+  // ZENORIA_ACCOUNT_NEWS_V1 : pastille rouge de nouveautes (memoire dans le navigateur, par compte)
+  const accountNews = useAccountNews({
+    userId: user ? user.id : null,
+    ready: newsReady,
+    orders,
+    rows: newsRows,
+    reviews: newsReviews,
+    reviewsEnabled: showReviews,
+    section,
+  });
 
   // Chargement de « Mes avis », à l'ouverture de la rubrique
   const loadReviews = useCallback(async () => {
@@ -825,6 +848,7 @@ export default function Compte() {
         onAccountMenuClose={() => setAccountMenuOpen(false)}
         onLogout={() => { setAccountMenuOpen(false); logout(); }}
         onFavClick={() => go("favoris")}
+        accountBadge={accountNews.total} // ZENORIA_ACCOUNT_NEWS_V1
         showCart={true}
         cartCount={headerCartCount}
         onCartClick={() => window.location.assign("/#panier")}
@@ -900,6 +924,12 @@ export default function Compte() {
                       className={`shrink-0 flex items-center gap-2 whitespace-nowrap rounded-full lg:rounded-xl px-3.5 py-2 text-sm text-left ${on ? "bg-[#f5edf1] text-[#412f3b] font-medium" : "text-[#54434c] hover:bg-[#fbf7f9]"}`}
                     >
                       <Icon size={16} className="text-[#8f6075]" /> {s.label}
+                      {accountNews.tabLabels[s.id] ? (
+                        <span data-testid={`account-nav-badge-${s.id}`} className="inline-grid h-[18px] min-w-[18px] px-1 rounded-full bg-[#c0392b] text-white text-[10px] font-medium leading-none place-items-center">
+                          {accountNews.tabLabels[s.id]}
+                          <span className="sr-only"> nouveautés</span>
+                        </span>
+                      ) : null}
                     </button>
                   );
                 })}

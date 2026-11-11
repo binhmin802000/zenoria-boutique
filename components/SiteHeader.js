@@ -78,6 +78,7 @@ export default function SiteHeader({
   showSearch = false, // ZENORIA_REMOVE_SEARCH_V1 : loupe retiree de toutes les pages (reversible : remettre true)
   showAccount = true,
   showFavorites = true,
+  accountBadge = 0, // ZENORIA_ACCOUNT_NEWS_V1 : nombre de nouveautes non vues (pastille rouge), 0 = aucune
   menuOpen,
   onMenuToggle,
   onMenuClose,
@@ -98,6 +99,9 @@ export default function SiteHeader({
   logoHref = null,
 }) {
   const items = NAV.filter((n) => !n.seasonsOnly || showSeasons);
+  // ZENORIA_ACCOUNT_NEWS_V1 : pastille rouge sur le compte (plafonnee a 9+)
+  const newsCount = Math.max(0, Math.floor(Number(accountBadge) || 0));
+  const newsLabel = newsCount > 9 ? "9+" : String(newsCount);
   // Menu mobile : pilote par la page quand elle fournit onMenuToggle (accueil), sinon gere par le composant (quiz, pages simples)
   const [innerMenu, setInnerMenu] = useState(false);
   const controlled = typeof onMenuToggle === "function";
@@ -157,6 +161,12 @@ export default function SiteHeader({
             <Button variant="ghost" size="icon" onClick={onAccountClick}>
               <User size={19} />
             </Button>
+            {newsCount > 0 && (
+              <span data-testid="header-account-badge" className="pointer-events-none absolute left-0 top-0 h-[18px] min-w-[18px] px-1 rounded-full bg-[#c0392b] text-white text-[10px] font-medium leading-none grid place-items-center">
+                {newsLabel}
+                <span className="sr-only"> nouveautés dans votre compte</span>
+              </span>
+            )}
             {user && accountMenuOpen && (
               <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-[#eadfe4] p-4 z-50">
                 <div className="text-xs text-[#9a7384] uppercase tracking-widest mb-1">Connecté(e) en tant que</div>
@@ -168,6 +178,12 @@ export default function SiteHeader({
                 )}
                 <a href="/compte" data-testid="menu-account-link" className="flex items-center gap-2 text-sm text-[#8f6075] hover:text-[#71485b] mb-2">
                   <User size={16} /> Mon compte
+                  {newsCount > 0 && (
+                    <span data-testid="menu-account-badge" className="ml-1 inline-grid h-[18px] min-w-[18px] px-1 rounded-full bg-[#c0392b] text-white text-[10px] font-medium leading-none place-items-center align-middle">
+                      {newsLabel}
+                      <span className="sr-only"> nouveautés</span>
+                    </span>
+                  )}
                 </a>
                 <button onClick={onLogout} className="flex items-center gap-2 text-sm text-[#8f6075] hover:text-[#71485b]">
                   <LogOut size={16} /> Se déconnecter
@@ -196,8 +212,14 @@ export default function SiteHeader({
             )}
           </Button>
           )}
-          <Button variant="ghost" size="icon" className="lg:hidden" onClick={toggleMenu}>
+          <Button variant="ghost" size="icon" className="lg:hidden relative" onClick={toggleMenu}>
             {isOpen ? <X /> : <Menu />}
+            {showAccount && newsCount > 0 && (
+              <span data-testid="header-burger-badge" className="pointer-events-none absolute right-0 top-0 sm:hidden h-[18px] min-w-[18px] px-1 rounded-full bg-[#c0392b] text-white text-[10px] font-medium leading-none grid place-items-center">
+                {newsLabel}
+                <span className="sr-only"> nouveautés dans votre compte</span>
+              </span>
+            )}
           </Button>
         </div>
       </div>
@@ -228,6 +250,12 @@ export default function SiteHeader({
                 )}
                 <a href="/compte" className="text-left text-[#8f6075]">
                   Mon compte
+                  {newsCount > 0 && (
+                    <span data-testid="mobile-account-badge" className="ml-1 inline-grid h-[18px] min-w-[18px] px-1 rounded-full bg-[#c0392b] text-white text-[10px] font-medium leading-none place-items-center align-middle">
+                      {newsLabel}
+                      <span className="sr-only"> nouveautés</span>
+                    </span>
+                  )}
                 </a>
                 <button
                   onClick={() => {

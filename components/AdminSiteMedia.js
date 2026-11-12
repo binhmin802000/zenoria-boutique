@@ -20,6 +20,7 @@ import AdminSeasonFx from "@/components/AdminSeasonFx";
 import AdminRingAnimation from "@/components/AdminRingAnimation";
 import AdminGridOrder from "@/components/AdminGridOrder"; // ZENORIA_GRID_ORDER_V3
 import AdminNewBadge from "@/components/AdminNewBadge"; // ZENORIA_NEW_BADGE_V2
+import AdminAccountNewsCache from "@/components/AdminAccountNewsCache"; // ZENORIA_ACCOUNT_NEWS_BADGE_V1
 import AdminShipping from "@/components/AdminShipping";
 import AdminContact from "@/components/AdminContact";
 import AdminLegalPages from "@/components/AdminLegalPages"; // ZENORIA_STORY_REVIEWS_V1
@@ -350,7 +351,7 @@ export default function AdminSiteMedia() {
       <AdminAccordionSection
         id="vitrine"
         title="Vitrine & ambiance"
-        count={4}
+        count={5} // ZENORIA_ACCOUNT_NEWS_BADGE_V1 : 4 -> 5 (carte de la pastille de nouveautes)
         isOpen={openGroup === "vitrine"}
         onToggle={toggleGroup}
       >
@@ -361,6 +362,9 @@ export default function AdminSiteMedia() {
         </div>
         <div data-config-card="new_badge" style={{ scrollMarginTop: 84 }}> {/* ZENORIA_CONFIG_LINKS_V1 */}
           <AdminNewBadge />
+        </div>
+        <div data-config-card="account_news_cache" style={{ scrollMarginTop: 84 }}> {/* ZENORIA_ACCOUNT_NEWS_BADGE_V1 */}
+          <AdminAccountNewsCache />
         </div>
       </AdminAccordionSection>
       </div>

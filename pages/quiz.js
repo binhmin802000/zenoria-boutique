@@ -17,6 +17,8 @@ import { PieceUniqueNotice } from "@/components/ProductParts"; // ZENORIA_STOCK_
 import { getAvailability, pieceStateMap, maxQtyFor, stockStateMap } from "@/lib/shopUtils"; // ZENORIA_STOCK_UI3_V1
 import { CONTACT_KEY, DEFAULT_CONTACT, parseContactSetting } from "@/lib/contactSettings";
 import { SITE_SETTINGS_TABLE } from "@/lib/siteSettings";
+import { DEFAULT_ACCOUNT_NEWS_CACHE, fetchAccountNewsCacheSetting } from "@/lib/accountNewsCacheSettings"; // ZENORIA_ACCOUNT_NEWS_BADGE_V1
+import { useAccountNewsBadge } from "@/lib/useAccountNewsBadge"; // ZENORIA_ACCOUNT_NEWS_BADGE_V1
 import QuizCartDialog from "@/components/QuizCartDialog";
 import { visibleFamilies, buildSeasonCards, gradientFor } from "@/lib/seasons";
 import { pickPublicBanner, bannerKey, readClosedKeys, writeClosedKeys, getSessionStorage } from "@/lib/publicBanner";
@@ -64,6 +66,15 @@ export default function QuizPage() {
   const [closedBanners, setClosedBanners] = useState([]);
   const [nowMs, setNowMs] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  // ZENORIA_ACCOUNT_NEWS_BADGE_V1 : identifiant du compte (sans ecoute en temps reel, comme accountHref ci-dessous)
+  const [badgeUserId, setBadgeUserId] = useState(null);
+  const [accountNewsCacheCfg, setAccountNewsCacheCfg] = useState(DEFAULT_ACCOUNT_NEWS_CACHE);
+  const [accountNewsCacheReady, setAccountNewsCacheReady] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    fetchAccountNewsCacheSetting(supabase).then((s) => { if (alive) { setAccountNewsCacheCfg(s); setAccountNewsCacheReady(true); } });
+    return () => { alive = false; };
+  }, []);
   const [cartCount, setCartCount] = useState(0);
   const [favCount, setFavCount] = useState(0);
   const [accountHref, setAccountHref] = useState(DEFAULT_ACCOUNT_HREF);
@@ -141,6 +152,7 @@ export default function QuizPage() {
         const { data } = await supabase.auth.getSession();
         const u = data && data.session ? data.session.user : null;
         if (active) setAccountHref(u ? "/compte" : DEFAULT_ACCOUNT_HREF);
+        if (active) setBadgeUserId(u ? u.id : null); // ZENORIA_ACCOUNT_NEWS_BADGE_V1
         if (!u) return;
         const { data: row } = await supabase.from("admin_users").select("user_id").eq("user_id", u.id).maybeSingle();
         if (active) setIsAdmin(Boolean(row));
@@ -329,6 +341,7 @@ export default function QuizPage() {
         onFavClick={() => window.location.assign("/#favoris")}
         cartCount={cartCount}
         onCartClick={openCart}
+        accountBadge={useAccountNewsBadge({ userId: badgeUserId, settingsReady: accountNewsCacheReady, enabled: accountNewsCacheCfg.enabled, cacheMinutes: accountNewsCacheCfg.minutes })} // ZENORIA_ACCOUNT_NEWS_BADGE_V1
       />
 
       <main className="max-w-6xl mx-auto px-5 sm:px-6 py-10 md:py-14">

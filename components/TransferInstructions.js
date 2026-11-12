@@ -11,14 +11,9 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { formatOrderPrice, formatOrderReference } from "@/lib/orderDisplay";
+import { formatDueDateTime } from "@/lib/transferDueFormat"; // ZENORIA_TRANSFER_DUE_TIME_V1
 import { buildMailtoLink, buildWhatsAppLink } from "@/lib/contactSettings";
 
-const TIME_ZONE = "Europe/Paris";
-
-function formatDueDate(value) {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("fr-FR", { timeZone: TIME_ZONE });
-}
 function groupIban(iban) {
   return String(iban || "").replace(/(.{4})/g, "$1 ").trim();
 }
@@ -131,7 +126,7 @@ export default function TransferInstructions({ orderId, contactCfg }) {
       {data.bic && <CopyField label="BIC" value={data.bic} testId="transfer-copy-bic" />}
       <CopyField label="Référence à indiquer" value={reference} testId="transfer-copy-reference" />
       <div className="pt-2 mt-1 border-t border-[#f0e6ea] text-sm text-[#54434c]">
-        Merci d&apos;effectuer votre virement avant le <strong>{formatDueDate(data.due_at)}</strong>. Votre bijou vous est réservé jusqu&apos;à cette date. Au-delà, la commande sera annulée automatiquement.
+        Merci d&apos;effectuer votre virement avant le <strong>{formatDueDateTime(data.due_at)}</strong>. Votre bijou vous est réservé jusqu&apos;à cette date. Au-delà, la commande sera annulée automatiquement.
       </div>
     </div>
   );

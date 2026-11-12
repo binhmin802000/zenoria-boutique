@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { getMediaUrl } from "@/lib/supabase";
+import { getMediaUrl, getPosterUrl, getThumbUrl } from "@/lib/supabase"; // ZENORIA_HERO_MEDIA_V1
+import ThumbImage from "@/components/ThumbImage"; // ZENORIA_HERO_MEDIA_V1
+import HeroMedia from "@/components/HeroMedia"; // ZENORIA_HERO_MEDIA_V1
 import { formatPrice, getAvailability } from "@/lib/shopUtils";
 import { buildMailtoLink, buildWhatsAppLink } from "@/lib/contactSettings"; // ZENORIA_STOCK_UI_V1
 import { Pencil } from "lucide-react"; // ZENORIA_2C4_V1
@@ -19,21 +21,14 @@ export function RingVisual({ product, large = false, circle = false, video = fal
   const videoSrc = product.video ? getMediaUrl(product.video, product.slug) : null;
 
   if (circle && video && videoSrc && !imgError) {
+    // ZENORIA_HERO_MEDIA_V1 : image fixe + ▶ sur ecran etroit / economie de donnees (voir components/HeroMedia.js)
     return (
-      <div className="relative w-full h-full rounded-full overflow-hidden bg-black">
-        {/* ZENORIA_PRELOAD_VIDEOS_V1 : preload metadata pour reduire le cached egress sans bloquer l'autoplay */}
-        <video
-          key={videoSrc}
-          src={videoSrc}
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload="metadata"
-          onError={() => setImgError(true)}
-          className="w-full h-full object-cover object-center"
-        />
-      </div>
+      <HeroMedia
+        videoSrc={videoSrc}
+        posterSrc={getPosterUrl(product.video, product.slug)}
+        fallbackSrc={product.photos && product.photos[0] ? getThumbUrl(product.photos[0], product.slug) : null}
+        onVideoError={() => setImgError(true)}
+      />
     );
   }
 
@@ -53,13 +48,13 @@ export function RingVisual({ product, large = false, circle = false, video = fal
     }
     return (
       <div className={`relative overflow-hidden ${large ? "h-[360px]" : "h-56"}`}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={imgSrc}
-          alt={product.name}
-          onError={() => setImgError(true)}
-          className="w-full h-full object-cover object-center"
-        />
+        {/* ZENORIA_HERO_MEDIA_V1 : miniature dans la grille, photo complete pour les visuels agrandis */}
+        {large ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={imgSrc} alt={product.name} onError={() => setImgError(true)} className="w-full h-full object-cover object-center" />
+        ) : (
+          <ThumbImage path={product.photos[0]} slug={product.slug} alt={product.name} onFail={() => setImgError(true)} className="w-full h-full object-cover object-center" />
+        )}
       </div>
     );
   }

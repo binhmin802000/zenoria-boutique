@@ -8,7 +8,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { supabase, getMediaUrl } from "@/lib/supabase";
+import { supabase, getMediaUrl, getPosterUrl, getThumbUrl } from "@/lib/supabase"; // ZENORIA_HERO_MEDIA_V1
+import HeroMedia from "@/components/HeroMedia"; // ZENORIA_HERO_MEDIA_V1
 import ThumbImage from "@/components/ThumbImage"; // ZENORIA_MEDIA_VARIANTS_V1
 import { CONTACT_KEY, DEFAULT_CONTACT, parseContactSetting, buildMailtoLink, buildWhatsAppLink, buildSignalLink } from "@/lib/contactSettings";
 import { useSiteStatus } from "@/lib/siteStatus";
@@ -132,21 +133,14 @@ function HeroVideo({ path, fallback }) {
   if (failed || !src) {
     return fallback ? <RingVisual product={fallback} large circle video /> : null;
   }
+  // ZENORIA_HERO_MEDIA_V1 : image fixe + ▶ sur ecran etroit / economie de donnees (voir components/HeroMedia.js)
   return (
-    <div className="relative w-full h-full rounded-full overflow-hidden bg-black">
-      {/* ZENORIA_PRELOAD_VIDEOS_V1 : preload metadata pour reduire le cached egress sans bloquer l'autoplay */}
-      <video
-        key={src}
-        src={src}
-        autoPlay
-        loop
-        muted
-        playsInline
-        preload="metadata"
-        onError={() => setFailed(true)}
-        className="w-full h-full object-cover object-center"
-      />
-    </div>
+    <HeroMedia
+      videoSrc={src}
+      posterSrc={getPosterUrl(path, "site")}
+      fallbackSrc={fallback && fallback.photos && fallback.photos[0] ? getThumbUrl(fallback.photos[0], fallback.slug) : null}
+      onVideoError={() => setFailed(true)}
+    />
   );
 }
 // Petite vignette à taille variable, utilisée dans le panier

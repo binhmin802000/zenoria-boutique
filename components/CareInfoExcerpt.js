@@ -1,14 +1,14 @@
 // ZENORIA_CARE_INFO_V1
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { fetchCareInfoSetting, careInfoExcerpt } from "@/lib/careInfoSettings";
+import { fetchCareInfoSetting } from "@/lib/careInfoSettings";
 // ============================================================
-// Court encart « Entretien du bijou » affiche sous la description de la fiche produit (ProductSheet.js,
-// partage entre l'Accueil et le quiz). Lecture mise en cache en memoire du module (une seule fois par
-// session de navigation, le reglage ne change pas pendant la visite) pour ne pas refaire l'appel reseau
-// a chaque ouverture de fiche.
+// Lien « Entretien du bijou » affiche sous la description de la fiche produit (ProductSheet.js,
+// partage entre l'Accueil et le quiz) : un simple lien vers /entretien, sans extrait de texte.
+// Lecture mise en cache en memoire du module (une seule fois par session de navigation, le reglage
+// ne change pas pendant la visite) pour ne pas refaire l'appel reseau a chaque ouverture de fiche.
 // ============================================================
-let cached = null; // { enabled, excerpt } | null tant que non lu
+let cached = null; // { enabled } | null tant que non lu
 
 export default function CareInfoExcerpt() {
   const [state, setState] = useState(cached);
@@ -17,7 +17,7 @@ export default function CareInfoExcerpt() {
     if (cached) return;
     let alive = true;
     fetchCareInfoSetting(supabase).then((res) => {
-      const next = { enabled: res.enabled, excerpt: careInfoExcerpt(res.content) };
+      const next = { enabled: res.enabled };
       cached = next;
       if (alive) setState(next);
     });
@@ -26,12 +26,11 @@ export default function CareInfoExcerpt() {
     };
   }, []);
 
-  if (!state || !state.enabled || !state.excerpt) return null;
+  if (!state || !state.enabled) return null;
   return (
-    <p data-testid="product-sheet-care-info" className="text-sm leading-6 text-[#70656a] mt-4 rounded-xl bg-[#faf6f8] border border-[#eee2e5] px-4 py-3">
-      {state.excerpt}{" "}
-      <a href="/entretien" data-testid="product-sheet-care-info-link" className="underline underline-offset-2 text-[#855a6f] whitespace-nowrap">
-        En savoir plus
+    <p data-testid="product-sheet-care-info" className="mt-4">
+      <a href="/entretien" data-testid="product-sheet-care-info-link" className="text-sm text-[#855a6f] underline underline-offset-2 hover:text-[#6f4a5c]">
+        Entretien du bijou
       </a>
     </p>
   );

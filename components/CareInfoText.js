@@ -18,7 +18,7 @@ export default function CareInfoText({ content, className = "", ...rest }) {
               {segments.map((seg, sIdx) => {
                 let node = seg.text;
                 if (seg.underline) node = <u key="u">{node}</u>;
-                if (seg.bold) node = <strong key="b" className="font-medium">{node}</strong>;
+                if (seg.bold) node = <strong key="b" className="font-bold">{node}</strong>; // ZENORIA_CARE_INFO_BOLD_FIX_V1
                 return <React.Fragment key={sIdx}>{node}</React.Fragment>;
               })}
             </React.Fragment>

@@ -88,6 +88,7 @@ export default function Footer({ seasons = [], seasonsOnClick = null, logoMode =
               <span className="text-[10px] uppercase tracking-wide rounded-full border border-white/20 px-2 py-0.5">Bientôt</span>
             </p>
             <p><a href="/cgv" className="hover:text-white underline-offset-2 hover:underline">Conditions générales de vente</a></p>
+            <p><a href="/entretien" className="hover:text-white underline-offset-2 hover:underline">Entretien du bijou</a></p> {/* ZENORIA_CARE_INFO_V1 */}
             <p><a href="/mentions-legales" className="hover:text-white underline-offset-2 hover:underline">Mentions légales</a></p>
             <p><a href="/confidentialite" className="hover:text-white underline-offset-2 hover:underline">Politique de confidentialité</a></p>
             {reviewsCfg.enabled && <p><a href="/charte-des-avis" className="hover:text-white underline-offset-2 hover:underline">Charte des avis</a></p>}

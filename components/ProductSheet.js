@@ -5,6 +5,7 @@ import { ProductMedia, PriceTag, AvailabilityBadge, UnavailableNotice } from "@/
 import { getAvailability } from "@/lib/shopUtils"; // ZENORIA_STOCK_UI_V1
 import FavoriteButton from "@/components/FavoriteButton";
 import useModalFocus from "@/lib/useModalFocus";
+import CareInfoExcerpt from "@/components/CareInfoExcerpt"; // ZENORIA_CARE_INFO_V1
 
 // ============================================================================
 // FICHE BAGUE — la fenêtre qui s'ouvre sur une bague (galerie, vidéo, prix, disponibilité, texte, « Ajouter au panier »).
@@ -70,6 +71,7 @@ export default function ProductSheet({ product, initialMode = "video", label = "
                 <p className="text-[15px] leading-7 text-[#54434c] mt-5">{product.pitch}</p>
               )}
               <p className="text-sm leading-6 text-[#70656a] mt-3 italic">{product.energy}</p>
+              <CareInfoExcerpt /> {/* ZENORIA_CARE_INFO_V1 */}
               {uniqueNotice}
               {extra}
 

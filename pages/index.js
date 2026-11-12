@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase, getMediaUrl } from "@/lib/supabase";
+import ThumbImage from "@/components/ThumbImage"; // ZENORIA_MEDIA_VARIANTS_V1
 import { CONTACT_KEY, DEFAULT_CONTACT, parseContactSetting, buildMailtoLink, buildWhatsAppLink, buildSignalLink } from "@/lib/contactSettings";
 import { useSiteStatus } from "@/lib/siteStatus";
 import { formatReturnAt } from "@/lib/maintenance";
@@ -156,7 +157,7 @@ function CartThumb({ product, size = "h-20 w-20" }) {
     return (
       <div className={`${size} shrink-0 rounded-xl overflow-hidden bg-[#f5edf1]`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={src} alt={product.name} onError={() => setImgError(true)} className="w-full h-full object-cover object-center" />
+        <ThumbImage /* ZENORIA_MEDIA_VARIANTS_V1 */ path={product.photos[0]} slug={product.slug} alt={product.name} onFail={() => setImgError(true)} className="w-full h-full object-cover object-center" />
       </div>
     );
   }

@@ -12,6 +12,7 @@ import SeasonFx from "@/components/SeasonFx"; // ZENORIA_COMPTE_SEASON_FX_V1
 import { Home, Package, Star, Heart, UserCog, ShieldCheck, LogOut, Truck, Hand as HandIcon, ChevronLeft, FileDown, AlertTriangle } from "lucide-react"; // ZENORIA_INVOICE_STEP3_V1
 import { supabase as supabaseForInvoice } from "@/lib/supabase"; // ZENORIA_INVOICE_STEP3_V1
 import { supabase, getMediaUrl, SITE_MEDIA_TABLE, SITE_SLOT_ACCOUNT_HERO } from "@/lib/supabase";
+import ThumbImage from "@/components/ThumbImage"; // ZENORIA_MEDIA_VARIANTS_V1
 import { SITE_SETTINGS_TABLE, SEASON_FX_KEY, parseSeasonFxSetting, pickFxSeason } from "@/lib/siteSettings"; // ZENORIA_COMPTE_SEASON_FX_V1
 import { fetchReviewsSetting, DEFAULT_REVIEWS, REVIEWS_RULES, REFUSAL_REASONS, reviewErrorMessage } from "@/lib/reviewsSettings";
 import { CONTACT_KEY, DEFAULT_CONTACT, parseContactSetting, buildMailtoLink, buildWhatsAppLink, buildSignalLink } from "@/lib/contactSettings";
@@ -103,7 +104,7 @@ function ProductThumb({ item }) {
   if (src && !err) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={src} alt="" onError={() => setErr(true)} className="h-14 w-14 rounded-xl object-cover shrink-0 bg-[#f5edf1]" />
+      <ThumbImage /* ZENORIA_MEDIA_VARIANTS_V1 */ path={photo} slug={item.product.slug} alt="" onFail={() => setErr(true)} className="h-14 w-14 rounded-xl object-cover shrink-0 bg-[#f5edf1]" />
     );
   }
   return <div className="h-14 w-14 rounded-xl shrink-0 bg-[#f5edf1] grid place-items-center text-[#c9b6be] text-[10px] text-center px-1">{item.product_name || "Bijou"}</div>;
@@ -114,7 +115,7 @@ function FavThumb({ product, size = "h-16 w-16" }) {
   const src = product.photos && product.photos[0] ? getMediaUrl(product.photos[0], product.slug) : null;
   if (src && !err) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={src} alt="" onError={() => setErr(true)} className={`${size} rounded-xl object-cover shrink-0 bg-[#f5edf1]`} />;
+    return <ThumbImage path={product.photos[0]} slug={product.slug} alt="" onFail={() => setErr(true)} className={`${size} rounded-xl object-cover shrink-0 bg-[#f5edf1]`} />; // ZENORIA_MEDIA_VARIANTS_V1
   }
   return <div className={`${size} rounded-xl shrink-0 bg-[#f5edf1] grid place-items-center text-[#c9b6be] text-[10px] text-center px-1`}>{product.name}</div>;
 }

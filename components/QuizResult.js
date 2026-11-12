@@ -3,6 +3,7 @@ import { Info, RefreshCw, ArrowRight } from "lucide-react";
 import Mannequin from "@/components/Mannequin";
 import SeasonIcon from "@/components/SeasonIcon";
 import { getMediaUrl } from "@/lib/supabase";
+import ThumbImage from "@/components/ThumbImage"; // ZENORIA_MEDIA_VARIANTS_V1
 import { HAIR, EYES, SKIN, SEASON_WHY, traitLabels, borderlineNote } from "@/lib/colorEngine";
 import { OCCASIONS, AVOID, outfitFor, occasionByKey, flatteringGarment } from "@/lib/quizOutfits";
 import { getAvailability } from "@/lib/shopUtils"; // ZENORIA_STOCK_UI_V1
@@ -24,7 +25,7 @@ function RingThumb({ product }) {
     return (
       <div className="relative h-48 sm:h-full min-h-[150px] overflow-hidden bg-[#f5edf1]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={src} alt={product.name} onError={() => setFailed(true)} className="absolute inset-0 w-full h-full object-cover object-center" />
+        <ThumbImage /* ZENORIA_MEDIA_VARIANTS_V1 */ path={product.photos[0]} slug={product.slug} alt={product.name} onFail={() => setFailed(true)} className="absolute inset-0 w-full h-full object-cover object-center" />
       </div>
     );
   }

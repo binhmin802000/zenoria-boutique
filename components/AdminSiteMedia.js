@@ -22,6 +22,7 @@ import AdminGridOrder from "@/components/AdminGridOrder"; // ZENORIA_GRID_ORDER_
 import AdminNewBadge from "@/components/AdminNewBadge"; // ZENORIA_NEW_BADGE_V2
 import AdminAccountNewsCache from "@/components/AdminAccountNewsCache"; // ZENORIA_ACCOUNT_NEWS_BADGE_V1
 import AdminCareInfo from "@/components/AdminCareInfo"; // ZENORIA_CARE_INFO_V1
+import AdminMediaVariants from "@/components/AdminMediaVariants"; // ZENORIA_MEDIA_VARIANTS_V1
 import AdminShipping from "@/components/AdminShipping";
 import AdminContact from "@/components/AdminContact";
 import AdminLegalPages from "@/components/AdminLegalPages"; // ZENORIA_STORY_REVIEWS_V1
@@ -352,7 +353,7 @@ export default function AdminSiteMedia() {
       <AdminAccordionSection
         id="vitrine"
         title="Vitrine & ambiance"
-        count={6} // ZENORIA_CARE_INFO_V1 : 5 -> 6 (carte Entretien du bijou)
+        count={7} // ZENORIA_MEDIA_VARIANTS_V1 : 6 -> 7 (carte Miniatures des bijoux)
         isOpen={openGroup === "vitrine"}
         onToggle={toggleGroup}
       >
@@ -369,6 +370,9 @@ export default function AdminSiteMedia() {
         </div>
         <div data-config-card="care_info" style={{ scrollMarginTop: 84 }}> {/* ZENORIA_CARE_INFO_V1 */}
           <AdminCareInfo />
+        </div>
+        <div data-config-card="media_variants" style={{ scrollMarginTop: 84 }}> {/* ZENORIA_MEDIA_VARIANTS_V1 */}
+          <AdminMediaVariants />
         </div>
       </AdminAccordionSection>
       </div>

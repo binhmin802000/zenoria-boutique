@@ -20,6 +20,7 @@ import AdminSeasonFx from "@/components/AdminSeasonFx";
 import AdminRingAnimation from "@/components/AdminRingAnimation";
 import AdminGridOrder from "@/components/AdminGridOrder"; // ZENORIA_GRID_ORDER_V3
 import AdminNewBadge from "@/components/AdminNewBadge"; // ZENORIA_NEW_BADGE_V2
+import AdminHeroMobile from "@/components/AdminHeroMobile"; // ZENORIA_HERO_MOBILE_V1
 import AdminAccountNewsCache from "@/components/AdminAccountNewsCache"; // ZENORIA_ACCOUNT_NEWS_BADGE_V1
 import AdminCareInfo from "@/components/AdminCareInfo"; // ZENORIA_CARE_INFO_V1
 import AdminMediaVariants from "@/components/AdminMediaVariants"; // ZENORIA_MEDIA_VARIANTS_V1
@@ -353,7 +354,7 @@ export default function AdminSiteMedia() {
       <AdminAccordionSection
         id="vitrine"
         title="Vitrine & ambiance"
-        count={7} // ZENORIA_MEDIA_VARIANTS_V1 : 6 -> 7 (carte Miniatures des bijoux)
+        count={8} // ZENORIA_HERO_MOBILE_V1 : 7 -> 8 (carte Vidéo d'accueil sur mobile)
         isOpen={openGroup === "vitrine"}
         onToggle={toggleGroup}
       >
@@ -364,6 +365,9 @@ export default function AdminSiteMedia() {
         </div>
         <div data-config-card="new_badge" style={{ scrollMarginTop: 84 }}> {/* ZENORIA_CONFIG_LINKS_V1 */}
           <AdminNewBadge />
+        </div>
+        <div data-config-card="hero_mobile" style={{ scrollMarginTop: 84 }}> {/* ZENORIA_HERO_MOBILE_V1 */}
+          <AdminHeroMobile />
         </div>
         <div data-config-card="account_news_cache" style={{ scrollMarginTop: 84 }}> {/* ZENORIA_ACCOUNT_NEWS_BADGE_V1 */}
           <AdminAccountNewsCache />

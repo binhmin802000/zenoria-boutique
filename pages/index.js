@@ -22,6 +22,7 @@ import BannerBar from "@/components/BannerBar";
 import SeasonFx from "@/components/SeasonFx";
 import { DEFAULT_NEW_BADGE, NEW_BADGE_KEY, parseNewBadgeSetting, isNewProduct } from "@/lib/newBadge"; // ZENORIA_NEW_BADGE_V1
 import { DEFAULT_ACCOUNT_NEWS_CACHE, ACCOUNT_NEWS_CACHE_KEY, parseAccountNewsCacheSetting } from "@/lib/accountNewsCacheSettings"; // ZENORIA_ACCOUNT_NEWS_BADGE_V1
+import { DEFAULT_HERO_MOBILE, HERO_MOBILE_KEY, parseHeroMobileSetting } from "@/lib/heroMobileSettings"; // ZENORIA_HERO_MOBILE_V1
 import { useAccountNewsBadge } from "@/lib/useAccountNewsBadge"; // ZENORIA_ACCOUNT_NEWS_BADGE_V1
 import SeasonIcon from "@/components/SeasonIcon";
 import Mannequin from "@/components/Mannequin";
@@ -127,7 +128,7 @@ function pickCartDensity(lineCount, viewportHeight, extraHeight = 0) {
 // onglet Familles de /admin). Leur mise en forme est dans lib/seasons.js.
 // Vidéo d'accueil dédiée (onglet « Contenu du site » de /admin) : en boucle, sans le son, dans le cercle de la bannière.
 // Si le fichier ne se charge pas, on revient à la vidéo de la première collection.
-function HeroVideo({ path, fallback }) {
+function HeroVideo({ path, fallback, mobileAutoplay = false }) {
   const [failed, setFailed] = useState(false);
   const src = getMediaUrl(path, "site");
   if (failed || !src) {
@@ -140,6 +141,7 @@ function HeroVideo({ path, fallback }) {
       posterSrc={getPosterUrl(path, "site")}
       fallbackSrc={fallback && fallback.photos && fallback.photos[0] ? getThumbUrl(fallback.photos[0], fallback.slug) : null}
       onVideoError={() => setFailed(true)}
+      mobileAutoplay={mobileAutoplay} /* ZENORIA_HERO_MOBILE_V1 */
     />
   );
 }
@@ -261,6 +263,7 @@ export default function ZenoriaShop() {
   const [paymentMethodsCfg, setPaymentMethodsCfg] = useState(DEFAULT_PAYMENT_METHODS);
   const [newsletterCfg, setNewsletterCfg] = useState(DEFAULT_NEWSLETTER); // ZENORIA_NEWSLETTER_V1
   const [newBadgeCfg, setNewBadgeCfg] = useState(DEFAULT_NEW_BADGE); // ZENORIA_NEW_BADGE_V2 : reglage du badge Nouveaute (admin : Contenu du site > Vitrine & ambiance)
+  const [heroMobileCfg, setHeroMobileCfg] = useState(DEFAULT_HERO_MOBILE); // ZENORIA_HERO_MOBILE_V1 : vidéo d'accueil sur mobile (admin : Contenu du site > Vitrine & ambiance)
   const [accountNewsCacheCfg, setAccountNewsCacheCfg] = useState(DEFAULT_ACCOUNT_NEWS_CACHE); // ZENORIA_ACCOUNT_NEWS_BADGE_V1
   const [paymentMethodsLoaded, setPaymentMethodsLoaded] = useState(false);
   useEffect(() => {
@@ -349,7 +352,7 @@ export default function ZenoriaShop() {
         supabase.from("site_media").select("*"),
         optionalQuery(supabase.from("families").select("*").order("sort_order", { ascending: true })),
         optionalQuery(supabase.from("banners").select("*")),
-        optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").in("key", [SEASON_FX_KEY, SHIPPING_KEY, SITE_TEXTS_KEY, CONTACT_KEY, REVIEWS_KEY, PAYMENT_METHODS_KEY, GRID_ORDER_KEY, NEWSLETTER_KEY, NEW_BADGE_KEY, ACCOUNT_NEWS_CACHE_KEY])), // ZENORIA_ACCOUNT_NEWS_BADGE_V1
+        optionalQuery(supabase.from(SITE_SETTINGS_TABLE).select("key, value").in("key", [SEASON_FX_KEY, SHIPPING_KEY, SITE_TEXTS_KEY, CONTACT_KEY, REVIEWS_KEY, PAYMENT_METHODS_KEY, GRID_ORDER_KEY, NEWSLETTER_KEY, NEW_BADGE_KEY, ACCOUNT_NEWS_CACHE_KEY, HERO_MOBILE_KEY])), // ZENORIA_ACCOUNT_NEWS_BADGE_V1
         optionalQuery(supabase.rpc("public_piece_states")), // ZENORIA_STOCK_UI2_V1
         optionalQuery(supabase.rpc("public_stock_states")), // ZENORIA_STOCK_UI3_V1
       ]);
@@ -405,6 +408,9 @@ export default function ZenoriaShop() {
       // ZENORIA_NEW_BADGE_V2 : ligne absente ou illisible -> valeurs par defaut (active, 14 jours)
       const newBadgeRow = settingRows.find((r) => r.key === NEW_BADGE_KEY) || null;
       setNewBadgeCfg(parseNewBadgeSetting(newBadgeRow ? newBadgeRow.value : null));
+      // ZENORIA_HERO_MOBILE_V1 : ligne absente ou illisible -> image fixe + ▶ sur mobile (comportement par défaut, le plus économique)
+      const heroMobileRow = settingRows.find((r) => r.key === HERO_MOBILE_KEY) || null;
+      setHeroMobileCfg(parseHeroMobileSetting(heroMobileRow ? heroMobileRow.value : null));
       // ZENORIA_ACCOUNT_NEWS_BADGE_V1 : ligne absente ou illisible -> valeurs par defaut (actif, 15 min)
       const accountNewsCacheRow = settingRows.find((r) => r.key === ACCOUNT_NEWS_CACHE_KEY) || null;
       setAccountNewsCacheCfg(parseAccountNewsCacheSetting(accountNewsCacheRow ? accountNewsCacheRow.value : null));
@@ -1104,7 +1110,7 @@ export default function ZenoriaShop() {
             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8 }} className="relative flex justify-center">
               <div className="w-[420px] max-w-[88vw] aspect-square rounded-full bg-white/35 border border-white shadow-[0_30px_100px_rgba(91,54,77,.2)] overflow-hidden relative">
                 {siteMedia.hero_video && siteMedia.hero_video.path ? (
-                  <HeroVideo path={siteMedia.hero_video.path} fallback={products[0]} />
+                  <HeroVideo path={siteMedia.hero_video.path} fallback={products[0]} mobileAutoplay={heroMobileCfg.autoplay === true} /* ZENORIA_HERO_MOBILE_V1 */ />
                 ) : (
                   products[0] && <RingVisual product={products[0]} large circle video />
                 )}

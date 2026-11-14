@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { KeyRound, LogOut, Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH, PASSWORD_HELP, validatePasswordConfirmation } from "@/lib/passwordPolicy"; // ZENORIA_PASSWORD_POLICY_V1
 
 // ============================================================
 // « PROFIL & SÉCURITÉ » — e-mail (lecture seule), changement de mot
@@ -28,12 +29,9 @@ export default function AccountProfileSection({ user }) {
     setPasswordError("");
     setPasswordSuccess("");
 
-    if (newPassword.length < 8) {
-      setPasswordError("Le mot de passe doit contenir au moins 8 caractères.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setPasswordError("Les deux mots de passe ne correspondent pas.");
+    const passwordCheck = validatePasswordConfirmation(newPassword, confirmPassword); // ZENORIA_PASSWORD_POLICY_V1
+    if (!passwordCheck.valid) {
+      setPasswordError(passwordCheck.message);
       return;
     }
 
@@ -78,7 +76,7 @@ export default function AccountProfileSection({ user }) {
         <h3 className="font-serif text-lg text-[#412f3b] mb-1 flex items-center gap-2">
           <KeyRound size={16} className="text-[#8f6075]" /> Changer mon mot de passe
         </h3>
-        <p className="text-sm text-[#70656a] mb-3">Au moins 8 caractères.</p>
+        <p className="text-sm text-[#70656a] mb-3">{PASSWORD_HELP}</p>
 
         {passwordError && <div role="alert" className="mb-3 rounded-xl bg-red-50 text-red-600 px-3 py-2 text-sm">{passwordError}</div>}
         {passwordSuccess && <div className="mb-3 rounded-xl bg-emerald-50 text-emerald-700 px-3 py-2 text-sm">{passwordSuccess}</div>}
@@ -88,6 +86,8 @@ export default function AccountProfileSection({ user }) {
             <input
             type={showNewPassword ? "text" : "password"}
             value={newPassword}
+            minLength={PASSWORD_MIN_LENGTH}
+            maxLength={PASSWORD_MAX_LENGTH}
             onChange={(e) => setNewPassword(e.target.value)}
             placeholder="Nouveau mot de passe"
             data-testid="new-password-input"
@@ -108,6 +108,7 @@ export default function AccountProfileSection({ user }) {
             <input
             type={showConfirmPassword ? "text" : "password"}
             value={confirmPassword}
+            maxLength={PASSWORD_MAX_LENGTH}
             onChange={(e) => setConfirmPassword(e.target.value)}
             placeholder="Confirmer le nouveau mot de passe"
             data-testid="confirm-password-input"

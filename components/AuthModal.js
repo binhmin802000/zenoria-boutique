@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
+import { PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH, PASSWORD_HELP, validatePasswordConfirmation } from "@/lib/passwordPolicy"; // ZENORIA_PASSWORD_POLICY_V1
 
 // Traduit les messages d'erreur Supabase en français.
 function translateError(message) {
@@ -10,7 +11,7 @@ function translateError(message) {
   const m = message.toLowerCase();
   if (m.includes("invalid login credentials")) return "E-mail ou mot de passe incorrect.";
   if (m.includes("user already registered")) return "Un compte existe déjà avec cet e-mail.";
-  if (m.includes("password should be at least")) return "Le mot de passe doit contenir au moins 6 caractères.";
+  if (m.includes("password should be at least")) return `Le mot de passe doit contenir au moins ${PASSWORD_MIN_LENGTH} caractères.`; // ZENORIA_PASSWORD_POLICY_V1
   if (m.includes("unable to validate email") || m.includes("invalid email")) return "Adresse e-mail invalide.";
   if (m.includes("rate limit")) return "Trop de tentatives. Réessayez dans quelques minutes.";
   return "Une erreur est survenue. Merci de réessayer.";
@@ -70,8 +71,9 @@ export default function AuthModal({ open, onClose, initialMode = "login" }) {
     e.preventDefault();
     setError("");
     setInfo("");
-    if (password !== confirmPassword) {
-      setError("Les mots de passe ne correspondent pas.");
+    const passwordCheck = validatePasswordConfirmation(password, confirmPassword); // ZENORIA_PASSWORD_POLICY_V1
+    if (!passwordCheck.valid) {
+      setError(passwordCheck.message);
       return;
     }
     setLoading(true);
@@ -103,8 +105,9 @@ export default function AuthModal({ open, onClose, initialMode = "login" }) {
     e.preventDefault();
     setError("");
     setInfo("");
-    if (password !== confirmPassword) {
-      setError("Les mots de passe ne correspondent pas.");
+    const passwordCheck = validatePasswordConfirmation(password, confirmPassword); // ZENORIA_PASSWORD_POLICY_V1
+    if (!passwordCheck.valid) {
+      setError(passwordCheck.message);
       return;
     }
     setLoading(true);
@@ -221,7 +224,10 @@ export default function AuthModal({ open, onClose, initialMode = "login" }) {
                   <input
                     type={showPassword ? "text" : "password"}
                     required
-                    placeholder="Mot de passe (6 caractères min.)"
+                    placeholder="Nouveau mot de passe"
+                    minLength={PASSWORD_MIN_LENGTH}
+                    maxLength={PASSWORD_MAX_LENGTH}
+                    aria-describedby="signup-password-help"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full rounded-full border border-[#eadfe4] pl-11 pr-11 py-3 outline-none focus:border-[#8f6075]"
@@ -234,6 +240,7 @@ export default function AuthModal({ open, onClose, initialMode = "login" }) {
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
+                <p id="signup-password-help" className="text-xs text-[#70656a]">{PASSWORD_HELP}</p>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-[#9a7384]" size={18} />
                   <input
@@ -293,7 +300,10 @@ export default function AuthModal({ open, onClose, initialMode = "login" }) {
                   <input
                     type={showPassword ? "text" : "password"}
                     required
-                    placeholder="Nouveau mot de passe (6 caractères min.)"
+                    placeholder="Nouveau mot de passe"
+                    minLength={PASSWORD_MIN_LENGTH}
+                    maxLength={PASSWORD_MAX_LENGTH}
+                    aria-describedby="recovery-password-help"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full rounded-full border border-[#eadfe4] pl-11 pr-11 py-3 outline-none focus:border-[#8f6075]"
@@ -306,6 +316,7 @@ export default function AuthModal({ open, onClose, initialMode = "login" }) {
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
+                <p id="recovery-password-help" className="text-xs text-[#70656a]">{PASSWORD_HELP}</p>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-[#9a7384]" size={18} />
                   <input

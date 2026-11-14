@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"; // ZENORIA_NAV_5H_V1 : useRef
 // ZENORIA_ADMIN_NAV_5A_V1 : AdminBilling et AdminPaymentMethods sont affichés dans le groupe Réglages (pages/admin.js)
-import { RefreshCw, FileDown } from "lucide-react"; // ZENORIA_INVOICE_STEP3B_V1
+import { RefreshCw, FileDown, X, UserRound, ShieldCheck } from "lucide-react"; // ZENORIA_INVOICE_STEP3B_V1 · ZENORIA_ACCOUNT_SECURITY_READ_V1
 import { supabase, getMediaUrl } from "@/lib/supabase";
 import { parseBankTransfer, BANK_TRANSFER_KEY, DEFAULT_BANK_TRANSFER, autoCancelAt, isAutoCancelAlert, formatAutoCancel } from "@/lib/paymentSettings"; // ZENORIA_ADMIN_TRANSFER_V1 · ZENORIA_AUTO_CANCEL_UI_V1
 // ZENORIA_ORDERS_5B5_V1 : imports regroupés en tête de fichier
@@ -11,6 +11,7 @@ import { useFlaggedAccounts } from "@/lib/flaggedAccounts";
 import FlaggedBadge from "@/components/FlaggedBadge";
 // ZENORIA_HOME_5D_V1 : l'Accueil ouvre cet écran avec un filtre déjà choisi
 import { peekOrdersHandoff, clearOrdersHandoff } from "@/lib/adminCounters";
+import { accountDisplayName, accountAccessState, activeSessionsLabel, resetAvailability } from "@/lib/accountSecurityView"; // ZENORIA_ACCOUNT_SECURITY_READ_V1
 
 // ZENORIA_INVOICE_STEP3B_V1 : télécharge la facture PDF d'une commande depuis l'admin (même route que l'espace cliente ;
 // issue_invoice_for_order autorise un compte administrateur à générer la facture de n'importe quelle commande).
@@ -71,6 +72,58 @@ function friendlyError(err) {
   return "Impossible de charger les comptes : " + msg;
 }
 
+// ZENORIA_ACCOUNT_SECURITY_READ_V1 : fiche détaillée en lecture seule.
+function AccountDetailPanel({ account, flaggedCount, onClose }) {
+  const state = accountAccessState(account);
+  const reset = resetAvailability();
+  useEffect(() => {
+    const onKeyDown = (event) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+  const toneClass = state.tone === "ok" ? "bg-emerald-50 text-emerald-700" : state.tone === "warn" ? "bg-amber-50 text-amber-700" : "bg-[#f5edf1] text-[#8f6075]";
+  return (
+    <div className="fixed inset-0 z-[70] flex justify-end bg-black/40" role="dialog" aria-modal="true" aria-labelledby="account-detail-title" data-testid="account-detail-dialog" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div className="h-full w-full max-w-xl overflow-y-auto bg-[#fbf8f4] shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[#eee2e5] bg-[#fbf8f4]/95 px-5 py-4 backdrop-blur">
+          <div><h2 id="account-detail-title" className="font-serif text-2xl text-[#412f3b]">Compte client</h2><p className="break-all text-sm text-[#8b737e]">{account.email || "—"}</p></div>
+          <button type="button" onClick={onClose} aria-label="Fermer la fiche du compte" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[#d9c5cc] hover:bg-[#f5edf1]"><X size={18} /></button>
+        </div>
+        <div className="space-y-4 p-5">
+          <section className="rounded-2xl border border-[#eee2e5] bg-white p-4" data-testid="account-profile-card">
+            <div className="mb-3 flex items-center gap-2 text-sm font-medium text-[#412f3b]"><UserRound size={17} /> Profil et activité</div>
+            <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+              <div><dt className="text-xs text-[#8b737e]">Cliente</dt><dd className="mt-0.5 text-[#412f3b]">{accountDisplayName(account)}</dd></div>
+              <div><dt className="text-xs text-[#8b737e]">Téléphone</dt><dd className="mt-0.5 text-[#412f3b]">{account.profile?.phone || "Non renseigné"}</dd></div>
+              <div><dt className="text-xs text-[#8b737e]">Compte créé</dt><dd className="mt-0.5 text-[#412f3b]">{formatDateTime(account.created_at)}</dd></div>
+              <div><dt className="text-xs text-[#8b737e]">Identifiant Auth</dt><dd className="mt-0.5 break-all font-mono text-[11px] text-[#54434c]">{account.account_id}</dd></div>
+            </dl>
+            {flaggedCount > 0 && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">Compte à surveiller : {flaggedCount} annulations par la cliente sur les 30 derniers jours.</div>}
+          </section>
+          <section className="rounded-2xl border border-[#eee2e5] bg-white p-4" data-testid="account-security-card">
+            <div className="mb-3 flex items-center gap-2 text-sm font-medium text-[#412f3b]"><ShieldCheck size={17} /> Accès et sécurité</div>
+            <span className={"inline-flex rounded-full px-3 py-1 text-xs " + toneClass}>{state.label}</span>
+            <p className="mt-2 text-xs leading-5 text-[#70656a]">{state.detail}</p>
+            <dl className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+              <div><dt className="text-xs text-[#8b737e]">Adresse e-mail</dt><dd className="mt-0.5 break-all text-[#412f3b]">{account.email || "—"}</dd></div>
+              <div><dt className="text-xs text-[#8b737e]">Méthode</dt><dd className="mt-0.5 text-[#412f3b]">E-mail</dd></div>
+              <div><dt className="text-xs text-[#8b737e]">Confirmation</dt><dd className="mt-0.5 text-[#412f3b]">{account.confirmed_at ? formatDateTime(account.confirmed_at) : "Non confirmée"}</dd></div>
+              <div><dt className="text-xs text-[#8b737e]">Dernière connexion</dt><dd className="mt-0.5 text-[#412f3b]">{account.last_sign_in_at ? formatDateTime(account.last_sign_in_at) : "Jamais"}</dd></div>
+              <div><dt className="text-xs text-[#8b737e]">Sessions</dt><dd className="mt-0.5 text-[#412f3b]">{activeSessionsLabel(account.active_sessions)}</dd></div>
+              <div><dt className="text-xs text-[#8b737e]">Rôle</dt><dd className="mt-0.5 text-[#412f3b]">{account.is_admin_account ? "Administrateur" : "Cliente"}</dd></div>
+            </dl>
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3">
+              <div className="text-sm font-medium text-amber-900">{reset.label}</div><p className="mt-1 text-xs leading-5 text-amber-800">{reset.detail}</p>
+              <button type="button" disabled className="mt-3 h-9 cursor-not-allowed rounded-full bg-[#8f6075] px-4 text-xs font-medium text-white opacity-45">Envoyer un lien de réinitialisation</button>
+            </div>
+          </section>
+          <p className="text-[11px] leading-4 text-[#8b737e]">Cette fiche est en lecture seule. Aucun mot de passe, hash ou lien de récupération n’est accessible depuis l’administration.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CrmAccounts() {
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -78,6 +131,7 @@ export function CrmAccounts() {
   const [includeAdmins, setIncludeAdmins] = useState(false);
   const flagged = useFlaggedAccounts(accounts); // ZENORIA_FLAGGED_5E_V1
   const [query, setQuery] = useState("");
+  const [openAccountId, setOpenAccountId] = useState(null); // ZENORIA_ACCOUNT_SECURITY_READ_V1
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -116,6 +170,7 @@ export function CrmAccounts() {
 
   const q = query.trim().toLowerCase();
   const visible = (includeAdmins ? accounts : customers).filter((a) => !q || String(a.email || "").toLowerCase().includes(q));
+  const openAccount = accounts.find((account) => account.account_id === openAccountId) || null; // ZENORIA_ACCOUNT_SECURITY_READ_V1
 
   const cards = [
     { label: "Comptes clients", value: stats.total },
@@ -194,12 +249,13 @@ export function CrmAccounts() {
               <th className="px-4 py-3 font-medium">Inscrit(e) le</th>
               <th className="px-4 py-3 font-medium">Adresse</th>
               <th className="px-4 py-3 font-medium">Dernière connexion</th>
+              <th className="px-4 py-3 font-medium"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
             {!loading && !error && visible.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-[#8b737e]">
+                <td colSpan={7} className="px-4 py-6 text-center text-[#8b737e]">
                   {q ? "Aucun compte ne correspond à cette recherche." : "Aucun compte client pour le moment."}
                 </td>
               </tr>
@@ -224,12 +280,14 @@ export function CrmAccounts() {
                   </span>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-[#54434c]">{a.last_sign_in_at ? formatDateTime(a.last_sign_in_at) : "Jamais"}</td>
+                <td className="px-4 py-3 whitespace-nowrap"><button type="button" onClick={() => setOpenAccountId(a.account_id)} className="text-xs text-[#8f6075] underline" data-testid="crm-account-open">Voir le compte</button></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
+      {openAccount && <AccountDetailPanel account={openAccount} flaggedCount={flagged.get(openAccount.account_id)?.count || 0} onClose={() => setOpenAccountId(null)} />}
       <p className="text-[11px] leading-4 text-[#8b737e]">
                 Les adresses e-mail sont des données personnelles : cet écran est réservé à l&apos;administration. Les demandes d&apos;export ou d&apos;effacement
         des données se traitent dans CRM › RGPD. L&apos;historique des connexions et les adresses IP restent dans Technique › Connexions.

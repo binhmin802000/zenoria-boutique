@@ -194,11 +194,18 @@ export default function AdminPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // ZENORIA_ADMIN_MOBILE_MENU_V1 : menu mobile (hamburger), independant du survol desktop
   const sidebarCollapsed = !(sidebarPinned || sidebarHover || mobileMenuOpen); // vrai quand seules les icônes sont affichées
   const sidebarTimer = useRef(null);
+  // ZENORIA_ADMIN_MOBILE_MENU_FIX_V1 : les interactions de survol sont réservées aux pointeurs desktop précis.
+  // Chrome Android peut synthétiser mouseenter après un toucher et rouvrir le menu qui vient d'être fermé.
+  const canUseSidebarHover = () =>
+    typeof window !== "undefined" &&
+    window.matchMedia("(min-width: 640px) and (hover: hover) and (pointer: fine)").matches;
   const queueSidebarOpen = () => {
+    if (!canUseSidebarHover()) return;
     if (sidebarTimer.current) clearTimeout(sidebarTimer.current);
     sidebarTimer.current = setTimeout(() => setSidebarHover(true), 120); // court délai : pas d'ouverture par accident
   };
   const queueSidebarClose = () => {
+    if (!canUseSidebarHover()) return;
     if (sidebarTimer.current) clearTimeout(sidebarTimer.current);
     sidebarTimer.current = setTimeout(() => setSidebarHover(false), 300);
   };
@@ -223,6 +230,22 @@ export default function AdminPage() {
       if (sidebarTimer.current) clearTimeout(sidebarTimer.current);
     };
   }, []);
+  // ZENORIA_ADMIN_MOBILE_MENU_FIX_V1 : toute navigation ferme le tiroir mobile, même si le navigateur produit des événements souris synthétiques.
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches) {
+      if (sidebarTimer.current) clearTimeout(sidebarTimer.current);
+      sidebarTimer.current = null;
+      setSidebarHover(false);
+      setMobileMenuOpen(false);
+    }
+  }, [nav.group, nav.sub]);
+  // Empêche le document derrière le tiroir de défiler tout en conservant le défilement du panneau.
+  useEffect(() => {
+    if (!mobileMenuOpen || typeof document === "undefined") return undefined;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previous; };
+  }, [mobileMenuOpen]);
   const [rgpdPendingCount, setRgpdPendingCount] = useState(0);
   const [stockFilter, setStockFilter] = useState(""); // ZENORIA_HOME_5D2_V1 : filtre de la liste des bijoux (venu de l'Accueil)
   const tab = nav.sub;
@@ -889,7 +912,14 @@ export default function AdminPage() {
           className={`${mobileMenuOpen ? "fixed inset-0 z-50 bg-black/40" : "hidden"} sm:block sm:static sm:bg-transparent sm:z-20 sm:shrink-0 sm:sticky sm:top-20 sm:self-start ${sidebarPinned ? "sm:w-60" : "sm:w-14"}`} /* ZENORIA_ADMIN_MOBILE_MENU_V1 */
           onMouseEnter={queueSidebarOpen}
           onMouseLeave={queueSidebarClose}
-          onClick={(e) => { if (e.target === e.currentTarget) setMobileMenuOpen(false); }} // ZENORIA_ADMIN_MOBILE_MENU_V1 : clic sur le fond (mobile) ferme le menu
+          onPointerDown={(e) => {
+            if (e.pointerType !== "mouse") {
+              if (sidebarTimer.current) clearTimeout(sidebarTimer.current);
+              sidebarTimer.current = null;
+              setSidebarHover(false);
+            }
+          }} // ZENORIA_ADMIN_MOBILE_MENU_FIX_V1 : aucun survol résiduel après un toucher
+          onClick={(e) => { if (e.target === e.currentTarget) closeSidebarNow(); }} // ZENORIA_ADMIN_MOBILE_MENU_V1 : clic sur le fond (mobile) ferme le menu
         >
           {/* ZENORIA_NAV_5H_V1 : zone sensible le long du bord gauche de l'écran (le menu s'y déplie) */}
           {!sidebarPinned && (

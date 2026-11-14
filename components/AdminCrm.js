@@ -239,8 +239,37 @@ export function CrmAccounts() {
         </label>
       </div>
 
-      <div className="bg-white rounded-2xl border border-[#eee2e5] overflow-x-auto mb-4">
-        <table className="w-full min-w-[560px] text-sm" data-testid="crm-table">
+      {/* ZENORIA_CRM_MOBILE_WIDTH_FIX_V3 : cartes sur mobile ; tableau complet à partir de 640 px. */}
+      <div className="space-y-3 mb-4 sm:hidden" data-testid="crm-mobile-list">
+        {!loading && !error && visible.length === 0 && (
+          <div className="rounded-2xl border border-[#eee2e5] bg-white px-4 py-6 text-center text-sm text-[#8b737e]">
+            {q ? "Aucun compte ne correspond à cette recherche." : "Aucun compte client pour le moment."}
+          </div>
+        )}
+        {visible.map((a) => (
+          <article key={a.account_id} className="min-w-0 rounded-2xl border border-[#eee2e5] bg-white p-4" data-testid="crm-mobile-card">
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="break-all text-sm font-medium text-[#412f3b]">{a.email || "—"}</div>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  <span className={"rounded-full px-2.5 py-0.5 text-[11px] " + (a.confirmed_at ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>{a.confirmed_at ? "Confirmée" : "Non confirmée"}</span>
+                  {a.is_admin_account && <span className="rounded-full bg-[#f5edf1] px-2 py-0.5 text-[11px] text-[#8f6075]">Admin</span>}
+                  {flagged.get(a.account_id) && <FlaggedBadge count={flagged.get(a.account_id).count} />}
+                </div>
+              </div>
+              <button type="button" onClick={() => setOpenAccountId(a.account_id)} className="shrink-0 rounded-full border border-[#d9c5cc] px-3 py-1.5 text-xs text-[#8f6075]" data-testid="crm-account-open-mobile">Voir</button>
+            </div>
+            <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+              <div className="min-w-0"><dt className="text-[#8b737e]">Cliente</dt><dd className="truncate text-[#54434c]">{a.profile && (a.profile.first_name || a.profile.last_name) ? [a.profile.first_name, a.profile.last_name].filter(Boolean).join(" ") : "—"}</dd></div>
+              <div className="min-w-0"><dt className="text-[#8b737e]">Téléphone</dt><dd className="truncate text-[#54434c]">{a.profile?.phone || "—"}</dd></div>
+              <div className="min-w-0"><dt className="text-[#8b737e]">Inscription</dt><dd className="text-[#54434c]">{formatDateTime(a.created_at)}</dd></div>
+              <div className="min-w-0"><dt className="text-[#8b737e]">Dernière connexion</dt><dd className="text-[#54434c]">{a.last_sign_in_at ? formatDateTime(a.last_sign_in_at) : "Jamais"}</dd></div>
+            </dl>
+          </article>
+        ))}
+      </div>
+      <div className="hidden sm:block bg-white rounded-2xl border border-[#eee2e5] overflow-x-auto mb-4" data-testid="crm-desktop-table-wrap">
+        <table className="w-full min-w-[760px] text-sm" data-testid="crm-table">
           <thead>
             <tr className="bg-[#f5edf1] text-left text-[#8b737e]">
               <th className="px-4 py-3 font-medium">E-mail</th>

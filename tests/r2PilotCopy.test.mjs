@@ -1,0 +1,18 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+const server = fs.readFileSync(new URL("../lib/r2Server.js", import.meta.url), "utf8");
+const route = fs.readFileSync(new URL("../pages/api/admin/r2/pilot-copy.js", import.meta.url), "utf8");
+assert.match(server, /GetObjectCommand/);
+assert.match(server, /verifyR2ObjectSha256/);
+assert.match(server, /createHash\("sha256"\)/);
+assert.match(route, /violette\/thumb_1794524724532-IMG_20250620_141016\.jpg/);
+assert.match(route, /EXPECTED_SIZE = 29618/);
+assert.match(route, /requireAdminApi/);
+assert.match(route, /HeadObjectCommand/);
+assert.match(route, /PutObjectCommand/);
+assert.match(route, /DeleteObjectCommand/);
+assert.match(route, /sourcePreserved: true/);
+assert.match(route, /sha256Match: true/);
+assert.doesNotMatch(route, /ListObjects|CopyObjectCommand|supabase.*remove|storage.*remove/);
+assert.doesNotMatch(route, /R2_SECRET_ACCESS_KEY|R2_ACCESS_KEY_ID|accountId|secretAccessKey/);
+console.log("r2PilotCopy.test.mjs : OK");

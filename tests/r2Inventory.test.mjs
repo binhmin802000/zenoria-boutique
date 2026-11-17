@@ -14,4 +14,8 @@ assert.match(route, /listR2Objects/);
 assert.match(route, /readOnly:\s*true/);
 assert.doesNotMatch(route, /PutObjectCommand|DeleteObjectCommand|CopyObjectCommand|.remove\(|.upload\(/);
 assert.doesNotMatch(route, /R2_SECRET_ACCESS_KEY|R2_ACCESS_KEY_ID|accountId|endpoint/);
+assert.match(route, /createClient/);
+assert.match(route, /Authorization: "Bearer " \+ tokenMatch\[1\]/);
+assert.match(route, /supabaseUser\.rpc\("admin_storage_files"/);
+assert.doesNotMatch(route, /supabaseAdmin\.rpc\("admin_storage_files"/);
 console.log("r2Inventory.test.mjs : OK");

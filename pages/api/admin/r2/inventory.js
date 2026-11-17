@@ -2,7 +2,7 @@
 // Inventaire comparatif strictement en lecture seule. Aucun objet n'est modifie.
 import { requireAdminApi } from "@/lib/requireAdminApi";
 import { listR2Objects } from "@/lib/r2Server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { createClient } from "@supabase/supabase-js";
 
 const FILES_LIMIT = 2000;
 
@@ -24,8 +24,26 @@ export default async function handler(req, res) {
     const admin = await requireAdminApi(req, res, "admin-r2-inventory");
     if (!admin) return;
 
+    // ZENORIA_R2_INVENTORY_ADMIN_JWT_V1
+    const authorization = req.headers.authorization;
+    const tokenMatch = typeof authorization === "string" && /^Bearer ([^\s]+)$/i.exec(authorization);
+    if (!tokenMatch) {
+      return res.status(401).json({ ok: false, error: "Connexion requise." });
+    }
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return res.status(503).json({ ok: false, error: "Configuration Supabase incomplete." });
+    }
+
+    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: "Bearer " + tokenMatch[1] } },
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
+
     const [supabaseResult, r2Result] = await Promise.all([
-      supabaseAdmin.rpc("admin_storage_files", { max_rows: FILES_LIMIT }),
+      supabaseUser.rpc("admin_storage_files", { max_rows: FILES_LIMIT }),
       listR2Objects(process.env, FILES_LIMIT),
     ]);
 

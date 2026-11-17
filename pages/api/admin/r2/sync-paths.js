@@ -22,7 +22,14 @@ function missingR2Object(error) {
 async function syncOne(objectPath, optional) {
   const response = await fetch(publicUrl(objectPath), { cache: "no-store" });
   if (!response.ok) {
-    if (optional && response.status === 404) {
+    let responseText = "";
+    try {
+      responseText = await response.text();
+    } catch {}
+    const missingSource =
+      response.status === 404 ||
+      (response.status === 400 && /object(?:\s+|%20|_)not(?:\s+|%20|_)found|not(?:\s+|%20|_)found/i.test(responseText)); // ZENORIA_R2_SYNC_OPTIONAL_400_V1
+    if (optional && missingSource) {
       return { path: objectPath, status: "OPTIONAL_MISSING", bytes: 0 };
     }
     return { path: objectPath, status: "FAILED", bytes: 0, error: "Lecture Supabase HTTP " + response.status };

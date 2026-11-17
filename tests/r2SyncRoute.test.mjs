@@ -12,6 +12,9 @@ assert.match(route, /verifyR2ObjectSha256/);
 assert.match(route, /COPIED_OK/);
 assert.match(route, /SKIP_OK/);
 assert.match(route, /OPTIONAL_MISSING/);
+assert.match(route, /response\.status === 400/);
+assert.match(route, /response\.text\(\)/);
+assert.match(route, /object/); // ZENORIA_R2_SYNC_OPTIONAL_400_V1
 assert.match(route, /FAILED/);
 assert.match(route, /sourcePreserved: true/);
 assert.match(route, /CacheControl: "public, max-age=31536000, immutable"/);

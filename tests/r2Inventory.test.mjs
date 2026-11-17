@@ -1,0 +1,17 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+const server = fs.readFileSync(new URL("../lib/r2Server.js", import.meta.url), "utf8");
+const route = fs.readFileSync(new URL("../pages/api/admin/r2/inventory.js", import.meta.url), "utf8");
+assert.match(server, /ListObjectsV2Command/);
+assert.match(server, /export async function listR2Objects/);
+assert.match(server, /ContinuationToken/);
+assert.match(server, /MaxKeys/);
+assert.doesNotMatch(server.slice(server.indexOf("ZENORIA_R2_INVENTORY_V1")), /PutObjectCommand|DeleteObjectCommand|CopyObjectCommand/);
+assert.match(route, /req\.method !== "POST"/);
+assert.match(route, /requireAdminApi/);
+assert.match(route, /admin_storage_files/);
+assert.match(route, /listR2Objects/);
+assert.match(route, /readOnly:\s*true/);
+assert.doesNotMatch(route, /PutObjectCommand|DeleteObjectCommand|CopyObjectCommand|.remove\(|.upload\(/);
+assert.doesNotMatch(route, /R2_SECRET_ACCESS_KEY|R2_ACCESS_KEY_ID|accountId|endpoint/);
+console.log("r2Inventory.test.mjs : OK");

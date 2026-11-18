@@ -1,0 +1,14 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+const code = fs.readFileSync(new URL("../components/AdminR2CycleCheck.js", import.meta.url), "utf8");
+assert.match(code, /data-testid="r2-cycle-run"/);
+assert.match(code, /window\.confirm/);
+assert.match(code, /\/api\/admin\/r2\/object-cycle/);
+assert.match(code, /Authorization: "Bearer " \+ data\.session\.access_token/);
+assert.match(code, /cleanupAttempted/);
+assert.match(code, /deleteRequested/);
+assert.match(code, /deleted/);
+assert.match(code, /onRunning/);
+assert.match(code, /onResult/);
+assert.doesNotMatch(code, /useEffect|migrate-batch|pilot-copy|sync-paths|delete-paths/);
+console.log("adminR2CycleCheck.test.mjs : OK");

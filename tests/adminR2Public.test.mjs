@@ -1,0 +1,14 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+const parent = fs.readFileSync(new URL("../components/AdminR2Health.js", import.meta.url), "utf8");
+const child = fs.readFileSync(new URL("../components/AdminR2PublicCheck.js", import.meta.url), "utf8");
+assert.match(parent, /<AdminR2PublicCheck busy={busy} \/>/);
+assert.match(child, /data-testid="r2-public-run"/);
+assert.match(child, /SITE_MEDIA_TABLE/);
+assert.match(child, /RING_SLOT/);
+assert.match(child, /getMediaUrl\(data.path, "site"\)/);
+assert.match(child, /new Image\(\)/);
+assert.match(child, /Code HTTP : non disponible/);
+assert.match(child, /Aucune photo personnalisee disponible/);
+assert.doesNotMatch(child, /useEffect|\.upload\(|\.remove\(|object-cycle|migrate-batch/);
+console.log("adminR2Public.test.mjs : OK");

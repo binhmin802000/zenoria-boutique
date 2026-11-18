@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import AdminR2PublicCheck from "@/components/AdminR2PublicCheck";
 import { RefreshCw, Server, Files } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -95,6 +96,7 @@ export default function AdminR2Health() {
           <button type="button" onClick={runInventory} disabled={busy} className="mt-4 flex items-center gap-1.5 rounded-full border border-[#d9c5cc] hover:bg-[#f5edf1] px-4 h-9 text-xs disabled:opacity-50" data-testid="r2-inventory-run"><RefreshCw size={14} className={inventory.status === "running" ? "animate-spin" : ""}/>Comparer les stockages</button>
         </article>
       </div>
+      <AdminR2PublicCheck busy={busy} />
       <p className="text-[11px] text-[#8b737e] mt-4 leading-4">Un succes de connexion valide l'acces au bucket, pas la diffusion publique des medias. La comparaison est strictement en lecture seule.</p>
     </section>
   );

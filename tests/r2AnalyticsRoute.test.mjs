@@ -1,0 +1,10 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+const code = fs.readFileSync(new URL("../pages/api/admin/r2/analytics-check.js", import.meta.url), "utf8");
+assert.match(code, /req\.method !== "POST"/);
+assert.match(code, /requireAdminApi/);
+assert.match(code, /checkCloudflareR2Analytics/);
+assert.match(code, /CF_ANALYTICS_CONFIG_MISSING/);
+assert.match(code, /CF_ANALYTICS_ACCESS_DENIED/);
+assert.doesNotMatch(code, /CLOUDFLARE_API_TOKEN|R2_ACCOUNT_ID|accountId|token|graphqlCodes|missing/);
+console.log("r2AnalyticsRoute.test.mjs : OK");

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw, Copy } from "lucide-react";
+import AdminR2Health from "@/components/AdminR2Health";
 import { createClient } from "@supabase/supabase-js";
 import { supabase, getMediaUrl, PRODUCT_MEDIA_BUCKET } from "@/lib/supabase";
 import { videoSupport } from "@/lib/prepareVideo";
@@ -223,6 +224,7 @@ export default function AdminHealth({ quotaAlerts, quotaReady }) {
         </div>
       </div>
 
+      <AdminR2Health />
       {hasRun && (
         <section
           data-testid="health-summary"

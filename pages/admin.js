@@ -1072,7 +1072,7 @@ export default function AdminPage() {
         </div>
         </aside>
 
-        <main className="flex-1 min-w-0 py-8" onMouseDownCapture={closeSidebarNow} onFocusCapture={closeSidebarNow}>
+        <main className="flex-1 min-w-0 py-8" onMouseDownCapture={closeSidebarNow}> {/* ZENORIA_FIX_FILE_PICKER_FOCUS_V1 */}
         {tab !== "maintenance" && <MaintenanceBanner status={maintenance} onOpen={() => goTo("technique", "maintenance")} />}
 
         {tab !== "quotas" && <QuotaBanner status={quota} onOpen={() => goTo("technique", "quotas")} />}

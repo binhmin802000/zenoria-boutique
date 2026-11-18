@@ -1,6 +1,6 @@
 // ZENORIA_MEDIA_VARIANTS_V1
 import React, { useCallback, useRef, useState } from "react";
-import { supabase, getMediaUrl, PRODUCT_MEDIA_BUCKET } from "@/lib/supabase";
+import { supabase, getMediaUrl, PRODUCT_MEDIA_BUCKET, syncUploadedPathsToR2 } from "@/lib/supabase";
 import { collectPhotoPaths } from "@/lib/mediaVariants";
 import { makeThumbBlob } from "@/lib/mediaVariantsBrowser";
 // ============================================================
@@ -102,6 +102,9 @@ export default function AdminMediaVariants() {
           if (!thumb) throw new Error("miniature impossible à créer");
           const up = await supabase.storage.from(PRODUCT_MEDIA_BUCKET).upload(it.thumb, thumb, { cacheControl: "31536000", upsert: false, contentType: "image/jpeg" });
           if (up.error && !alreadyThere(up.error)) throw up.error;
+          // ZENORIA_R2_THUMB_SYNC_V1 : la miniature doit exister dans R2 (le site lit les medias depuis R2).
+          // Idempotent : si elle existe deja dans Supabase, elle est simplement copiee vers R2.
+          await syncUploadedPathsToR2([it.thumb]);
           ok += 1;
         } catch (e) {
           errs.push(it.path + " : " + ((e && e.message) || "erreur"));

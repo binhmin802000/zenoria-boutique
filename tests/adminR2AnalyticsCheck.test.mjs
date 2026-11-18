@@ -1,0 +1,12 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+const code=fs.readFileSync(new URL("../components/AdminR2AnalyticsCheck.js",import.meta.url),"utf8");
+assert.equal(code.includes('data-testid="r2-analytics-run"'),true);
+assert.equal(code.includes('/api/admin/r2/analytics-check'),true);
+assert.equal(code.includes('supabase.auth.getSession()'),true);
+assert.equal(code.includes('Authorization:"Bearer "+data.session.access_token'),true);
+assert.equal(code.includes('storageDataset'),true);
+assert.equal(code.includes('sampleAvailable'),true);
+assert.equal(code.includes('Tester Analytics Cloudflare'),true);
+for(const forbidden of ['useEffect','CLOUDFLARE_API_TOKEN','R2_ACCOUNT_ID','accountId','secret']) assert.equal(code.includes(forbidden),false);
+console.log("adminR2AnalyticsCheck.test.mjs : OK");

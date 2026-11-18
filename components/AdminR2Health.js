@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import AdminR2PublicCheck from "@/components/AdminR2PublicCheck";
 import AdminR2CycleCheck from "@/components/AdminR2CycleCheck";
+import AdminR2AnalyticsCheck from "@/components/AdminR2AnalyticsCheck";
 import { RefreshCw, Server, Files, Copy } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -127,6 +128,7 @@ export default function AdminR2Health() {
       </div>
       <AdminR2PublicCheck busy={busy} onResult={setPublicResult} />
       <AdminR2CycleCheck busy={busy} onRunning={setCycleRunning} onResult={setCycleResult} />
+      <AdminR2AnalyticsCheck busy={busy} />
       <button type="button" onClick={copyReport} disabled={busy} data-testid="r2-report-copy" className="mt-4 flex h-9 items-center gap-2 rounded-full border border-[#d9c5cc] px-4 text-xs hover:bg-[#f5edf1] disabled:opacity-50"><Copy size={14} />{reportCopied ? "Rapport copie" : "Copier le rapport R2"}</button>
       <p className="text-[11px] text-[#8b737e] mt-4 leading-4">Un succes de connexion valide l'acces au bucket, pas la diffusion publique des medias. La comparaison est strictement en lecture seule.</p>
     </section>

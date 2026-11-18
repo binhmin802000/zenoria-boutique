@@ -15,12 +15,16 @@ export default async function handler(req, res) {
 
     const result = await runR2TechnicalObjectCycle();
     return res.status(200).json({
-      ok: result.ok,
-      created: result.created,
-      verified: result.verified,
-      deleted: result.deleted,
-      durationMs: result.durationMs,
-    });
+        ok: result.ok,
+        created: result.created,
+        verified: result.verified,
+        cleanupAttempted: result.cleanupAttempted,
+        deleteRequested: result.deleteRequested,
+        deleted: result.deleted,
+        durationMs: result.durationMs,
+        errorCode: result.errorCode,
+        error: result.error,
+      });
   } catch (error) {
     if (error && error.code === "R2_CONFIG_MISSING") {
       return res.status(503).json({ ok: false, error: "Configuration R2 incomplete." });

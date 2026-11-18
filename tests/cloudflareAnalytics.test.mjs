@@ -37,3 +37,11 @@ assert.match(code, /actionStatus/);
 assert.match(code, /sum { requests }/);
 assert.match(code, /R2_BUCKET/);
 assert.match(code, /operationsDataset/);
+
+assert.match(code, /R2_CLASS_A_ACTIONS/);
+assert.match(code, /R2_CLASS_B_ACTIONS/);
+assert.match(code, /R2_FREE_ACTIONS/);
+assert.match(code, /unknownActions/);
+assert.match(code, /1_000_000/);
+assert.match(code, /10_000_000/);
+assert.equal(code.includes("10 * 1024 ** 3"), true);

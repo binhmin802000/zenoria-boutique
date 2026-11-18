@@ -13,8 +13,9 @@ function sourceFor(url, selectedBase, supabaseBase) {
   const actual = within(sb) ? "Supabase" : within(selected) ? configured : "Autre URL";
   return { configured, actual, domain: target.hostname };
 }
-export default function AdminR2PublicCheck({ busy = false }) {
+export default function AdminR2PublicCheck({ busy = false, onResult }) {
   const [check, setCheck] = useState(initial);
+  const finish = (next) => { setCheck(next); if (onResult) onResult(next); };
   async function run() {
     setCheck({ ...initial, state: "running" });
     const start = performance.now();
@@ -22,7 +23,7 @@ export default function AdminR2PublicCheck({ busy = false }) {
       const { data, error } = await supabase.from(SITE_MEDIA_TABLE).select("path").eq("slot", RING_SLOT).maybeSingle();
       if (error) throw new Error("Lecture du media temoin impossible : " + error.message);
       if (!data?.path || typeof data.path !== "string") {
-        setCheck({ state: "warn", result: null, error: "Aucune photo personnalisee disponible pour Le geste.", checkedAt: Date.now() });
+        finish({ state: "warn", result: null, error: "Aucune photo personnalisee disponible pour Le geste.", checkedAt: Date.now() });
         return;
       }
       const url = getMediaUrl(data.path, "site");
@@ -42,9 +43,9 @@ export default function AdminR2PublicCheck({ busy = false }) {
       if (!loaded) throw new Error("Image indisponible.");
       const result = { ...source, durationMs: Math.round(performance.now() - start), http: "Non accessible via Image()", loaded: true };
       const status = source.actual === "R2" ? "ok" : "warn";
-      setCheck({ state: status, result, error: status === "warn" ? "Image chargee, mais la diffusion R2 n'est pas confirmee." : "", checkedAt: Date.now() });
+      finish({ state: status, result, error: status === "warn" ? "Image chargee, mais la diffusion R2 n'est pas confirmee." : "", checkedAt: Date.now() });
     } catch (error) {
-      setCheck({ state: "fail", result: null, error: error?.message || String(error), checkedAt: Date.now() });
+      finish({ state: "fail", result: null, error: error?.message || String(error), checkedAt: Date.now() });
     }
   }
   const labels = { idle: "Non teste", running: "En cours", ok: "Reussi", warn: "Attention", fail: "Echec" };

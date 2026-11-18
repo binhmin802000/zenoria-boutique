@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import AdminR2PublicCheck from "@/components/AdminR2PublicCheck";
-import { RefreshCw, Server, Files } from "lucide-react";
+import AdminR2CycleCheck from "@/components/AdminR2CycleCheck";
+import { RefreshCw, Server, Files, Copy } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 const EMPTY = Object.freeze({ status: "idle", error: "", data: null, checkedAt: null });
@@ -47,7 +48,11 @@ function DifferenceList({ title, rows }) {
 export default function AdminR2Health() {
   const [connection, setConnection] = useState(EMPTY);
   const [inventory, setInventory] = useState(EMPTY);
-  const busy = connection.status === "running" || inventory.status === "running";
+  const [publicResult, setPublicResult] = useState(null);
+  const [cycleResult, setCycleResult] = useState(null);
+  const [cycleRunning, setCycleRunning] = useState(false);
+  const [reportCopied, setReportCopied] = useState(false);
+  const busy = connection.status === "running" || inventory.status === "running" || cycleRunning;
 
   const runConnection = async () => {
     setConnection({ ...EMPTY, status: "running" });
@@ -70,6 +75,30 @@ export default function AdminR2Health() {
     } catch (error) {
       setInventory({ status: "fail", error: error.message || String(error), data: null, checkedAt: Date.now() });
     }
+  };
+
+  const copyReport = async () => {
+    const c = inventory.data?.comparison || {};
+    const line = (label, value) => label + " : " + value;
+    const lines = [
+      "ZENORIA - RAPPORT R2",
+      line("Date", new Date().toLocaleString("fr-FR", { timeZone: "Europe/Paris" })),
+      "",
+      line("Connexion", connection.checkedAt ? (connection.status === "ok" ? "Reussie" : "Echec") : "Non testee"),
+      ...(connection.data ? [line("Bucket", connection.data.bucket || "Non renseigne"), line("Duree connexion", String(connection.data.durationMs || 0) + " ms")] : []),
+      "",
+      line("Inventaire", inventory.checkedAt ? (inventory.status === "ok" ? "Conforme" : inventory.status === "warn" ? "Attention" : "Echec") : "Non teste"),
+      ...(inventory.data ? [line("Fichiers Supabase", inventory.data.supabase?.count ?? 0), line("Fichiers R2", inventory.data.r2?.count ?? 0), line("Absents de R2", c.missingInR2Count || 0), line("Seulement dans R2", c.onlyInR2Count || 0), line("Tailles differentes", c.sizeMismatchCount || 0)] : []),
+      "",
+      line("Diffusion publique", publicResult?.checkedAt ? ({ ok: "Reussie", warn: "Attention", fail: "Echec" }[publicResult.state] || "Non testee") : "Non testee"),
+      ...(publicResult?.result ? [line("Fournisseur configure", publicResult.result.configured), line("Source reelle", publicResult.result.actual), line("Domaine", publicResult.result.domain), line("Duree diffusion", String(publicResult.result.durationMs || 0) + " ms")] : []),
+      "",
+      line("Cycle technique", cycleResult?.checkedAt ? (cycleResult.state === "ok" ? "Reussi" : "Echec") : "Non teste"),
+      ...(cycleResult?.data ? [line("Cree", cycleResult.data.created ? "Oui" : "Non"), line("Verifie", cycleResult.data.verified ? "Oui" : "Non"), line("Nettoyage tente", cycleResult.data.cleanupAttempted ? "Oui" : "Non"), line("Suppression demandee", cycleResult.data.deleteRequested ? "Oui" : "Non"), line("Suppression confirmee", cycleResult.data.deleted ? "Oui" : "Non"), line("Duree cycle", String(cycleResult.data.durationMs || 0) + " ms"), ...(cycleResult.data.errorCode ? [line("Code erreur", cycleResult.data.errorCode)] : [])] : []),
+    ];
+    await navigator.clipboard.writeText(lines.join("\n"));
+    setReportCopied(true);
+    window.setTimeout(() => setReportCopied(false), 2500);
   };
 
   const c = inventory.data?.comparison || {};
@@ -96,7 +125,9 @@ export default function AdminR2Health() {
           <button type="button" onClick={runInventory} disabled={busy} className="mt-4 flex items-center gap-1.5 rounded-full border border-[#d9c5cc] hover:bg-[#f5edf1] px-4 h-9 text-xs disabled:opacity-50" data-testid="r2-inventory-run"><RefreshCw size={14} className={inventory.status === "running" ? "animate-spin" : ""}/>Comparer les stockages</button>
         </article>
       </div>
-      <AdminR2PublicCheck busy={busy} />
+      <AdminR2PublicCheck busy={busy} onResult={setPublicResult} />
+      <AdminR2CycleCheck busy={busy} onRunning={setCycleRunning} onResult={setCycleResult} />
+      <button type="button" onClick={copyReport} disabled={busy} data-testid="r2-report-copy" className="mt-4 flex h-9 items-center gap-2 rounded-full border border-[#d9c5cc] px-4 text-xs hover:bg-[#f5edf1] disabled:opacity-50"><Copy size={14} />{reportCopied ? "Rapport copie" : "Copier le rapport R2"}</button>
       <p className="text-[11px] text-[#8b737e] mt-4 leading-4">Un succes de connexion valide l'acces au bucket, pas la diffusion publique des medias. La comparaison est strictement en lecture seule.</p>
     </section>
   );

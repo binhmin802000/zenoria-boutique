@@ -15,6 +15,8 @@ assert.match(component, /sans controle SHA-256/);
 assert.match(component, /strictement en lecture seule/);
 assert.doesNotMatch(component, /useEffect/);
 assert.match(component, /<AdminR2CycleCheck/);
+assert.match(component, /<AdminR2AnalyticsCheck/);
+assert.match(component, /AdminR2AnalyticsCheck busy={busy}/);
 assert.match(component, /data-testid="r2-report-copy"/);
 assert.match(component, /Copier le rapport R2/);
 assert.match(component, /navigator\.clipboard\.writeText/);

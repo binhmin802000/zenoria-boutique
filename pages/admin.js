@@ -181,6 +181,7 @@ export default function AdminPage() {
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const authUserIdRef = useRef(undefined); // ZENORIA_ADMIN_AUTH_STABLE_FOCUS_V1 : undefined = session initiale non traitee
 
   // Navigation en deux niveaux : groupe (Produits, CRM, Technique), puis onglet. La position est conservée dans
   // l'adresse (par exemple /admin#technique/sante) : un rechargement de la page ou un lien gardent le même écran.
@@ -369,17 +370,29 @@ export default function AdminPage() {
       }
     };
 
+    const applyAuthUser = (currentUser, showLoading) => {
+      const nextUserId = currentUser ? currentUser.id : null;
+
+      // ZENORIA_ADMIN_AUTH_STABLE_FOCUS_V1
+      // Supabase peut reemettre SIGNED_IN ou TOKEN_REFRESHED au retour de focus.
+      // Si l'utilisateur ne change pas, ne pas remonter l'ecran Chargement :
+      // cela detacherait le champ fichier avant son evenement change.
+      if (authUserIdRef.current === nextUserId) return;
+
+      authUserIdRef.current = nextUserId;
+      setUser(currentUser);
+      if (showLoading) setAuthLoading(true);
+      checkAdmin(currentUser);
+    };
+
     supabase.auth.getSession().then(({ data }) => {
       const currentUser = data.session ? data.session.user : null;
-      setUser(currentUser);
-      checkAdmin(currentUser);
+      applyAuthUser(currentUser, false);
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       const currentUser = session ? session.user : null;
-      setUser(currentUser);
-      setAuthLoading(true);
-      checkAdmin(currentUser);
+      applyAuthUser(currentUser, true);
     });
 
     return () => {

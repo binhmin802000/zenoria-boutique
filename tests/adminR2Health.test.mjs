@@ -1,0 +1,18 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+const component = fs.readFileSync(new URL("../components/AdminR2Health.js", import.meta.url), "utf8");
+const health = fs.readFileSync(new URL("../components/AdminHealth.js", import.meta.url), "utf8");
+assert.match(health, /import AdminR2Health from "@\/components\/AdminR2Health"/);
+assert.match(health, /<AdminR2Health \/>/);
+assert.match(component, /supabase\.auth\.getSession\(\)/);
+assert.match(component, /Authorization: "Bearer " \+ data\.session\.access_token/);
+assert.match(component, /"\/api\/admin\/r2\/check"/);
+assert.match(component, /"\/api\/admin\/r2\/inventory"/);
+assert.match(component, /method: "POST"/);
+assert.match(component, /Controle incomplet/);
+assert.match(component, /2 000 fichiers/);
+assert.match(component, /sans controle SHA-256/);
+assert.match(component, /strictement en lecture seule/);
+assert.doesNotMatch(component, /useEffect/);
+assert.doesNotMatch(component, /object-cycle|migrate-batch|pilot-copy|sync-paths|delete-paths/);
+console.log("adminR2Health.test.mjs : OK");

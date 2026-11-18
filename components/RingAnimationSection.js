@@ -77,7 +77,7 @@ export default function RingAnimationSection({ accent }) {
     );
   }
 
-  const ringSrc = state.photoPath ? getMediaUrl(state.photoPath, "site") : DEFAULT_RING_PHOTO;
+  const ringSrc = state.photoPath ? getMediaUrl(state.photoPath, "site") : DEFAULT_RING_PHOTO; // ZENORIA_RING_SCALE_V1
   const crystalColor = resolveHeartColor(state.setting, ringColorFromPath(state.photoPath), accent);
 
   return (
@@ -85,6 +85,7 @@ export default function RingAnimationSection({ accent }) {
       <RingHandsVideo
         crystalColor={crystalColor}
         ringSrc={ringSrc}
+        ringScale={state.setting.ring_scale}
         speed={speedValue(state.setting.speed)}
         mode={state.setting.mode}
         onVanishStart={() => setCollapsing(true)}

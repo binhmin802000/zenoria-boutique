@@ -20,6 +20,9 @@ import {
   resolveHeartColor,
   currentSeasonKey,
   describeRingSetting,
+  RING_SCALE_MIN,
+  RING_SCALE_MAX,
+  RING_SCALE_STEP,
 } from "@/lib/ringSettings";
 import { DEFAULT_CUTOUT, cutoutRing, loadWorkImage, drawRgba, rgbaToPngBlob } from "@/lib/ringCutout";
 import RingHandsVideo from "@/components/RingHandsVideo";
@@ -491,6 +494,21 @@ export default function AdminRingAnimation() {
         </div>
       )}
 
+        {/* ZENORIA_RING_SCALE_V1 : taille visuelle de la bague pendant toute l'animation */}
+        <div className="mt-5 rounded-xl border border-[#eee2e5] bg-[#fbf8f4] px-4 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-[#54434c]">Taille de la bague dans l&apos;animation</p>
+              <p className="text-[11px] text-[#8b737e] mt-1">De 60 % à 220 %. L&apos;aperçu se met à jour immédiatement.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="button" disabled={disabled || draft.ring_scale <= RING_SCALE_MIN} onClick={() => setDraft((d) => ({ ...d, ring_scale: Math.max(RING_SCALE_MIN, Number((d.ring_scale - RING_SCALE_STEP).toFixed(2))) }))} data-testid="ring-scale-minus" aria-label="Réduire la bague" className="h-10 w-10 rounded-full border border-[#d9c5cc] hover:bg-[#f5edf1] disabled:opacity-40">−</button>
+              <output data-testid="ring-scale-value" className="min-w-[76px] text-center text-base font-medium text-[#412f3b]">{Math.round(draft.ring_scale * 100)} %</output>
+              <button type="button" disabled={disabled || draft.ring_scale >= RING_SCALE_MAX} onClick={() => setDraft((d) => ({ ...d, ring_scale: Math.min(RING_SCALE_MAX, Number((d.ring_scale + RING_SCALE_STEP).toFixed(2))) }))} data-testid="ring-scale-plus" aria-label="Agrandir la bague" className="h-10 w-10 rounded-full border border-[#d9c5cc] hover:bg-[#f5edf1] disabled:opacity-40">+</button>
+            </div>
+          </div>
+          <button type="button" disabled={disabled || draft.ring_scale === 1} onClick={() => setDraft((d) => ({ ...d, ring_scale: 1 }))} data-testid="ring-scale-reset" className="mt-3 text-xs text-[#8f6075] underline underline-offset-2 disabled:opacity-40">Réinitialiser à 100 %</button>
+        </div>
       {/* 2. COULEUR DU CŒUR */}
       <h3 className="font-serif text-lg mt-7">2. Couleur du cœur et des étincelles</h3>
       <div role="radiogroup" aria-label="Couleur du cœur" className="mt-3 space-y-2.5">
@@ -554,7 +572,7 @@ export default function AdminRingAnimation() {
       </div>
       <div className="mt-3 rounded-2xl bg-[#fbf8f4] border border-[#eee2e5] p-3" data-testid="ring-anim-preview">
         <div className="max-w-2xl mx-auto">
-          <RingHandsVideo key={replayKey} crystalColor={heartColor} ringSrc={photoUrl} speed={speedValue(draft.speed)} mode={draft.mode} />
+          <RingHandsVideo key={replayKey} crystalColor={heartColor} ringSrc={photoUrl} ringScale={draft.ring_scale} speed={speedValue(draft.speed)} mode={draft.mode} />
         </div>
       </div>
       <p className="text-[11px] text-[#8b737e] mt-2 leading-4">

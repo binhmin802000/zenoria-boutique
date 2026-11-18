@@ -48,16 +48,17 @@ var RHV = (function () {
     return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u, a[3] + (b[3] - a[3]) * u];
   }
 
-  function attrsFor(t, ti) {
+  function attrsFor(t, ti, ringScale) {
+    ringScale = Number.isFinite(Number(ringScale)) ? Number(ringScale) : 1; // ZENORIA_RING_SCALE_V1
     var a = {}, c = sstep(t, TL.XFADE[0], TL.XFADE[1]);
     var sway = 1.6 * Math.sin(TAU * t / 3.2) * (1 - sstep(t, TL.SWAY[0], TL.SWAY[1]));
     var p = ringAt(t);
-    a.ringA = { transform: tr(p[0], p[1] + sway, p[2], p[3]), opacity: reveal(t, TL.PATH.P0[0], TL.PATH.P0[1]) * (1 - wipe(t, SEAT[0], SEAT[1], 0)) };
-    a.ringC = { transform: tr(RING.C[0], RING.C[1], 0, RING.RC), opacity: wipe(t, RING.C[0], RING.C[1], TL.LAG) };
+    a.ringA = { transform: tr(p[0], p[1] + sway, p[2], p[3] * ringScale), opacity: reveal(t, TL.PATH.P0[0], TL.PATH.P0[1]) * (1 - wipe(t, SEAT[0], SEAT[1], 0)) };
+    a.ringC = { transform: tr(RING.C[0], RING.C[1], 0, RING.RC * ringScale), opacity: wipe(t, RING.C[0], RING.C[1], TL.LAG) };
     a.sheen = { transform: 'translate(-1.5 0) rotate(18)', opacity: 0 };
     var tk = TL.TOUCH, kt = sstep(t, tk[0], tk[0] + 0.25) * (1 - sstep(t, tk[0] + 0.25, tk[1]));
     var pn = ringAt(tk[0] + 0.25);
-    a.tch = { transform: tr(pn[0] - 34, pn[1] - 38, -25 * (1 - kt), 13 * kt), opacity: kt * (1 - c) };
+    a.tch = { transform: tr(pn[0] - 34, pn[1] - 38, -25 * (1 - kt), 13 * kt * ringScale), opacity: kt * (1 - c) };
     var Hh = TL.HEART;
     var hs = sstep(t, Hh.stroke[0], Hh.stroke[1]), hi = sstep(t, Hh.inner[0], Hh.inner[1]);
     var hf = sstep(t, Hh.fill[0], Hh.fill[1]), hg = sstep(t, Hh.glow[0], Hh.glow[1]);
@@ -114,8 +115,8 @@ var RHV = (function () {
     if (o.dash !== undefined) st += ';stroke-dashoffset:' + f(o.dash);
     return s + ' style="' + st + '"';
   }
-  function overlayMarkup(color, t, ringSrc, ti) {
-    var c = color, a = attrsFor(t == null ? 0 : t, ti || 0), i;
+  function overlayMarkup(color, t, ringSrc, ti, ringScale) {
+    var c = color, a = attrsFor(t == null ? 0 : t, ti || 0, ringScale), i;
     var star = function (k) { return '<path data-k="' + k + '" d="' + STAR + '" fill="' + c + '"' + at(a, k) + '/>'; };
     var s = '<defs><radialGradient id="rhvg"><stop offset="0" stop-color="' + c + '" stop-opacity="0.9"/><stop offset="1" stop-color="' + c + '" stop-opacity="0"/></radialGradient>' +
             '<radialGradient id="rhvs"><stop offset="0.55" stop-color="#2a2020" stop-opacity="0.26"/><stop offset="1" stop-color="#2a2020" stop-opacity="0"/></radialGradient>' +
@@ -142,8 +143,8 @@ var RHV = (function () {
     for (i = 0; i < TL.MSTARS.length; i++) s += star('ms' + i);
     return s;
   }
-  function apply(refs, t, ti) {
-    var a = attrsFor(t, ti || 0), k, e, o;
+  function apply(refs, t, ti, ringScale) {
+    var a = attrsFor(t, ti || 0, ringScale), k, e, o;
     for (k in a) { e = refs[k]; if (!e) continue; o = a[k];
       if (o.transform) e.setAttribute('transform', o.transform);
       if (o.opacity !== undefined) e.style.opacity = o.opacity;
@@ -151,7 +152,7 @@ var RHV = (function () {
   }
 
   var DEFAULTS = {
-    color: '#2e75c6', ringSrc: null, speed: 1, mode: 'once', life: true, holdSeconds: 4, loopPause: 3,
+    color: '#2e75c6', ringSrc: null, ringScale: 1, speed: 1, mode: 'once', life: true, holdSeconds: 4, loopPause: 3,
     src: '/animations/zenoria-geste.mp4', srcAlpha: '/animations/zenoria-geste-alpha.webm', stillSrc: '/animations/zenoria-geste-fin.png',
     alpha: null, reduce: null, onVanished: null, onVanishStart: null
   };
@@ -190,11 +191,11 @@ var RHV = (function () {
     var unframe = function (id) { if (typeof cancelAnimationFrame !== 'undefined') cancelAnimationFrame(id); else clearTimeout(id); };
 
     function rebuild() {
-      svg.innerHTML = overlayMarkup(o.color, lastT, o.ringSrc, lastTi);
+      svg.innerHTML = overlayMarkup(o.color, lastT, o.ringSrc, lastTi, o.ringScale);
       refs = {}; var nodes = svg.querySelectorAll('[data-k]'), i;
       for (i = 0; i < nodes.length; i++) refs[nodes[i].getAttribute('data-k')] = nodes[i];
     }
-    function paint(t, ti) { lastT = t; lastTi = ti; apply(refs, t, ti); }
+    function paint(t, ti) { lastT = t; lastTi = ti; apply(refs, t, ti, o.ringScale); }
     function setFade(v, sec) {
       var els = [video, img, svg], i;
       for (i = 0; i < els.length; i++) if (els[i]) { els[i].style.transition = 'opacity ' + sec + 's ease'; els[i].style.opacity = String(v); }
@@ -289,7 +290,7 @@ var RHV = (function () {
     return {
       setOptions: function (patch) {
         var redo = false, k;
-        for (k in patch) { if (patch[k] === undefined) continue; if ((k === 'color' || k === 'ringSrc') && patch[k] !== o[k]) redo = true; o[k] = patch[k]; }
+        for (k in patch) { if (patch[k] === undefined) continue; if ((k === 'color' || k === 'ringSrc' || k === 'ringScale') && patch[k] !== o[k]) redo = true; o[k] = patch[k]; }
         if (redo) rebuild();
         if (video && patch.speed) video.playbackRate = o.speed;
       },
@@ -310,7 +311,8 @@ var RHV = (function () {
 
 export default function RingHandsVideo({
   crystalColor = "#2e75c6", // couleur du cœur, du halo et des étincelles
-  ringSrc = "/animations/ring-bleu.png", // photo détourée de la bague (PNG transparent, carré). null : simple pierre colorée
+  ringSrc = "/animations/ring-bleu.png",
+  ringScale = 1, // photo détourée de la bague (PNG transparent, carré). null : simple pierre colorée
   speed = 1,
   mode = "once",
   life = true,
@@ -333,7 +335,7 @@ export default function RingHandsVideo({
   // Création du lecteur (une seule fois par jeu de fichiers vidéo)
   useEffect(() => {
     const player = RHV.createPlayer(hostRef.current, {
-      color: crystalColor, ringSrc, speed, mode, life, holdSeconds, loopPause, alpha, src, srcAlpha, stillSrc,
+      color: crystalColor, ringSrc, ringScale, speed, mode, life, holdSeconds, loopPause, alpha, src, srcAlpha, stillSrc,
       onVanishStart: () => { if (callbacks.current.onVanishStart) callbacks.current.onVanishStart(); },
       onVanished: () => { if (callbacks.current.onVanished) callbacks.current.onVanished(); },
     });
@@ -344,8 +346,8 @@ export default function RingHandsVideo({
 
   // Les réglages se mettent à jour à chaud, sans relancer la lecture
   useEffect(() => {
-    if (playerRef.current) playerRef.current.setOptions({ color: crystalColor, ringSrc, speed, mode, life, holdSeconds, loopPause });
-  }, [crystalColor, ringSrc, speed, mode, life, holdSeconds, loopPause]);
+    if (playerRef.current) playerRef.current.setOptions({ color: crystalColor, ringSrc, ringScale, speed, mode, life, holdSeconds, loopPause });
+  }, [crystalColor, ringSrc, ringScale, speed, mode, life, holdSeconds, loopPause]);
 
   return <div ref={hostRef} className={className} role="img" aria-label={label} style={{ width: "100%", aspectRatio: "1280 / 704" }} />;
 }

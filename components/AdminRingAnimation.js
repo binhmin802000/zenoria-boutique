@@ -23,6 +23,9 @@ import {
   RING_SCALE_MIN,
   RING_SCALE_MAX,
   RING_SCALE_STEP,
+  RING_RELIEF_MIN,
+  RING_RELIEF_MAX,
+  RING_RELIEF_STEP,
 } from "@/lib/ringSettings";
 import { DEFAULT_CUTOUT, cutoutRing, loadWorkImage, drawRgba, rgbaToPngBlob } from "@/lib/ringCutout";
 import RingHandsVideo from "@/components/RingHandsVideo";
@@ -509,6 +512,22 @@ export default function AdminRingAnimation() {
           </div>
           <button type="button" disabled={disabled || draft.ring_scale === 1} onClick={() => setDraft((d) => ({ ...d, ring_scale: 1 }))} data-testid="ring-scale-reset" className="mt-3 text-xs text-[#8f6075] underline underline-offset-2 disabled:opacity-40">Réinitialiser à 100 %</button>
         </div>
+        {/* ZENORIA_RING_RELIEF_V1 : effet de volume optionnel, sans modifier le PNG source */}
+        <div className="mt-5 rounded-xl border border-[#eee2e5] bg-[#fbf8f4] px-4 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-[#54434c]">Effet de relief 2,5D</p>
+              <p className="text-[11px] text-[#8b737e] mt-1 leading-4">Ajoute une légère inclinaison, une ombre de contact et un reflet. La photo source reste inchangée.</p>
+            </div>
+            <label className="inline-flex items-center gap-2 text-sm text-[#54434c]">
+              <input type="checkbox" checked={draft.relief_enabled} disabled={disabled} onChange={(e) => setDraft((d) => ({ ...d, relief_enabled: e.target.checked }))} data-testid="ring-relief-enabled" className="h-4 w-4 accent-[#8f6075]" />
+              Activé
+            </label>
+          </div>
+          <div className={draft.relief_enabled ? "mt-4" : "mt-4 opacity-50"}>
+            <Slider label="Intensité du relief" value={Math.round(draft.relief_intensity * 100)} min={RING_RELIEF_MIN * 100} max={RING_RELIEF_MAX * 100} step={RING_RELIEF_STEP * 100} suffix=" %" testId="ring-relief-intensity" onChange={(v) => setDraft((d) => ({ ...d, relief_intensity: v / 100 }))} />
+          </div>
+        </div>
       {/* 2. COULEUR DU CŒUR */}
       <h3 className="font-serif text-lg mt-7">2. Couleur du cœur et des étincelles</h3>
       <div role="radiogroup" aria-label="Couleur du cœur" className="mt-3 space-y-2.5">
@@ -572,7 +591,7 @@ export default function AdminRingAnimation() {
       </div>
       <div className="mt-3 rounded-2xl bg-[#fbf8f4] border border-[#eee2e5] p-3" data-testid="ring-anim-preview">
         <div className="max-w-2xl mx-auto">
-          <RingHandsVideo key={replayKey} crystalColor={heartColor} ringSrc={photoUrl} ringScale={draft.ring_scale} speed={speedValue(draft.speed)} mode={draft.mode} />
+          <RingHandsVideo key={replayKey} crystalColor={heartColor} ringSrc={photoUrl} ringScale={draft.ring_scale} ringRelief={draft.relief_enabled} ringReliefIntensity={draft.relief_intensity} speed={speedValue(draft.speed)} mode={draft.mode} />
         </div>
       </div>
       <p className="text-[11px] text-[#8b737e] mt-2 leading-4">

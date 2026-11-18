@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Heart, Upload, Trash2, RefreshCw } from "lucide-react";
-import { supabase, getMediaUrl, saveSiteMedia, clearSiteMedia, deleteProductMedia, SITE_MEDIA_TABLE } from "@/lib/supabase";
+import { supabase, getMediaUrl, saveSiteMedia, clearSiteMedia, deleteProductMedia, SITE_MEDIA_TABLE, syncUploadedPathsToR2 } from "@/lib/supabase";
 import { MEDIA_BUCKET } from "@/lib/orphanFiles";
 import { SITE_SETTINGS_TABLE } from "@/lib/siteSettings";
 import {
@@ -251,6 +251,13 @@ export default function AdminRingAnimation() {
       const path = buildRingPath(cutResult.color, Date.now());
       const { error: upErr } = await supabase.storage.from(MEDIA_BUCKET).upload(path, blob, { contentType: "image/png", cacheControl: "31536000", upsert: false });
       if (upErr) throw upErr;
+      // ZENORIA_R2_RING_SYNC_V1 : copie vers R2 verifiee AVANT l'enregistrement en base.
+      try {
+        await syncUploadedPathsToR2([path]);
+      } catch (syncErr) {
+        await deleteProductMedia(path); // retire le nouveau fichier (R2 et Supabase)
+        throw syncErr;
+      }
       const { error: saveErr } = await saveSiteMedia(RING_SLOT, path);
       if (saveErr) {
         await deleteProductMedia(path); // on ne garde pas un fichier orphelin

@@ -27,3 +27,8 @@ assert.match(code, /r2\.dev/);
 assert.match(code, /percent>=90/);
 assert.match(code, /percent>=70/);
 assert.match(code, /distinctes de la facturation Cloudflare/);
+
+assert.match(code, /formatStorageLimit/);
+assert.match(code, /Go-mois/);
+assert.match(code, /onResult/);
+assert.match(code, /publicHostIsR2Dev/);

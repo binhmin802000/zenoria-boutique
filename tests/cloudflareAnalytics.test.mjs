@@ -44,4 +44,5 @@ assert.match(code, /R2_FREE_ACTIONS/);
 assert.match(code, /unknownActions/);
 assert.match(code, /1_000_000/);
 assert.match(code, /10_000_000/);
-assert.equal(code.includes("10 * 1024 ** 3"), true);
+assert.equal(code.includes("10_000_000_000"), true);
+assert.equal(code.includes("10 * 1024 ** 3"), false);

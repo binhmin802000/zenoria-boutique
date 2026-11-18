@@ -23,3 +23,9 @@ assert.match(component, /navigator\.clipboard\.writeText/);
 assert.match(component, /Non teste/);
 assert.doesNotMatch(component, /migrate-batch|pilot-copy|sync-paths|delete-paths/);
 console.log("adminR2Health.test.mjs : OK");
+
+assert.match(component, /analyticsResult/);
+assert.match(component, /Stockage R2/);
+assert.match(component, /Operations classe A/);
+assert.match(component, /Domaine r2\.dev/);
+assert.match(component, /onResult={setAnalyticsResult}/);

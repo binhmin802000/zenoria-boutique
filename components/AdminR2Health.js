@@ -51,6 +51,7 @@ export default function AdminR2Health() {
   const [inventory, setInventory] = useState(EMPTY);
   const [publicResult, setPublicResult] = useState(null);
   const [cycleResult, setCycleResult] = useState(null);
+  const [analyticsResult, setAnalyticsResult] = useState(null);
   const [cycleRunning, setCycleRunning] = useState(false);
   const [reportCopied, setReportCopied] = useState(false);
   const busy = connection.status === "running" || inventory.status === "running" || cycleRunning;
@@ -94,6 +95,16 @@ export default function AdminR2Health() {
       line("Diffusion publique", publicResult?.checkedAt ? ({ ok: "Reussie", warn: "Attention", fail: "Echec" }[publicResult.state] || "Non testee") : "Non testee"),
       ...(publicResult?.result ? [line("Fournisseur configure", publicResult.result.configured), line("Source reelle", publicResult.result.actual), line("Domaine", publicResult.result.domain), line("Duree diffusion", String(publicResult.result.durationMs || 0) + " ms")] : []),
       "",
+      line("Analytics Cloudflare", analyticsResult?.checkedAt ? (analyticsResult.state === "ok" ? "Reussie" : "Echec") : "Non testee"),
+      ...(analyticsResult?.data?.usage ? [
+        line("Stockage R2", formatBytes(analyticsResult.data.usage.storage.used) + " / 10,00 Go-mois (" + analyticsResult.data.usage.storage.percent.toFixed(3).replace(".", ",") + " %)"),
+        line("Operations classe A", analyticsResult.data.usage.classA.used + " / " + analyticsResult.data.usage.classA.limit + " (" + analyticsResult.data.usage.classA.percent.toFixed(3).replace(".", ",") + " %)"),
+        line("Operations classe B", analyticsResult.data.usage.classB.used + " / " + analyticsResult.data.usage.classB.limit + " (" + analyticsResult.data.usage.classB.percent.toFixed(3).replace(".", ",") + " %)"),
+        line("Operations gratuites", analyticsResult.data.operationTotals?.free || 0),
+        line("Operations non classees", analyticsResult.data.operationTotals?.unclassified || 0),
+        line("Domaine r2.dev", analyticsResult.data.publicHostIsR2Dev ? "Oui" : "Non"),
+      ] : []),
+      "",
       line("Cycle technique", cycleResult?.checkedAt ? (cycleResult.state === "ok" ? "Reussi" : "Echec") : "Non teste"),
       ...(cycleResult?.data ? [line("Cree", cycleResult.data.created ? "Oui" : "Non"), line("Verifie", cycleResult.data.verified ? "Oui" : "Non"), line("Nettoyage tente", cycleResult.data.cleanupAttempted ? "Oui" : "Non"), line("Suppression demandee", cycleResult.data.deleteRequested ? "Oui" : "Non"), line("Suppression confirmee", cycleResult.data.deleted ? "Oui" : "Non"), line("Duree cycle", String(cycleResult.data.durationMs || 0) + " ms"), ...(cycleResult.data.errorCode ? [line("Code erreur", cycleResult.data.errorCode)] : [])] : []),
     ];
@@ -128,7 +139,7 @@ export default function AdminR2Health() {
       </div>
       <AdminR2PublicCheck busy={busy} onResult={setPublicResult} />
       <AdminR2CycleCheck busy={busy} onRunning={setCycleRunning} onResult={setCycleResult} />
-      <AdminR2AnalyticsCheck busy={busy} />
+      <AdminR2AnalyticsCheck busy={busy} onResult={setAnalyticsResult} />
       <button type="button" onClick={copyReport} disabled={busy} data-testid="r2-report-copy" className="mt-4 flex h-9 items-center gap-2 rounded-full border border-[#d9c5cc] px-4 text-xs hover:bg-[#f5edf1] disabled:opacity-50"><Copy size={14} />{reportCopied ? "Rapport copie" : "Copier le rapport R2"}</button>
       <p className="text-[11px] text-[#8b737e] mt-4 leading-4">Un succes de connexion valide l'acces au bucket, pas la diffusion publique des medias. La comparaison est strictement en lecture seule.</p>
     </section>

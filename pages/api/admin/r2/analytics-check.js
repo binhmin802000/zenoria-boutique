@@ -7,7 +7,7 @@ export default async function handler(req, res) {
     const admin = await requireAdminApi(req, res, "admin-r2-analytics-check");
     if (!admin) return;
     const result = await checkCloudflareR2Analytics();
-    return res.status(200).json({ ok: true, storageDataset: result.storageDataset, sampleAvailable: result.sampleAvailable, durationMs: result.durationMs });
+    return res.status(200).json({ ok: true, storageDataset: result.storageDataset, operationsDataset: result.operationsDataset, sampleAvailable: result.sampleAvailable, storage: result.storage, operations: result.operations, periodStart: result.periodStart, durationMs: result.durationMs });
   } catch (error) {
     if (error?.code === "CF_ANALYTICS_CONFIG_MISSING") return res.status(503).json({ ok: false, error: "Configuration Analytics Cloudflare incomplete." });
     if (error?.code === "CF_ANALYTICS_ACCESS_DENIED") return res.status(502).json({ ok: false, error: "Acces Analytics Cloudflare refuse." });

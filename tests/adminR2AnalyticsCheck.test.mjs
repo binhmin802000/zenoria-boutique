@@ -6,7 +6,16 @@ assert.equal(code.includes('/api/admin/r2/analytics-check'),true);
 assert.equal(code.includes('supabase.auth.getSession()'),true);
 assert.equal(code.includes('Authorization:"Bearer "+data.session.access_token'),true);
 assert.equal(code.includes('storageDataset'),true);
-assert.equal(code.includes('sampleAvailable'),true);
-assert.equal(code.includes('Tester Analytics Cloudflare'),true);
+assert.equal(code.includes('operationsDataset'),true);
+assert.equal(code.includes('Actualiser les metriques R2'),true);
 for(const forbidden of ['useEffect','CLOUDFLARE_API_TOKEN','R2_ACCOUNT_ID','accountId','secret']) assert.equal(code.includes(forbidden),false);
 console.log("adminR2AnalyticsCheck.test.mjs : OK");
+
+assert.match(code, /payloadBytes/);
+assert.match(code, /metadataBytes/);
+assert.match(code, /objectCount/);
+assert.match(code, /pendingUploads/);
+assert.match(code, /actionType/);
+assert.match(code, /actionStatus/);
+assert.match(code, /non contractuelles/);
+assert.match(code, /Actualiser les metriques R2/);

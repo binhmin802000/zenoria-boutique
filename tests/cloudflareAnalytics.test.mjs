@@ -13,12 +13,13 @@ assert.equal(code.includes("NEXT_PUBLIC_CLOUDFLARE"), false);
 assert.equal(code.includes("console.log"), false);
 const moduleUrl = "data:text/javascript;base64," + Buffer.from(code).toString("base64");
 const { checkCloudflareR2Analytics } = await import(moduleUrl);
-const env = { R2_ACCOUNT_ID: "account-test", CLOUDFLARE_API_TOKEN: "token-test" };
+const env = { R2_ACCOUNT_ID: "account-test", CLOUDFLARE_API_TOKEN: "token-test", R2_BUCKET: "bucket-test" };
 const goodFetch = async (url, options) => {
   assert.equal(url, "https://api.cloudflare.com/client/v4/graphql");
   assert.equal(options.headers.Authorization, "Bearer token-test");
   const body = JSON.parse(options.body);
   assert.equal(body.variables.accountTag, "account-test");
+  assert.equal(body.variables.bucketName, "bucket-test");
   return { ok: true, status: 200, json: async () => ({ data: { viewer: { accounts: [{ r2StorageAdaptiveGroups: [] }] } } }) };
 };
 const result = await checkCloudflareR2Analytics(env, goodFetch);
@@ -29,3 +30,10 @@ await assert.rejects(() => checkCloudflareR2Analytics({}, goodFetch), (error) =>
 await assert.rejects(() => checkCloudflareR2Analytics(env, async () => ({ ok: false, status: 403, json: async () => ({}) })), (error) => error.code === "CF_ANALYTICS_ACCESS_DENIED");
 await assert.rejects(() => checkCloudflareR2Analytics(env, async () => ({ ok: true, status: 200, json: async () => ({ errors: [{ message: "schema" }] }) })), (error) => error.code === "CF_ANALYTICS_GRAPHQL_FAILED");
 console.log("cloudflareAnalytics.test.mjs : OK");
+
+assert.match(code, /r2OperationsAdaptiveGroups/);
+assert.match(code, /actionType/);
+assert.match(code, /actionStatus/);
+assert.match(code, /sum { requests }/);
+assert.match(code, /R2_BUCKET/);
+assert.match(code, /operationsDataset/);

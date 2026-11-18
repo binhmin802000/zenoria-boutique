@@ -115,14 +115,25 @@ var RHV = (function () {
     if (o.dash !== undefined) st += ';stroke-dashoffset:' + f(o.dash);
     return s + ' style="' + st + '"';
   }
-  function overlayMarkup(color, t, ringSrc, ti, ringScale) {
+  function overlayMarkup(color, t, ringSrc, ti, ringScale, ringRelief, ringReliefIntensity) {
     var c = color, a = attrsFor(t == null ? 0 : t, ti || 0, ringScale), i;
+    var ri = ringRelief ? Math.min(1, Math.max(0, Number(ringReliefIntensity) || 0)) : 0; // ZENORIA_RING_RELIEF_V1
+    var reliefFilter = ri > 0 ? ' filter="url(#rhv2d)"' : '';
+    var reliefTransform = ri > 0 ? ' transform="rotate(' + f(-2.5 * ri) + ') scale(1 ' + f(1 - 0.06 * ri) + ')"' : '';
     var star = function (k) { return '<path data-k="' + k + '" d="' + STAR + '" fill="' + c + '"' + at(a, k) + '/>'; };
     var s = '<defs><radialGradient id="rhvg"><stop offset="0" stop-color="' + c + '" stop-opacity="0.9"/><stop offset="1" stop-color="' + c + '" stop-opacity="0"/></radialGradient>' +
             '<radialGradient id="rhvs"><stop offset="0.55" stop-color="#2a2020" stop-opacity="0.26"/><stop offset="1" stop-color="#2a2020" stop-opacity="0"/></radialGradient>' +
             '<radialGradient id="rhvh" cx="0.38" cy="0.32" r="0.8"><stop offset="0" stop-color="#fff" stop-opacity="0.85"/><stop offset="0.6" stop-color="' + c + '" stop-opacity="1"/><stop offset="1" stop-color="' + c + '" stop-opacity="1"/></radialGradient>' +
             '<linearGradient id="rhvw" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.85"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>' +
-            '<clipPath id="rhvr"><circle r="0.82"/></clipPath></defs>';
+            '<clipPath id="rhvr"><circle r="0.82"/></clipPath>' +
+              '<filter id="rhv2d" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">' +
+              '<feGaussianBlur in="SourceAlpha" stdDeviation="' + f(0.025 + 0.055 * ri) + '" result="rhvBlur"/>' +
+              '<feOffset in="rhvBlur" dx="' + f(0.035 + 0.055 * ri) + '" dy="' + f(0.045 + 0.065 * ri) + '" result="rhvOffset"/>' +
+              '<feFlood flood-color="#21171d" flood-opacity="' + f(0.16 + 0.34 * ri) + '" result="rhvShadowColor"/>' +
+              '<feComposite in="rhvShadowColor" in2="rhvOffset" operator="in" result="rhvShadow"/>' +
+              '<feSpecularLighting in="SourceAlpha" surfaceScale="' + f(0.25 + 1.1 * ri) + '" specularConstant="' + f(0.18 + 0.42 * ri) + '" specularExponent="18" lighting-color="#ffffff" result="rhvSpec"><feDistantLight azimuth="225" elevation="52"/></feSpecularLighting>' +
+              '<feComposite in="rhvSpec" in2="SourceAlpha" operator="in" result="rhvSpecClip"/>' +
+              '<feMerge><feMergeNode in="rhvShadow"/><feMergeNode in="SourceGraphic"/><feMergeNode in="rhvSpecClip"/></feMerge></filter></defs>';;
     s += '<g data-k="heart"' + at(a, 'heart') + '>';
     s += '<circle data-k="heartGlow" r="1.45" cy="0.1" fill="url(#rhvg)"' + at(a, 'heartGlow') + '/>';
     s += '<path data-k="heartFill" d="' + HF + '" fill="url(#rhvh)"' + at(a, 'heartFill') + '/>';
@@ -132,9 +143,10 @@ var RHV = (function () {
     s += '<g transform="scale(0.86 0.86) translate(0 0.02)"><path data-k="heartIn" d="' + HF + '" pathLength="1" stroke-width="0.014" stroke-dasharray="1"' + at(a, 'heartIn') + '/></g>';
     s += '</g></g>';
     for (i = 0; i < TL.HSTARS.length; i++) s += star('hs' + i);
-    var head = ringSrc
-      ? '<ellipse cx="0.07" cy="0.11" rx="1.0" ry="0.96" fill="url(#rhvs)"/><image href="' + ringSrc + '" x="-1" y="-1" width="2" height="2" preserveAspectRatio="xMidYMid meet"/>'
+    var headCore = ringSrc
+      ? '<ellipse cx="0.07" cy="0.11" rx="1.0" ry="0.96" fill="url(#rhvs)"/><image href="' + ringSrc + '" x="-1" y="-1" width="2" height="2" preserveAspectRatio="xMidYMid meet"' + reliefFilter + '/>'
       : '<circle r="0.9" fill="' + c + '" stroke="#3b3535" stroke-width="0.04"/><circle r="0.5" fill="#fff" fill-opacity="0.35" stroke="#3b3535" stroke-width="0.03"/>';
+    var head = '<g' + reliefTransform + '>' + headCore + '</g>';
     s += '<g data-k="ringA"' + at(a, 'ringA') + '>' + head + '</g>';
     s += star('tch');
     s += '<circle data-k="halo" r="62" fill="url(#rhvg)"' + at(a, 'halo') + '/>';
@@ -152,7 +164,7 @@ var RHV = (function () {
   }
 
   var DEFAULTS = {
-    color: '#2e75c6', ringSrc: null, ringScale: 1, speed: 1, mode: 'once', life: true, holdSeconds: 4, loopPause: 3,
+    color: '#2e75c6', ringSrc: null, ringScale: 1, ringRelief: false, ringReliefIntensity: 0.35, speed: 1, mode: 'once', life: true, holdSeconds: 4, loopPause: 3,
     src: '/animations/zenoria-geste.mp4', srcAlpha: '/animations/zenoria-geste-alpha.webm', stillSrc: '/animations/zenoria-geste-fin.png',
     alpha: null, reduce: null, onVanished: null, onVanishStart: null
   };
@@ -191,7 +203,7 @@ var RHV = (function () {
     var unframe = function (id) { if (typeof cancelAnimationFrame !== 'undefined') cancelAnimationFrame(id); else clearTimeout(id); };
 
     function rebuild() {
-      svg.innerHTML = overlayMarkup(o.color, lastT, o.ringSrc, lastTi, o.ringScale);
+      svg.innerHTML = overlayMarkup(o.color, lastT, o.ringSrc, lastTi, o.ringScale, o.ringRelief, o.ringReliefIntensity);
       refs = {}; var nodes = svg.querySelectorAll('[data-k]'), i;
       for (i = 0; i < nodes.length; i++) refs[nodes[i].getAttribute('data-k')] = nodes[i];
     }
@@ -290,7 +302,7 @@ var RHV = (function () {
     return {
       setOptions: function (patch) {
         var redo = false, k;
-        for (k in patch) { if (patch[k] === undefined) continue; if ((k === 'color' || k === 'ringSrc' || k === 'ringScale') && patch[k] !== o[k]) redo = true; o[k] = patch[k]; }
+        for (k in patch) { if (patch[k] === undefined) continue; if ((k === 'color' || k === 'ringSrc' || k === 'ringScale' || k === 'ringRelief' || k === 'ringReliefIntensity') && patch[k] !== o[k]) redo = true; o[k] = patch[k]; }
         if (redo) rebuild();
         if (video && patch.speed) video.playbackRate = o.speed;
       },
@@ -313,6 +325,8 @@ export default function RingHandsVideo({
   crystalColor = "#2e75c6", // couleur du cœur, du halo et des étincelles
   ringSrc = "/animations/ring-bleu.png",
   ringScale = 1, // photo détourée de la bague (PNG transparent, carré). null : simple pierre colorée
+  ringRelief = false,
+  ringReliefIntensity = 0.35,
   speed = 1,
   mode = "once",
   life = true,
@@ -335,7 +349,7 @@ export default function RingHandsVideo({
   // Création du lecteur (une seule fois par jeu de fichiers vidéo)
   useEffect(() => {
     const player = RHV.createPlayer(hostRef.current, {
-      color: crystalColor, ringSrc, ringScale, speed, mode, life, holdSeconds, loopPause, alpha, src, srcAlpha, stillSrc,
+      color: crystalColor, ringSrc, ringScale, ringRelief, ringReliefIntensity, speed, mode, life, holdSeconds, loopPause, alpha, src, srcAlpha, stillSrc,
       onVanishStart: () => { if (callbacks.current.onVanishStart) callbacks.current.onVanishStart(); },
       onVanished: () => { if (callbacks.current.onVanished) callbacks.current.onVanished(); },
     });
@@ -346,8 +360,8 @@ export default function RingHandsVideo({
 
   // Les réglages se mettent à jour à chaud, sans relancer la lecture
   useEffect(() => {
-    if (playerRef.current) playerRef.current.setOptions({ color: crystalColor, ringSrc, ringScale, speed, mode, life, holdSeconds, loopPause });
-  }, [crystalColor, ringSrc, ringScale, speed, mode, life, holdSeconds, loopPause]);
+    if (playerRef.current) playerRef.current.setOptions({ color: crystalColor, ringSrc, ringScale, ringRelief, ringReliefIntensity, speed, mode, life, holdSeconds, loopPause });
+  }, [crystalColor, ringSrc, ringScale, ringRelief, ringReliefIntensity, speed, mode, life, holdSeconds, loopPause]);
 
   return <div ref={hostRef} className={className} role="img" aria-label={label} style={{ width: "100%", aspectRatio: "1280 / 704" }} />;
 }

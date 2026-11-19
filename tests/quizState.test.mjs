@@ -46,7 +46,7 @@ test("l'adresse ne contient que des indices (aucun texte, aucune donnée personn
 const key = S.CART_STORAGE_KEY;
 test("la clé et la limite du panier sont celles de la boutique", () => {
   assert.equal(S.CART_STORAGE_KEY, "zenoria_cart_v2");
-  assert.equal(S.MAX_QTY_PER_PRODUCT, 10);
+  assert.equal(S.MAX_QTY_PER_PRODUCT, 99); // ZENORIA_M0T_V1 : borne technique, la vraie limite est le stock
 });
 test("addToStoredCart : panier vide -> 1 bague ; deuxième ajout -> quantité 2, même forme que la boutique", () => {
   const st = new FakeStorage();
@@ -62,12 +62,14 @@ test("addToStoredCart : conserve les autres bagues et le code promo déjà enreg
   S.addToStoredCart(st, 12);
   assert.deepEqual(JSON.parse(st.getItem(key)), { items: [{ id: 3, qty: 2 }, { id: 9, qty: 2 }, { id: 12, qty: 1 }], promo: "BIENVENUE10" });
 });
-test("addToStoredCart : limite de 10 par bague, refus clair au-delà, panier inchangé", () => {
-  const st = new FakeStorage({ [key]: JSON.stringify({ items: [{ id: 5, qty: 10 }], promo: "" }) });
+test("addToStoredCart : borne technique de 99 par bague, refus clair au-delà, panier inchangé", () => {
+  const st = new FakeStorage({ [key]: JSON.stringify({ items: [{ id: 5, qty: 99 }], promo: "" }) });
   assert.deepEqual(S.addToStoredCart(st, 5), { ok: false, reason: "max" });
-  assert.equal(S.cartCount(st), 10);
-  const st2 = new FakeStorage({ [key]: JSON.stringify({ items: [{ id: 5, qty: 9 }], promo: "" }) });
-  assert.deepEqual(S.addToStoredCart(st2, 5), { ok: true, qty: 10 });
+  assert.equal(S.cartCount(st), 99);
+  const st2 = new FakeStorage({ [key]: JSON.stringify({ items: [{ id: 5, qty: 98 }], promo: "" }) });
+  assert.deepEqual(S.addToStoredCart(st2, 5), { ok: true, qty: 99 });
+  const st3 = new FakeStorage({ [key]: JSON.stringify({ items: [{ id: 5, qty: 10 }], promo: "" }) });
+  assert.deepEqual(S.addToStoredCart(st3, 5), { ok: true, qty: 11 });
 });
 test("addToStoredCart : identifiant numérique ou texte reconnu comme la même bague", () => {
   const st = new FakeStorage({ [key]: JSON.stringify({ items: [{ id: "4", qty: 1 }], promo: "" }) });
@@ -83,9 +85,9 @@ test("panier illisible, absent ou abîmé : repart d'un panier vide sans erreur 
   assert.equal(S.cartCount(null), 0);
   assert.equal(S.cartCount(undefined), 0);
 });
-test("quantités enregistrées hors limites ramenées entre 1 et 10", () => {
-  const st = new FakeStorage({ [key]: JSON.stringify({ items: [{ id: 1, qty: 99 }, { id: 2, qty: 0 }, { id: 3, qty: -4 }, { id: 4, qty: "x" }], promo: "" }) });
-  assert.deepEqual(S.readStoredCart(st).items.map((i) => i.qty), [10, 1, 1, 1]);
+test("quantités enregistrées hors limites ramenées entre 1 et 99", () => {
+  const st = new FakeStorage({ [key]: JSON.stringify({ items: [{ id: 1, qty: 150 }, { id: 2, qty: 0 }, { id: 3, qty: -4 }, { id: 4, qty: "x" }, { id: 5, qty: 12 }], promo: "" }) });
+  assert.deepEqual(S.readStoredCart(st).items.map((i) => i.qty), [99, 1, 1, 1, 12]);
 });
 test("stockage indisponible (navigation privée, quota) : refus propre, jamais d'exception", () => {
   const st = new FakeStorage();

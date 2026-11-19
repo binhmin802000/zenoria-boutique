@@ -251,6 +251,7 @@ export default function ZenoriaShop() {
   const [promoCodes, setPromoCodes] = useState({});
   // Médias dédiés gérés depuis /admin (onglet « Contenu du site ») : { hero_video, savoir_faire_photo }
   const [siteMedia, setSiteMedia] = useState({});
+  const [universSavoirFairePhotoFailed, setUniversSavoirFairePhotoFailed] = useState(false); // ZENORIA_UNIVERS_SAVOIR_FAIRE_PHOTO_V1
   // --- État de la maintenance (onglet « Maintenance » de /admin) ---
   // « shop_pause » : le catalogue reste visible, la commande est fermée.
   // « full » : visible ici seulement pour un administrateur qui prévisualise le site pendant la coupure.
@@ -1338,12 +1339,29 @@ export default function ZenoriaShop() {
               type="button"
               onClick={() => scrollToSection("savoir-faire")}
               data-testid="univers-card-savoir-faire"
-              className="relative text-left rounded-[1.5rem] bg-[#f5edf1] p-6 hover:shadow-lg transition overflow-hidden"
+              className={`group relative text-left rounded-[1.5rem] p-6 hover:shadow-lg transition overflow-hidden active:scale-[0.985] motion-reduce:transform-none ${siteMedia.account_hero?.path && !universSavoirFairePhotoFailed ? "bg-[#3b2b39]" : "bg-[#f5edf1]"}`}
             >
-              <Hand className="text-[#412f3b] mb-4" size={26} />
-              <div className="font-serif text-xl mb-1 text-[#412f3b]">Notre savoir-faire</div>
-              <div className="text-sm text-[#70656a]">Des bijoux façonnés avec exigence et bienveillance.</div>
-              <ArrowRight size={16} className="absolute right-5 bottom-5 text-[#8f6075]" />
+              {/* ZENORIA_UNIVERS_SAVOIR_FAIRE_PHOTO_V1 : meme photo que le bandeau de l’espace cliente ; fallback rose si absente ou en erreur */}
+              {siteMedia.account_hero?.path && !universSavoirFairePhotoFailed && (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={getMediaUrl(siteMedia.account_hero.path, "site")}
+                    alt=""
+                    loading="lazy"
+                    onError={() => setUniversSavoirFairePhotoFailed(true)}
+                    data-testid="univers-savoir-faire-photo"
+                    className="absolute inset-0 h-full w-full object-cover object-center scale-[1.01] transition-transform duration-700 ease-out group-hover:scale-[1.04] motion-reduce:transform-none motion-reduce:transition-none"
+                  />
+                  <span aria-hidden="true" className="absolute inset-0 bg-gradient-to-b from-[#3b2b39]/20 via-[#3b2b39]/45 to-[#3b2b39]/85" />
+                </>
+              )}
+              <div className="relative z-10">
+                <Hand className={`mb-4 ${siteMedia.account_hero?.path && !universSavoirFairePhotoFailed ? "text-white" : "text-[#412f3b]"}`} size={26} />
+                <div className={`font-serif text-xl mb-1 ${siteMedia.account_hero?.path && !universSavoirFairePhotoFailed ? "text-white" : "text-[#412f3b]"}`}>Notre savoir-faire</div>
+                <div className={`text-sm ${siteMedia.account_hero?.path && !universSavoirFairePhotoFailed ? "text-white/80" : "text-[#70656a]"}`}>Des bijoux façonnés avec exigence et bienveillance.</div>
+              </div>
+              <ArrowRight size={16} className={`absolute z-10 right-5 bottom-5 ${siteMedia.account_hero?.path && !universSavoirFairePhotoFailed ? "text-white" : "text-[#8f6075]"}`} />
             </button>
             <button
               type="button"

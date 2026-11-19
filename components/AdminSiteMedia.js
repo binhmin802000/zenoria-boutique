@@ -85,8 +85,8 @@ const SLOTS = [
     kind: "photo",
     wide: true,
     title: "Bandeau de l'espace cliente",
-    description: "Affiché en haut de la page « Mon compte ». Format large ; un voile ivoire est ajouté à gauche (ordinateur) ou en bas (mobile) : placez le bijou plutôt à droite.",
-    fallback: "Aucune image dédiée : la page « Mon compte » affiche l'image par défaut « Fondu lumineux ».",
+    description: "Affiché en haut de la page « Mon compte » et en fond de la carte « Notre savoir-faire » dans L’univers Zenoria sur l’accueil. Format large ; placez le bijou plutôt à droite pour préserver les deux cadrages.", // ZENORIA_UNIVERS_SAVOIR_FAIRE_PHOTO_V1
+    fallback: "Aucune image dédiée : la page « Mon compte » affiche l'image par défaut « Fondu lumineux » et la carte « Notre savoir-faire » conserve son fond rose.",
     addLabel: "Ajouter une image",
     replaceLabel: "Remplacer l'image",
   },

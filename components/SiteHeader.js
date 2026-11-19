@@ -97,6 +97,7 @@ export default function SiteHeader({
   onCartClick,
   logoMode = 1,
   logoHref = null,
+  onLogoClick = null, // ZENORIA_LOGO_TOP_V1 : fourni par l'accueil, le logo devient un bouton qui remonte en haut de la page
 }) {
   const items = NAV.filter((n) => !n.seasonsOnly || showSeasons);
   // ZENORIA_ACCOUNT_NEWS_V1 : pastille rouge sur le compte (plafonnee a 9+)
@@ -135,7 +136,11 @@ export default function SiteHeader({
   return (
     <header className="sticky top-0 z-40 bg-[#fbf8f4]/95 backdrop-blur border-b border-[#eadfe4]">
       <div className="max-w-7xl mx-auto px-5 h-20 flex items-center justify-between">
-        {logoHref ? (
+        {onLogoClick ? (
+            <button type="button" onClick={onLogoClick} aria-label="Zenoria, retour en haut de la page" data-testid="header-logo-top" className="rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8f6075] focus-visible:ring-offset-2">
+              {logo}
+            </button>
+          ) : logoHref ? (
           <a href={logoHref} aria-label="Zenoria, retour à l'accueil">
             {logo}
           </a>

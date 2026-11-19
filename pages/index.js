@@ -890,6 +890,12 @@ export default function ZenoriaShop() {
     setSelectedMode(mode);
     setSelected(p);
   };
+  // ZENORIA_LOGO_TOP_V1 : clic sur le logo de l'accueil -> retour en haut de la page (sans animation si la visiteuse a demande moins de mouvements)
+  const scrollToPageTop = () => {
+    setMenu(false);
+    const reduceMotion = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+  };
   const scrollToSection = (id) => {
     const el = document.getElementById(id);
     if (el) {
@@ -1049,6 +1055,7 @@ export default function ZenoriaShop() {
       </div>
       <SiteHeader
         onSection={scrollToSection}
+          onLogoClick={scrollToPageTop} // ZENORIA_LOGO_TOP_V1
         onStory={() => window.dispatchEvent(new Event(OPEN_STORY_EVENT))}
         showSeasons={familiesReady}
         menuOpen={menu}

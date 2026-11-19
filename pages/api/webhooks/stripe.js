@@ -81,7 +81,7 @@ export default async function handler(req, res) {
 
   let event;
   try {
-    event = stripe.webhooks.constructEvent(rawBody, signature, process.env.STRIPE_WEBHOOK_SECRET);
+    event = await stripe.webhooks.constructEventAsync(rawBody, signature, process.env.STRIPE_WEBHOOK_SECRET); // ZENORIA_M3A_V1 : version asynchrone (Vercel et Workers)
   } catch (err) {
     console.error("[webhook-stripe] signature invalide :", err.message);
     return res.status(400).json({ ok: false, error: "signature invalide" });

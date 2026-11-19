@@ -33,6 +33,17 @@ import FavoriteButton from "@/components/FavoriteButton";
 import CrystalLogo from "@/components/CrystalLogo";
 import Footer from "@/components/Footer";
 import SiteHeader from "@/components/SiteHeader"; // ZENORIA_SITE_HEADER_V1
+import SectionNav from "@/components/SectionNav"; // ZENORIA_SECTION_NAV_V1
+// ZENORIA_SECTION_NAV_V1 : ordre des blocs parcourus par le bouton flottant (les blocs absents sont ignores)
+const SECTION_NAV_ITEMS = [
+  { id: "seasons", label: "Les saisons" },
+  { id: "collections", label: "Nos créations" },
+  { id: "univers-zenoria", label: "L'univers Zenoria" },
+  { id: "savoir-faire", label: "Notre savoir-faire" },
+  { id: "philosophie", label: "Notre philosophie" },
+  { id: "notre-histoire", label: "Notre histoire" },
+  { id: "quiz", label: "Quiz colorimétrie" },
+];
 import {
   readLocalFavorites,
   toggleLocalFavorite,
@@ -1427,6 +1438,11 @@ export default function ZenoriaShop() {
         logoMode={logo}
         logoCompact={true}
         logoDark={true}
+      />
+      {/* ZENORIA_SECTION_NAV_V1 : masque des qu'une fenetre ou le menu est ouvert */}
+      <SectionNav
+        sections={SECTION_NAV_ITEMS}
+        hidden={menu || cartOpen || favPanelOpen || Boolean(selected) || authModalOpen || logoutAsk || Boolean(transferResult) || paymentConfirmationOpen}
       />
       {/* PANIER */}
       <AnimatePresence>

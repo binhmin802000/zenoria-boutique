@@ -1,0 +1,16 @@
+// ZENORIA_M3B_V1 : pilote Cloudflare Workers (OpenNext). Ne pas fusionner avant la decision M5.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "zenoria-pilote",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    { "binding": "WORKER_SELF_REFERENCE", "service": "zenoria-pilote" }
+  ],
+  "observability": { "enabled": true }
+}

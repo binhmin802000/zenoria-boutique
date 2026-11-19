@@ -4,3 +4,7 @@ out
 .vercel
 .env*.local
 npm-debug.log*
+# ZENORIA_M3B_V1 : pilote Cloudflare
+.open-next
+.wrangler
+.dev.vars
